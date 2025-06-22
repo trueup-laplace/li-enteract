@@ -3,6 +3,8 @@
 Advanced Eye Tracking ML System
 High-performance eye tracking using MediaPipe, OpenCV, and TensorFlow
 Designed for integration with Tauri applications
+
+ENHANCED VERSION with standalone GUI testing capabilities
 """
 
 import cv2
@@ -47,7 +49,9 @@ class EyeTrackingML:
                  camera_id: int = 0,
                  model_path: Optional[str] = None,
                  calibration_points: int = 9,
-                 smoothing_window: int = 5):
+                 smoothing_window: int = 5,
+                 debug_mode: bool = False,
+                 gui_mode: bool = False):
         """
         Initialize the eye tracking system
         
@@ -56,13 +60,23 @@ class EyeTrackingML:
             model_path: Path to custom trained model
             calibration_points: Number of calibration points
             smoothing_window: Size of smoothing window for gaze points
+            debug_mode: Enable verbose debug output
+            gui_mode: Enable standalone GUI with live preview
         """
         self.camera_id = camera_id
         self.calibration_points = calibration_points
         self.smoothing_window = smoothing_window
+        self.debug_mode = debug_mode
+        self.gui_mode = gui_mode
+        
+        if self.debug_mode:
+            print("DEBUG: Initializing Eye Tracking ML system", file=sys.stderr)
         
         # MediaPipe setup
         self.mp_face_mesh = mp.solutions.face_mesh
+        self.mp_drawing = mp.solutions.drawing_utils
+        self.mp_drawing_styles = mp.solutions.drawing_styles
+        
         self.face_mesh = self.mp_face_mesh.FaceMesh(
             max_num_faces=1,
             refine_landmarks=True,
@@ -102,6 +116,19 @@ class EyeTrackingML:
         self.frame_lock = threading.Lock()
         self.latest_frame = None
         self.processing = True
+        
+        # GUI mode specific
+        if self.gui_mode:
+            self.gaze_overlay = None
+            self.initialize_gaze_overlay()
+
+    def initialize_gaze_overlay(self):
+        """Initialize the gaze overlay window for GUI mode"""
+        if self.gui_mode:
+            # Create a transparent overlay for gaze visualization
+            self.gaze_overlay = np.zeros((self.screen_height, self.screen_width, 3), dtype=np.uint8)
+            cv2.namedWindow('Gaze Overlay', cv2.WINDOW_NORMAL)
+            cv2.setWindowProperty('Gaze Overlay', cv2.WND_PROP_TOPMOST, 1)
 
     def build_simple_model(self):
         """Build a simple neural network for gaze estimation"""
@@ -120,15 +147,18 @@ class EyeTrackingML:
             metrics=['mae']
         )
         
-        print("Built simple gaze estimation model")
+        if self.debug_mode:
+            print("DEBUG: Built simple gaze estimation model", file=sys.stderr)
+            self.gaze_model.summary()
 
     def load_gaze_model(self, model_path: str):
         """Load a pre-trained gaze estimation model"""
         try:
             self.gaze_model = tf.keras.models.load_model(model_path)
-            print(f"Loaded gaze model from {model_path}")
+            if self.debug_mode:
+                print(f"DEBUG: Loaded gaze model from {model_path}", file=sys.stderr)
         except Exception as e:
-            print(f"Failed to load model: {e}")
+            print(f"ERROR: Failed to load model: {e}", file=sys.stderr)
             self.build_simple_model()
 
     def extract_eye_features(self, landmarks, face_3d) -> Optional[np.ndarray]:
@@ -139,7 +169,8 @@ class EyeTrackingML:
         try:
             # Check if we have enough landmarks
             if len(landmarks) < 468:  # MediaPipe face mesh has 468 landmarks
-                print(f"Not enough landmarks: {len(landmarks)}", file=sys.stderr)
+                if self.debug_mode:
+                    print(f"DEBUG: Not enough landmarks: {len(landmarks)}", file=sys.stderr)
                 return None
             
             # Get pupil centers - try iris landmarks first, fallback to eye center
@@ -159,6 +190,8 @@ class EyeTrackingML:
                 # Use iris landmarks if available
                 left_pupil = np.mean(left_iris_landmarks, axis=0)
                 right_pupil = np.mean(right_iris_landmarks, axis=0)
+                if self.debug_mode and self.fps_counter % 30 == 0:
+                    print("DEBUG: Using iris landmarks for pupil detection", file=sys.stderr)
             else:
                 # Fallback to eye center estimation using eye contour
                 left_eye_landmarks = []
@@ -173,17 +206,21 @@ class EyeTrackingML:
                         right_eye_landmarks.append(landmarks[idx])
                 
                 if len(left_eye_landmarks) < 6 or len(right_eye_landmarks) < 6:
-                    print("Insufficient eye landmarks", file=sys.stderr)
+                    if self.debug_mode:
+                        print("DEBUG: Insufficient eye landmarks", file=sys.stderr)
                     return None
                 
                 left_pupil = np.mean(left_eye_landmarks, axis=0)
                 right_pupil = np.mean(right_eye_landmarks, axis=0)
+                if self.debug_mode and self.fps_counter % 30 == 0:
+                    print("DEBUG: Using eye contour for pupil detection", file=sys.stderr)
             
             # Get eye corner landmarks for normalization - check bounds
             required_indices = [133, 33, 362, 263, 1, 168, 234, 454]
             for idx in required_indices:
                 if idx >= len(landmarks):
-                    print(f"Missing landmark {idx}, have {len(landmarks)} landmarks")
+                    if self.debug_mode:
+                        print(f"DEBUG: Missing landmark {idx}, have {len(landmarks)} landmarks", file=sys.stderr)
                     return None
             
             left_corner_inner = landmarks[133]
@@ -197,7 +234,8 @@ class EyeTrackingML:
             
             # Check for valid eye widths
             if left_eye_width <= 0 or right_eye_width <= 0:
-                print(f"Invalid eye widths: left={left_eye_width}, right={right_eye_width}")
+                if self.debug_mode:
+                    print(f"DEBUG: Invalid eye widths: left={left_eye_width}, right={right_eye_width}", file=sys.stderr)
                 return None
             
             left_pupil_norm = (left_pupil - left_corner_inner) / left_eye_width
@@ -225,10 +263,14 @@ class EyeTrackingML:
                 0.5  # Placeholder for additional features
             ])
             
+            if self.debug_mode and self.fps_counter % 60 == 0:
+                print(f"DEBUG: Extracted features: {features[:4]}", file=sys.stderr)
+            
             return features
             
         except Exception as e:
-            print(f"Feature extraction error: {e}", file=sys.stderr)
+            if self.debug_mode:
+                print(f"DEBUG: Feature extraction error: {e}", file=sys.stderr)
             return None
 
     def estimate_gaze(self, features: np.ndarray) -> Optional[GazePoint]:
@@ -259,10 +301,14 @@ class EyeTrackingML:
                 raw_pupil_y=features[5]
             )
             
+            if self.debug_mode and self.fps_counter % 30 == 0:
+                print(f"DEBUG: Estimated gaze: ({screen_x:.1f}, {screen_y:.1f})", file=sys.stderr)
+            
             return gaze_point
             
         except Exception as e:
-            print(f"Gaze estimation error: {e}")
+            if self.debug_mode:
+                print(f"DEBUG: Gaze estimation error: {e}", file=sys.stderr)
             return None
 
     def smooth_gaze(self, gaze_point: GazePoint) -> GazePoint:
@@ -325,45 +371,133 @@ class EyeTrackingML:
                     gaze_point = self.smooth_gaze(raw_gaze)
             
             # Draw debug information
-            self.draw_debug_info(frame, landmarks, gaze_point)
+            self.draw_debug_info(frame, landmarks, gaze_point, results)
         
         return gaze_point, frame
 
-    def draw_debug_info(self, frame: np.ndarray, landmarks: np.ndarray, gaze_point: Optional[GazePoint]):
+    def draw_debug_info(self, frame: np.ndarray, landmarks: np.ndarray, gaze_point: Optional[GazePoint], results=None):
         """Draw debug information on the frame"""
         h, w = frame.shape[:2]
         
-        # Draw eye landmarks
-        for idx in self.LEFT_EYE + self.RIGHT_EYE:
+        # Draw face mesh if in GUI mode
+        if self.gui_mode and results and results.multi_face_landmarks:
+            for face_landmarks in results.multi_face_landmarks:
+                # Draw face mesh with fallback styling
+                try:
+                    self.mp_drawing.draw_landmarks(
+                        frame, face_landmarks, self.mp_face_mesh.FACEMESH_CONTOURS,
+                        None, self.mp_drawing_styles.get_default_face_mesh_contours_style())
+                except AttributeError:
+                    # Fallback for older MediaPipe versions
+                    self.mp_drawing.draw_landmarks(
+                        frame, face_landmarks, self.mp_face_mesh.FACEMESH_CONTOURS)
+                
+                # Draw iris with fallback styling
+                try:
+                    self.mp_drawing.draw_landmarks(
+                        frame, face_landmarks, self.mp_face_mesh.FACEMESH_IRISES,
+                        None, self.mp_drawing_styles.get_default_face_mesh_iris_style())
+                except AttributeError:
+                    # Fallback for older MediaPipe versions
+                    self.mp_drawing.draw_landmarks(
+                        frame, face_landmarks, self.mp_face_mesh.FACEMESH_IRISES)
+        
+        # Draw eye landmarks with different colors
+        for idx in self.LEFT_EYE:
             if idx < len(landmarks):
                 x, y = landmarks[idx]
                 cv2.circle(frame, (int(x * w), int(y * h)), 2, (0, 255, 0), -1)
         
-        # Draw iris landmarks
+        for idx in self.RIGHT_EYE:
+            if idx < len(landmarks):
+                x, y = landmarks[idx]
+                cv2.circle(frame, (int(x * w), int(y * h)), 2, (0, 255, 0), -1)
+        
+        # Draw iris landmarks in blue
         for idx in self.LEFT_IRIS + self.RIGHT_IRIS:
             if idx < len(landmarks):
                 x, y = landmarks[idx]
-                cv2.circle(frame, (int(x * w), int(y * h)), 2, (255, 0, 0), -1)
+                cv2.circle(frame, (int(x * w), int(y * h)), 3, (255, 0, 0), -1)
         
         # Draw gaze point info
         if gaze_point:
-            cv2.putText(frame, f"Gaze: ({gaze_point.x:.0f}, {gaze_point.y:.0f})", 
-                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-            cv2.putText(frame, f"Confidence: {gaze_point.confidence:.2f}", 
-                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            info_text = [
+                f"Gaze: ({gaze_point.x:.0f}, {gaze_point.y:.0f})",
+                f"Confidence: {gaze_point.confidence:.2f}",
+                f"Calibrated: {'Yes' if self.is_calibrated else 'No'}",
+                f"Smooth Window: {len(self.gaze_history)}/{self.smoothing_window}"
+            ]
+            
+            for i, text in enumerate(info_text):
+                cv2.putText(frame, text, (10, 30 + i * 25), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
         
-        # Draw FPS
-        cv2.putText(frame, f"FPS: {self.current_fps:.1f}", 
-                   (10, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+        # Draw FPS and debug info
+        debug_info = [
+            f"FPS: {self.current_fps:.1f}",
+            f"Camera ID: {self.camera_id}",
+            f"Screen: {self.screen_width}x{self.screen_height}"
+        ]
+        
+        for i, text in enumerate(debug_info):
+            cv2.putText(frame, text, (10, h - 80 + i * 25), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
+        
+        # Draw controls
+        if self.gui_mode:
+            controls = [
+                "Controls:",
+                "Q - Quit",
+                "C - Calibrate", 
+                "D - Toggle Debug",
+                "R - Reset Model",
+                "SPACE - Toggle Overlay"
+            ]
+            
+            for i, text in enumerate(controls):
+                cv2.putText(frame, text, (w - 200, 30 + i * 20), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+
+    def update_gaze_overlay(self, gaze_point: Optional[GazePoint]):
+        """Update the gaze overlay window"""
+        if not self.gui_mode or self.gaze_overlay is None:
+            return
+        
+        # Clear overlay
+        self.gaze_overlay.fill(0)
+        
+        if gaze_point:
+            # Draw gaze point
+            x, y = int(gaze_point.x), int(gaze_point.y)
+            
+            # Ensure coordinates are within screen bounds
+            x = max(0, min(x, self.screen_width - 1))
+            y = max(0, min(y, self.screen_height - 1))
+            
+            # Draw gaze point with varying size based on confidence
+            radius = int(20 * gaze_point.confidence)
+            cv2.circle(self.gaze_overlay, (x, y), radius, (0, 255, 0), 2)
+            cv2.circle(self.gaze_overlay, (x, y), 5, (0, 255, 255), -1)
+            
+            # Draw gaze trail
+            if len(self.gaze_history) > 1:
+                points = [(int(gp.x), int(gp.y)) for gp in self.gaze_history]
+                for i in range(1, len(points)):
+                    alpha = i / len(points)
+                    cv2.line(self.gaze_overlay, points[i-1], points[i], 
+                            (int(255 * alpha), int(100 * alpha), 0), 2)
+        
+        # Show overlay
+        cv2.imshow('Gaze Overlay', self.gaze_overlay)
 
     def calibrate(self) -> bool:
         """Perform calibration using multiple screen points"""
-        print("Starting calibration...")
-        print("Look at the red dot and press SPACE when focused")
+        print("Starting calibration...", file=sys.stderr)
+        print("Look at the red dot and press SPACE when focused", file=sys.stderr)
         
         cap = cv2.VideoCapture(self.camera_id)
         if not cap.isOpened():
-            print("Failed to open camera")
+            print("Failed to open camera for calibration", file=sys.stderr)
             return False
         
         calibration_points = []
@@ -377,7 +511,7 @@ class EyeTrackingML:
         collected_data = []
         
         for point_idx, (target_x, target_y) in enumerate(calibration_points):
-            print(f"Calibration point {point_idx + 1}/{len(calibration_points)}: ({target_x}, {target_y})")
+            print(f"Calibration point {point_idx + 1}/{len(calibration_points)}: ({target_x}, {target_y})", file=sys.stderr)
             
             # Show calibration window
             calib_window = np.zeros((self.screen_height, self.screen_width, 3), dtype=np.uint8)
@@ -428,20 +562,22 @@ class EyeTrackingML:
             history = self.gaze_model.fit(X, y, epochs=100, batch_size=len(X), verbose=0)
             
             self.is_calibrated = True
-            print(f"Calibration completed! Final loss: {history.history['loss'][-1]:.4f}")
+            print(f"Calibration completed! Final loss: {history.history['loss'][-1]:.4f}", file=sys.stderr)
             return True
         else:
-            print("Insufficient calibration data")
+            print("Insufficient calibration data", file=sys.stderr)
             return False
 
     def run_tracking(self, headless: bool = False) -> None:
         """Main tracking loop"""
         cap = None
         camera_available = False
+        show_overlay = self.gui_mode
         
         # Try to open camera with multiple attempts and backends
         for attempt in range(3):
-            for backend in [cv2.CAP_DSHOW, cv2.CAP_ANY, cv2.CAP_MSMF]:  # Windows backends
+            backends = [cv2.CAP_DSHOW, cv2.CAP_ANY, cv2.CAP_MSMF] if sys.platform == "win32" else [cv2.CAP_V4L2, cv2.CAP_ANY]
+            for backend in backends:
                 try:
                     cap = cv2.VideoCapture(self.camera_id, backend)
                     if cap.isOpened():
@@ -449,7 +585,8 @@ class EyeTrackingML:
                         ret, test_frame = cap.read()
                         if ret and test_frame is not None:
                             camera_available = True
-                            print(f"INFO: Camera opened successfully with backend {backend} on attempt {attempt + 1}", file=sys.stderr)
+                            if self.debug_mode:
+                                print(f"DEBUG: Camera opened successfully with backend {backend} on attempt {attempt + 1}", file=sys.stderr)
                             break
                         else:
                             cap.release()
@@ -459,7 +596,8 @@ class EyeTrackingML:
                             cap.release()
                             cap = None
                 except Exception as e:
-                    print(f"INFO: Camera attempt {attempt + 1} with backend {backend} failed: {e}", file=sys.stderr)
+                    if self.debug_mode:
+                        print(f"DEBUG: Camera attempt {attempt + 1} with backend {backend} failed: {e}", file=sys.stderr)
                     if cap:
                         cap.release()
                         cap = None
@@ -467,7 +605,8 @@ class EyeTrackingML:
             if camera_available:
                 break
             
-            print(f"INFO: Camera attempt {attempt + 1} failed, retrying...", file=sys.stderr)
+            if self.debug_mode:
+                print(f"DEBUG: Camera attempt {attempt + 1} failed, retrying...", file=sys.stderr)
             time.sleep(1)
         
         if not camera_available or cap is None:
@@ -479,12 +618,21 @@ class EyeTrackingML:
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
                 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
                 cap.set(cv2.CAP_PROP_FPS, 30)
-                print("INFO: Camera properties set successfully", file=sys.stderr)
+                if self.debug_mode:
+                    print("DEBUG: Camera properties set successfully", file=sys.stderr)
             except Exception as e:
                 print(f"WARNING: Failed to set camera properties: {e}", file=sys.stderr)
         
         if not headless:
-            print("Eye tracking started. Press 'q' to quit, 'c' to calibrate", file=sys.stderr)
+            if self.gui_mode:
+                print("Eye tracking GUI started. Controls:", file=sys.stderr)
+                print("  Q - Quit", file=sys.stderr)
+                print("  C - Calibrate", file=sys.stderr)
+                print("  D - Toggle Debug Mode", file=sys.stderr)
+                print("  R - Reset Model", file=sys.stderr)
+                print("  SPACE - Toggle Gaze Overlay", file=sys.stderr)
+            else:
+                print("Eye tracking started. Press 'q' to quit, 'c' to calibrate", file=sys.stderr)
         else:
             print("INFO: Headless eye tracking started", file=sys.stderr)
             if camera_available:
@@ -516,9 +664,14 @@ class EyeTrackingML:
             # If no camera or failed to read, generate demo data
             if not camera_available:
                 frame_count += 1
+                # Create a dummy frame for GUI mode
+                if self.gui_mode and processed_frame is None:
+                    processed_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                    cv2.putText(processed_frame, "NO CAMERA - DEMO MODE", (50, 240), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
             
             # If no face detected, generate demo data for testing pipeline
-            if gaze_point is None and headless:
+            if gaze_point is None and (headless or frame_count % 60 == 0):
                 # Generate smooth demo gaze data that moves around the screen
                 demo_time = time.time() * 0.5  # Slow movement
                 demo_x = (np.sin(demo_time) * 0.3 + 0.5) * self.screen_width  # Oscillate left-right
@@ -534,11 +687,13 @@ class EyeTrackingML:
                 )
                 
                 if frame_count % 30 == 0:  # Every 30 frames
-                    print(f"INFO: No face detected, using demo data. Frame {frame_count}", file=sys.stderr)
+                    if self.debug_mode:
+                        print(f"DEBUG: No face detected, using demo data. Frame {frame_count}", file=sys.stderr)
             elif gaze_point is not None:
                 face_detection_count += 1
                 if frame_count % 30 == 0:  # Every 30 frames
-                    print(f"INFO: Face detected! Detection rate: {face_detection_count}/{frame_count}", file=sys.stderr)
+                    if self.debug_mode:
+                        print(f"DEBUG: Face detected! Detection rate: {face_detection_count}/{frame_count}", file=sys.stderr)
             
             # Update FPS
             self.fps_counter += 1
@@ -546,7 +701,7 @@ class EyeTrackingML:
                 self.current_fps = self.fps_counter
                 self.fps_counter = 0
                 self.fps_start_time = time.time()
-                if headless:
+                if headless or self.debug_mode:
                     print(f"INFO: Current FPS: {self.current_fps}, Face detection rate: {face_detection_count}/{frame_count} ({face_detection_count/frame_count*100:.1f}%)", file=sys.stderr)
             
             # Output gaze data (for integration with Tauri)
@@ -559,21 +714,57 @@ class EyeTrackingML:
                     'calibrated': self.is_calibrated
                 }
                 # Output JSON for Tauri integration (stdout)
-                print(json.dumps(gaze_data), flush=True)
+                if headless:
+                    print(json.dumps(gaze_data), flush=True)
+                elif self.debug_mode and frame_count % 30 == 0:
+                    print(f"DEBUG: Gaze JSON: {json.dumps(gaze_data)}", file=sys.stderr)
             
-            # Show debug window only if not headless
+            # GUI Mode handling
             if not headless:
-                cv2.imshow('Eye Tracking', processed_frame)
-                
-                key = cv2.waitKey(1) & 0xFF
-                if key == ord('q'):
-                    break
-                elif key == ord('c'):
-                    self.calibrate()
+                if self.gui_mode:
+                    # Update gaze overlay
+                    if show_overlay:
+                        self.update_gaze_overlay(gaze_point)
+                    
+                    # Show main camera window
+                    if processed_frame is not None:
+                        cv2.imshow('Eye Tracking Camera', processed_frame)
+                    
+                    # Handle keyboard input for GUI mode
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord('q'):
+                        print("INFO: Quit requested", file=sys.stderr)
+                        break
+                    elif key == ord('c'):
+                        print("INFO: Starting calibration...", file=sys.stderr)
+                        self.calibrate()
+                    elif key == ord('d'):
+                        self.debug_mode = not self.debug_mode
+                        print(f"INFO: Debug mode {'enabled' if self.debug_mode else 'disabled'}", file=sys.stderr)
+                    elif key == ord('r'):
+                        print("INFO: Resetting model...", file=sys.stderr)
+                        self.build_simple_model()
+                        self.is_calibrated = False
+                    elif key == ord(' '):
+                        show_overlay = not show_overlay
+                        print(f"INFO: Gaze overlay {'enabled' if show_overlay else 'disabled'}", file=sys.stderr)
+                        if not show_overlay:
+                            cv2.destroyWindow('Gaze Overlay')
+                else:
+                    # Basic mode (original behavior)
+                    if processed_frame is not None:
+                        cv2.imshow('Eye Tracking', processed_frame)
+                    
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord('q'):
+                        break
+                    elif key == ord('c'):
+                        self.calibrate()
             else:
                 # In headless mode, just a small delay
                 time.sleep(0.01)
         
+        # Cleanup
         if cap is not None:
             cap.release()
         if not headless:
@@ -594,19 +785,45 @@ def main():
     parser.add_argument('--screen-width', type=int, default=1920, help='Screen width')
     parser.add_argument('--screen-height', type=int, default=1080, help='Screen height')
     parser.add_argument('--headless', action='store_true', help='Run without GUI (for Tauri integration)')
+    parser.add_argument('--gui', action='store_true', help='Run with enhanced GUI mode and live preview')
+    parser.add_argument('--debug', action='store_true', help='Enable verbose debug output')
+    parser.add_argument('--smoothing', type=int, default=5, help='Smoothing window size')
     
     args = parser.parse_args()
+    
+    # Validate arguments
+    if args.headless and args.gui:
+        print("ERROR: Cannot use both --headless and --gui modes", file=sys.stderr)
+        return
     
     # Initialize eye tracker
     tracker = EyeTrackingML(
         camera_id=args.camera,
-        model_path=args.model
+        model_path=args.model,
+        smoothing_window=args.smoothing,
+        debug_mode=args.debug,
+        gui_mode=args.gui
     )
     
     tracker.screen_width = args.screen_width
     tracker.screen_height = args.screen_height
     
     try:
+        # Print startup info
+        mode_info = []
+        if args.headless:
+            mode_info.append("HEADLESS")
+        if args.gui:
+            mode_info.append("GUI")
+        if args.debug:
+            mode_info.append("DEBUG")
+        
+        mode_str = " + ".join(mode_info) if mode_info else "STANDARD"
+        print(f"INFO: Starting Eye Tracking ML System in {mode_str} mode", file=sys.stderr)
+        print(f"INFO: Screen resolution: {args.screen_width}x{args.screen_height}", file=sys.stderr)
+        print(f"INFO: Camera ID: {args.camera}", file=sys.stderr)
+        print(f"INFO: Smoothing window: {args.smoothing}", file=sys.stderr)
+        
         # In headless mode, skip calibration and start immediately
         if args.headless:
             print("INFO: Starting in headless mode for Tauri integration", file=sys.stderr)
@@ -616,6 +833,8 @@ def main():
             if not tracker.calibrate():
                 print("ERROR: Calibration failed", file=sys.stderr)
                 return
+        elif args.gui:
+            print("INFO: GUI mode started. Press 'C' to calibrate", file=sys.stderr)
         
         # Start tracking
         tracker.run_tracking(headless=args.headless)
@@ -624,8 +843,20 @@ def main():
         print("\nINFO: Shutting down...", file=sys.stderr)
     except Exception as e:
         print(f"ERROR: {e}", file=sys.stderr)
+        if args.debug:
+            import traceback
+            traceback.print_exc()
     finally:
         tracker.stop_tracking()
 
 if __name__ == "__main__":
-    main() 
+    main()
+
+# Basic Test (Camera + Debug)
+# python eye-tracking-ml.py --debug
+
+# Full GUI Mode with Live Preview
+# python eye-tracking-ml.py --gui --debug --screen-width 1920 --screen-height 1080
+
+# Headless Mode (Original Tauri Integration)
+# python eye-tracking-ml.py --headless --camera 0 --screen-width 1920 --screen-height 1080
