@@ -5,7 +5,6 @@ import { useAppStore } from './stores/app'
 
 // Components
 import WindowHeader from './components/core/WindowHeader.vue'
-import ThreeScene from './components/three/ThreeScene.vue'
 import ControlPanel from './components/core/ControlPanel.vue'
 import ChatDrawer from './components/core/ChatDrawer.vue'
 import MinimizedView from './components/core/MinimizedView.vue'
@@ -36,9 +35,6 @@ onMounted(() => {
       <div class="window-wrapper">
         <!-- Window Header -->
         <WindowHeader />
-        
-        <!-- Three.js Background -->
-        <ThreeScene />
         
         <!-- Content overlay with subtle gradient -->
         <div class="content-overlay">
