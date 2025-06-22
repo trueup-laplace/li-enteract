@@ -137,19 +137,20 @@ export function useCameraManager() {
       state.isActive = true
       state.error = null
 
-      // Attach to video element if available
-      if (videoElement.value) {
-        console.log('Attaching stream to video element')
-        videoElement.value.srcObject = stream
-        await videoElement.value.play()
-        console.log('Video element playing')
-      } else {
-        console.log('No video element available yet')
-      }
+      // Video element attachment will be handled by the watch function
+      console.log('Stream ready, video attachment will be handled automatically')
 
       console.log('Camera stream started successfully')
       return true
     } catch (error) {
+      // Check if this is just a video play error but stream was created
+      if (state.stream && error instanceof DOMException && error.name === 'AbortError') {
+        console.log('Video play interrupted, but camera stream is active')
+        state.isActive = true
+        state.error = null
+        return true // Consider this a success since we have the stream
+      }
+      
       const errorMsg = `Failed to start camera: ${(error as Error).message}`
       state.error = errorMsg
       state.isActive = false
@@ -229,38 +230,97 @@ export function useCameraManager() {
   }
 
   const attachVideoElement = (element: HTMLVideoElement): void => {
+    console.log('Attaching video element to camera manager')
     videoElement.value = element
     
-    if (state.stream) {
-      element.srcObject = state.stream
-      element.play().catch(console.error)
-    }
+    // The watch function will handle stream attachment automatically
+    // when the stream becomes available
   }
 
   // Watch for stream changes and auto-attach to video element
-  watch(() => state.stream, (newStream: MediaStream | null) => {
+  watch(() => state.stream, async (newStream: MediaStream | null) => {
     if (videoElement.value && newStream) {
-      videoElement.value.srcObject = newStream
-      videoElement.value.play().catch(console.error)
+      try {
+        console.log('Auto-attaching stream to video element')
+        
+        // Clear any existing source first
+        videoElement.value.srcObject = null
+        
+        // Small delay to ensure clean state
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        // Set new stream
+        videoElement.value.srcObject = newStream
+        
+        // Wait for metadata to load before playing
+        await new Promise((resolve, reject) => {
+          const video = videoElement.value!
+          
+          const onLoadedMetadata = () => {
+            video.removeEventListener('loadedmetadata', onLoadedMetadata)
+            video.removeEventListener('error', onError)
+            resolve(void 0)
+          }
+          
+          const onError = (e: Event) => {
+            video.removeEventListener('loadedmetadata', onLoadedMetadata)
+            video.removeEventListener('error', onError)
+            reject(e)
+          }
+          
+          video.addEventListener('loadedmetadata', onLoadedMetadata)
+          video.addEventListener('error', onError)
+        })
+        
+        // Now play the video
+        await videoElement.value.play()
+        console.log('Video playing successfully')
+        
+      } catch (error) {
+        console.error('Video attachment error:', error)
+        // Don't fail the whole process for video issues
+      }
+    } else if (videoElement.value && !newStream) {
+      // Clear video when stream is removed
+      videoElement.value.srcObject = null
     }
   })
 
   const getCurrentFrame = (): ImageData | null => {
     if (!videoElement.value || !state.isActive) {
+      console.log('getCurrentFrame: No video element or not active')
       return null
     }
 
     try {
+      const video = videoElement.value
+      
+      // Check if video is ready
+      if (video.readyState < 2) { // HAVE_CURRENT_DATA
+        console.log('getCurrentFrame: Video not ready, readyState:', video.readyState)
+        return null
+      }
+      
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        console.log('getCurrentFrame: Video dimensions not available')
+        return null
+      }
+
       const canvas = document.createElement('canvas')
       const ctx = canvas.getContext('2d')
-      if (!ctx) return null
+      if (!ctx) {
+        console.log('getCurrentFrame: Could not get canvas context')
+        return null
+      }
 
-      const video = videoElement.value
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight
 
       ctx.drawImage(video, 0, 0)
-      return ctx.getImageData(0, 0, canvas.width, canvas.height)
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      
+      console.log('getCurrentFrame: Successfully captured frame', canvas.width, 'x', canvas.height)
+      return imageData
     } catch (error) {
       console.error('Failed to get current frame:', error)
       return null

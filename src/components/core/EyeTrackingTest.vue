@@ -27,6 +27,8 @@
           autoplay 
           muted 
           playsinline
+          controls="false"
+          preload="metadata"
         ></video>
         <div v-if="eyeTracking.currentGaze.value" class="gaze-overlay">
           <div 

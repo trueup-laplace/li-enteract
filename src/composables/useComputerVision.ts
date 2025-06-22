@@ -241,8 +241,8 @@ export function useComputerVision() {
     }
   }
 
-  // Calculate basic gaze vector from eye positions
-  const calculateGaze = (eyes: EyePair, faceBox: FaceBox): GazeVector => {
+  // Calculate basic gaze vector from eye positions and image analysis
+  const calculateGaze = (eyes: EyePair, faceBox: FaceBox, processedImage?: any): GazeVector => {
     if (!eyes.isValid) {
       return {
         x: 0,
@@ -253,15 +253,45 @@ export function useComputerVision() {
     }
 
     try {
-      // Calculate center point between pupils
+      // If we have processed image data, use it to influence gaze calculation
+      if (processedImage) {
+        // Analyze the face region for brightness variations that might indicate gaze direction
+        const faceData = extractFaceRegion(processedImage, faceBox)
+        const gazeInfluence = analyzeGazeDirection(faceData)
+        
+        // Combine eye position with image analysis
+        const baseX = (eyes.left.pupilCenter.x + eyes.right.pupilCenter.x) / 2
+        const baseY = (eyes.left.pupilCenter.y + eyes.right.pupilCenter.y) / 2
+        
+        // Calculate relative position within face
+        const relativeX = (baseX - faceBox.x) / faceBox.width
+        const relativeY = (baseY - faceBox.y) / faceBox.height
+        
+        // Apply image analysis influence
+        const influencedX = relativeX + gazeInfluence.x * 0.3
+        const influencedY = relativeY + gazeInfluence.y * 0.3
+        
+        // Convert to normalized gaze coordinates (-1 to 1)
+        const normalizedX = (influencedX - 0.5) * 2
+        const normalizedY = (influencedY - 0.5) * 2
+
+        const confidence = (eyes.left.confidence + eyes.right.confidence) / 2 * gazeInfluence.confidence
+
+        return {
+          x: Math.max(-1, Math.min(1, normalizedX)),
+          y: Math.max(-1, Math.min(1, normalizedY)),
+          confidence,
+          timestamp: Date.now()
+        }
+      }
+
+      // Fallback to basic calculation
       const gazeX = (eyes.left.pupilCenter.x + eyes.right.pupilCenter.x) / 2
       const gazeY = (eyes.left.pupilCenter.y + eyes.right.pupilCenter.y) / 2
 
-      // Calculate relative position within face
       const relativeX = (gazeX - faceBox.x) / faceBox.width
       const relativeY = (gazeY - faceBox.y) / faceBox.height
 
-      // Convert to normalized gaze coordinates (-1 to 1)
       const normalizedX = (relativeX - 0.5) * 2
       const normalizedY = (relativeY - 0.5) * 2
 
@@ -281,6 +311,80 @@ export function useComputerVision() {
         confidence: 0,
         timestamp: Date.now()
       }
+    }
+  }
+
+  // Extract face region from image data
+  const extractFaceRegion = (processedImage: any, faceBox: FaceBox): any => {
+    const { x, y, width, height } = faceBox
+    const imageWidth = processedImage.width
+    const data = processedImage.data
+    
+    const faceData = []
+    for (let fy = y; fy < y + height && fy < processedImage.height; fy++) {
+      for (let fx = x; fx < x + width && fx < imageWidth; fx++) {
+        const index = (fy * imageWidth + fx) * 4
+        faceData.push({
+          x: fx - x,
+          y: fy - y,
+          r: data[index],
+          g: data[index + 1],
+          b: data[index + 2],
+          brightness: (data[index] + data[index + 1] + data[index + 2]) / 3
+        })
+      }
+    }
+    
+    return { data: faceData, width, height }
+  }
+
+  // Analyze gaze direction from face region
+  const analyzeGazeDirection = (faceData: any): { x: number, y: number, confidence: number } => {
+    const { data, width, height } = faceData
+    
+    // Look for bright spots that might indicate eye reflections or gaze direction
+    const regions = {
+      left: { brightness: 0, count: 0 },
+      right: { brightness: 0, count: 0 },
+      top: { brightness: 0, count: 0 },
+      bottom: { brightness: 0, count: 0 }
+    }
+    
+    data.forEach((pixel: any) => {
+      const { x, y, brightness } = pixel
+      
+      // Categorize pixels by region
+      if (x < width / 2) {
+        regions.left.brightness += brightness
+        regions.left.count++
+      } else {
+        regions.right.brightness += brightness
+        regions.right.count++
+      }
+      
+      if (y < height / 2) {
+        regions.top.brightness += brightness
+        regions.top.count++
+      } else {
+        regions.bottom.brightness += brightness
+        regions.bottom.count++
+      }
+    })
+    
+    // Calculate average brightness per region
+    const leftAvg = regions.left.count > 0 ? regions.left.brightness / regions.left.count : 0
+    const rightAvg = regions.right.count > 0 ? regions.right.brightness / regions.right.count : 0
+    const topAvg = regions.top.count > 0 ? regions.top.brightness / regions.top.count : 0
+    const bottomAvg = regions.bottom.count > 0 ? regions.bottom.brightness / regions.bottom.count : 0
+    
+    // Calculate gaze influence based on brightness differences
+    const horizontalInfluence = (rightAvg - leftAvg) / 255 * 0.5
+    const verticalInfluence = (bottomAvg - topAvg) / 255 * 0.5
+    
+    return {
+      x: horizontalInfluence,
+      y: verticalInfluence,
+      confidence: Math.min(1, Math.abs(horizontalInfluence) + Math.abs(verticalInfluence))
     }
   }
 
@@ -322,7 +426,7 @@ export function useComputerVision() {
       const eyes = detectEyes(processedImage, primaryFace)
 
       // Calculate gaze
-      const gaze = calculateGaze(eyes, primaryFace)
+      const gaze = calculateGaze(eyes, primaryFace, imageData)
 
       const processingTime = performance.now() - startTime
       lastProcessingTime.value = processingTime

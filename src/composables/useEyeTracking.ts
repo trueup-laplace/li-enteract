@@ -156,6 +156,7 @@ export function useEyeTracking() {
       // Get current frame from camera
       const imageData = camera.getCurrentFrame()
       if (!imageData) {
+        console.log('No image data from camera, using simulation')
         // For demo: if we have camera stream but no frame yet, simulate tracking
         if (camera.isActive.value) {
           simulateGazeTracking()
@@ -163,11 +164,15 @@ export function useEyeTracking() {
         return
       }
 
+      console.log('Got image data:', imageData.width, 'x', imageData.height)
+
       // Try to process frame with computer vision if available
       if (cv.isReady.value) {
+        console.log('Processing frame with computer vision')
         const result = cv.processFrame(imageData)
         updateStateFromResult(result)
       } else {
+        console.log('Computer vision not ready, using simulation')
         // Fallback: simulate gaze tracking for demo purposes
         simulateGazeTracking()
       }
