@@ -5,13 +5,16 @@ import {
   ChatBubbleLeftRightIcon,
   SparklesIcon,
   CommandLineIcon,
-  EyeIcon
+  EyeIcon,
+  ArrowsPointingOutIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
+import { useGazeWindowControl } from '../../composables/useGazeWindowControl'
 import TransparencyControls from './TransparencyControls.vue'
 import EyeTrackingTest from './EyeTrackingTest.vue'
 
 const store = useAppStore()
+const gazeControl = useGazeWindowControl()
 
 // Transparency controls state
 const showTransparencyControls = ref(false)
@@ -33,6 +36,10 @@ const toggleEyeTrackingTest = () => {
   if (showEyeTrackingTest.value) {
     showTransparencyControls.value = false
   }
+}
+
+const toggleGazeControl = async () => {
+  await gazeControl.toggleGazeControl()
 }
 
 // Click outside to close controls
@@ -90,6 +97,17 @@ onUnmounted(() => {
         >
           <EyeIcon class="w-3.5 h-3.5 transition-colors"
             :class="showEyeTrackingTest ? 'text-white' : 'text-white/80 group-hover:text-white'" />
+        </button>
+
+        <!-- Gaze Window Control Button (Phase 2) -->
+        <button 
+          @click="toggleGazeControl"
+          class="btn btn-circle btn-sm glass-btn-compact group tooltip flex items-center justify-center"
+          :class="{ 'btn-success': gazeControl.isActive.value, 'glass-btn-compact': !gazeControl.isActive.value }"
+          :data-tip="gazeControl.isActive.value ? 'Stop Gaze Control (Phase 2)' : 'Start Gaze Control (Phase 2)'"
+        >
+          <ArrowsPointingOutIcon class="w-3.5 h-3.5 transition-colors"
+            :class="gazeControl.isActive.value ? 'text-white' : 'text-white/80 group-hover:text-white'" />
         </button>
 
         <!-- Command Mode Button (Transparency Controls) -->

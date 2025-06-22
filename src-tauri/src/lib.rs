@@ -100,6 +100,73 @@ async fn toggle_transparency(window: Window, current_alpha: f64) -> Result<f64, 
     Ok(new_alpha)
 }
 
+#[tauri::command]
+async fn move_window_to_position(window: Window, x: i32, y: i32) -> Result<(), String> {
+    use tauri::PhysicalPosition;
+    
+    let position = PhysicalPosition::new(x, y);
+    window.set_position(position).map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_window_position(window: Window) -> Result<(i32, i32), String> {
+    let position = window.outer_position().map_err(|e| e.to_string())?;
+    Ok((position.x, position.y))
+}
+
+#[tauri::command]
+async fn get_window_size(window: Window) -> Result<(u32, u32), String> {
+    let size = window.outer_size().map_err(|e| e.to_string())?;
+    Ok((size.width, size.height))
+}
+
+#[tauri::command]
+async fn get_screen_size() -> Result<(u32, u32), String> {
+    // Get primary monitor size
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
+        
+        unsafe {
+            let width = GetSystemMetrics(SM_CXSCREEN) as u32;
+            let height = GetSystemMetrics(SM_CYSCREEN) as u32;
+            return Ok((width, height));
+        }
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        use core_graphics::display::CGMainDisplay;
+        
+        let display = CGMainDisplay();
+        let width = display.pixels_wide() as u32;
+        let height = display.pixels_high() as u32;
+        return Ok((width, height));
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        // For Linux, we'll return a default size
+        // In a production app, you'd want to query the actual display
+        return Ok((1920, 1080));
+    }
+}
+
+#[tauri::command]
+async fn set_window_bounds(window: Window, x: i32, y: i32, width: u32, height: u32) -> Result<(), String> {
+    use tauri::{PhysicalPosition, PhysicalSize};
+    
+    let position = PhysicalPosition::new(x, y);
+    let size = PhysicalSize::new(width, height);
+    
+    window.set_position(position).map_err(|e| e.to_string())?;
+    window.set_size(size).map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -122,7 +189,12 @@ pub fn run() {
             greet, 
             set_window_transparency, 
             emergency_restore_window,
-            toggle_transparency
+            toggle_transparency,
+            move_window_to_position,
+            get_window_position,
+            get_window_size,
+            get_screen_size,
+            set_window_bounds
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
