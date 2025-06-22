@@ -4,25 +4,46 @@ import {
   MicrophoneIcon, 
   ChatBubbleLeftRightIcon,
   SparklesIcon,
-  CommandLineIcon
+  CommandLineIcon,
+  EyeIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 import TransparencyControls from './TransparencyControls.vue'
+import EyeTrackingTest from './EyeTrackingTest.vue'
 
 const store = useAppStore()
 
 // Transparency controls state
 const showTransparencyControls = ref(false)
 
+// Eye tracking test state
+const showEyeTrackingTest = ref(false)
+
 const toggleTransparencyControls = () => {
   showTransparencyControls.value = !showTransparencyControls.value
+  // Close eye tracking test if opening transparency controls
+  if (showTransparencyControls.value) {
+    showEyeTrackingTest.value = false
+  }
 }
 
-// Click outside to close transparency controls
-const closeTransparencyControls = (event: Event) => {
-  const target = event.target as HTMLElement
-  if (!target.closest('.transparency-controls') && !target.closest('.command-btn')) {
+const toggleEyeTrackingTest = () => {
+  showEyeTrackingTest.value = !showEyeTrackingTest.value
+  // Close transparency controls if opening eye tracking test
+  if (showEyeTrackingTest.value) {
     showTransparencyControls.value = false
+  }
+}
+
+// Click outside to close controls
+const closeControls = (event: Event) => {
+  const target = event.target as HTMLElement
+  if (!target.closest('.transparency-controls') && 
+      !target.closest('.command-btn') && 
+      !target.closest('.eye-tracking-test') && 
+      !target.closest('.eye-tracking-btn')) {
+    showTransparencyControls.value = false
+    showEyeTrackingTest.value = false
   }
 }
 
@@ -30,11 +51,11 @@ const closeTransparencyControls = (event: Event) => {
 import { onMounted, onUnmounted } from 'vue'
 
 onMounted(() => {
-  document.addEventListener('click', closeTransparencyControls)
+  document.addEventListener('click', closeControls)
 })
 
 onUnmounted(() => {
-  document.removeEventListener('click', closeTransparencyControls)
+  document.removeEventListener('click', closeControls)
 })
 </script>
 
@@ -60,6 +81,17 @@ onUnmounted(() => {
             :class="store.micEnabled ? 'text-white' : 'text-white/80 group-hover:text-white'" />
         </button>
         
+        <!-- Eye Tracking Test Button -->
+        <button 
+          @click="toggleEyeTrackingTest"
+          class="btn btn-circle btn-sm glass-btn-compact group tooltip flex items-center justify-center eye-tracking-btn"
+          :class="{ 'btn-primary': showEyeTrackingTest, 'glass-btn-compact': !showEyeTrackingTest }"
+          data-tip="Eye Tracking Test (Phase 1)"
+        >
+          <EyeIcon class="w-3.5 h-3.5 transition-colors"
+            :class="showEyeTrackingTest ? 'text-white' : 'text-white/80 group-hover:text-white'" />
+        </button>
+
         <!-- Command Mode Button (Transparency Controls) -->
         <button 
           @click="toggleTransparencyControls"
@@ -88,6 +120,13 @@ onUnmounted(() => {
     <Transition name="transparency-panel">
       <div v-if="showTransparencyControls" class="transparency-panel-container">
         <TransparencyControls />
+      </div>
+    </Transition>
+
+    <!-- Eye Tracking Test Panel -->
+    <Transition name="eye-tracking-panel">
+      <div v-if="showEyeTrackingTest" class="eye-tracking-panel-container">
+        <EyeTrackingTest class="eye-tracking-test" />
       </div>
     </Transition>
   </div>
@@ -184,5 +223,54 @@ onUnmounted(() => {
 /* Ensure transparency controls are always interactive */
 .transparency-panel-container * {
   pointer-events: auto !important;
+}
+
+/* Eye tracking panel styles */
+.eye-tracking-panel-container {
+  @apply fixed inset-0 z-50;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.eye-tracking-test {
+  @apply w-full h-full max-w-7xl max-h-full overflow-auto;
+  background: rgba(17, 24, 39, 0.95);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Eye tracking button active state */
+.eye-tracking-btn.btn-primary {
+  @apply bg-blue-500/20 border-blue-500/30 text-blue-300;
+}
+
+.eye-tracking-btn.btn-primary:hover {
+  @apply bg-blue-500/30 border-blue-500/50;
+}
+
+/* Animation for eye tracking panel */
+.eye-tracking-panel-enter-active,
+.eye-tracking-panel-leave-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.eye-tracking-panel-enter-from {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.eye-tracking-panel-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.eye-tracking-panel-enter-to,
+.eye-tracking-panel-leave-from {
+  opacity: 1;
+  transform: scale(1);
 }
 </style> 
