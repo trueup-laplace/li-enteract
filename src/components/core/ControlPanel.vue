@@ -1,68 +1,131 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { 
   MicrophoneIcon, 
   ChatBubbleLeftRightIcon,
   SparklesIcon,
   CommandLineIcon,
-  EyeIcon,
-  ArrowsPointingOutIcon
+  CpuChipIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
-import { useGazeWindowControl } from '../../composables/useGazeWindowControl'
+import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
+import { useWindowManager } from '../../composables/useWindowManager'
 import TransparencyControls from './TransparencyControls.vue'
-import EyeTrackingTest from './EyeTrackingTest.vue'
 
 const store = useAppStore()
-const gazeControl = useGazeWindowControl()
+const mlEyeTracking = useMLEyeTracking()
+const windowManager = useWindowManager()
 
 // Transparency controls state
 const showTransparencyControls = ref(false)
 
-// Eye tracking test state
-const showEyeTrackingTest = ref(false)
+// ML Eye tracking with window movement state
+const isGazeControlActive = ref(false)
 
 const toggleTransparencyControls = () => {
   showTransparencyControls.value = !showTransparencyControls.value
-  // Close eye tracking test if opening transparency controls
-  if (showTransparencyControls.value) {
-    showEyeTrackingTest.value = false
+}
+
+const toggleMLEyeTrackingWithMovement = async () => {
+  if (mlEyeTracking.isActive.value) {
+    // Stop both ML tracking and window movement
+    await mlEyeTracking.stopTracking()
+    windowManager.disableGazeControl()
+    isGazeControlActive.value = false
+    console.log('🛑 ML Eye Tracking and Window Movement stopped')
+  } else {
+    // Start ML tracking
+    await mlEyeTracking.startTracking()
+    
+    // Wait a moment for initialization
+    setTimeout(() => {
+      if (mlEyeTracking.isActive.value) {
+        // Start window movement with ML gaze data
+        startMLGazeWindowMovement()
+        isGazeControlActive.value = true
+        console.log('🚀 ML Eye Tracking and Window Movement started')
+      }
+    }, 1000)
   }
 }
 
-const toggleEyeTrackingTest = () => {
-  showEyeTrackingTest.value = !showEyeTrackingTest.value
-  // Close transparency controls if opening eye tracking test
-  if (showEyeTrackingTest.value) {
-    showTransparencyControls.value = false
-  }
+// Function to connect ML gaze data to window movement
+function startMLGazeWindowMovement() {
+  // Enable the window manager for gaze control
+  windowManager.enableGazeControl()
+  
+  // Create interval to read ML gaze data and move window
+  const updateInterval = setInterval(async () => {
+    if (!mlEyeTracking.isActive.value) {
+      clearInterval(updateInterval)
+      return
+    }
+    
+    const gazeData = mlEyeTracking.currentGaze.value
+    if (gazeData && mlEyeTracking.isHighConfidence.value) {
+      // Convert gaze screen coordinates to normalized coordinates (0-1)
+      const normalizedGaze = {
+        x: gazeData.x / mlEyeTracking.config.value.screen_width,
+        y: gazeData.y / mlEyeTracking.config.value.screen_height
+      }
+      
+      // Process gaze input through the window manager
+      await windowManager.processGazeInput(normalizedGaze)
+    }
+  }, 33) // 30 FPS window movement
 }
 
-const toggleGazeControl = async () => {
-  await gazeControl.toggleGazeControl()
+// Keyboard shortcuts
+const handleKeydown = async (event: KeyboardEvent) => {
+  // Ctrl+Shift+E = Toggle ML Eye Tracking
+  if (event.ctrlKey && event.shiftKey && event.key === 'E') {
+    event.preventDefault()
+    await toggleMLEyeTrackingWithMovement()
+    console.log('⌨️ Keyboard shortcut: ML Eye Tracking toggled')
+  }
+  
+  // Ctrl+Shift+S = Stop all tracking (emergency stop)
+  if (event.ctrlKey && event.shiftKey && event.key === 'S') {
+    event.preventDefault()
+    await mlEyeTracking.stopTracking()
+    windowManager.disableGazeControl()
+    isGazeControlActive.value = false
+    console.log('🚨 Emergency stop: All tracking stopped')
+  }
+  
+  // Ctrl+Shift+C = Calibrate
+  if (event.ctrlKey && event.shiftKey && event.key === 'C') {
+    event.preventDefault()
+    if (mlEyeTracking.isActive.value) {
+      await mlEyeTracking.calibrate()
+      console.log('🎯 Calibration triggered via keyboard')
+    }
+  }
 }
 
 // Click outside to close controls
 const closeControls = (event: Event) => {
   const target = event.target as HTMLElement
   if (!target.closest('.transparency-controls') && 
-      !target.closest('.command-btn') && 
-      !target.closest('.eye-tracking-test') && 
-      !target.closest('.eye-tracking-btn')) {
+      !target.closest('.command-btn')) {
     showTransparencyControls.value = false
-    showEyeTrackingTest.value = false
   }
 }
 
-// Setup click outside listener when controls are shown
-import { onMounted, onUnmounted } from 'vue'
-
 onMounted(() => {
   document.addEventListener('click', closeControls)
+  document.addEventListener('keydown', handleKeydown)
+  
+  // Show keyboard shortcuts in console
+  console.log('⌨️ ML Eye Tracking Keyboard Shortcuts:')
+  console.log('   Ctrl+Shift+E = Start/Stop ML Eye Tracking + Window Movement')
+  console.log('   Ctrl+Shift+S = Emergency Stop (stop all tracking)')
+  console.log('   Ctrl+Shift+C = Calibrate ML tracking')
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', closeControls)
+  document.removeEventListener('keydown', handleKeydown)
 })
 </script>
 
@@ -88,26 +151,22 @@ onUnmounted(() => {
             :class="store.micEnabled ? 'text-white' : 'text-white/80 group-hover:text-white'" />
         </button>
         
-        <!-- Eye Tracking Test Button -->
+        <!-- ML Eye Tracking + Window Movement Button -->
         <button 
-          @click="toggleEyeTrackingTest"
-          class="btn btn-circle btn-sm glass-btn-compact group tooltip flex items-center justify-center eye-tracking-btn"
-          :class="{ 'btn-primary': showEyeTrackingTest, 'glass-btn-compact': !showEyeTrackingTest }"
-          data-tip="Eye Tracking Test (Phase 1)"
-        >
-          <EyeIcon class="w-3.5 h-3.5 transition-colors"
-            :class="showEyeTrackingTest ? 'text-white' : 'text-white/80 group-hover:text-white'" />
-        </button>
-
-        <!-- Gaze Window Control Button (Phase 2) -->
-        <button 
-          @click="toggleGazeControl"
+          @click="toggleMLEyeTrackingWithMovement"
           class="btn btn-circle btn-sm glass-btn-compact group tooltip flex items-center justify-center"
-          :class="{ 'btn-success': gazeControl.isActive.value, 'glass-btn-compact': !gazeControl.isActive.value }"
-          :data-tip="gazeControl.isActive.value ? 'Stop Gaze Control (Phase 2)' : 'Start Gaze Control (Phase 2)'"
+          :class="{ 
+            'btn-success': mlEyeTracking.isActive.value && mlEyeTracking.isCalibrated.value && isGazeControlActive,
+            'btn-warning': mlEyeTracking.isActive.value && (!mlEyeTracking.isCalibrated.value || !isGazeControlActive),
+            'glass-btn-compact': !mlEyeTracking.isActive.value 
+          }"
+          :data-tip="mlEyeTracking.isActive.value ? 
+            'Stop ML Gaze Control (Ctrl+Shift+E)' : 
+            'Start ML Gaze Control (Ctrl+Shift+E)'"
+          :disabled="mlEyeTracking.isLoading.value"
         >
-          <ArrowsPointingOutIcon class="w-3.5 h-3.5 transition-colors"
-            :class="gazeControl.isActive.value ? 'text-white' : 'text-white/80 group-hover:text-white'" />
+          <CpuChipIcon class="w-3.5 h-3.5 transition-colors"
+            :class="mlEyeTracking.isActive.value ? 'text-white' : 'text-white/80 group-hover:text-white'" />
         </button>
 
         <!-- Command Mode Button (Transparency Controls) -->
@@ -134,17 +193,29 @@ onUnmounted(() => {
       </div>
     </div>
     
+    <!-- Status Indicator -->
+    <div v-if="mlEyeTracking.isActive.value" class="mt-2 text-center">
+      <div class="glass-panel-compact px-3 py-1 inline-block">
+        <span class="text-xs text-white/80">
+          ML Gaze Control: 
+          <span :class="{
+            'text-green-400': mlEyeTracking.isCalibrated.value && isGazeControlActive,
+            'text-yellow-400': !mlEyeTracking.isCalibrated.value || !isGazeControlActive,
+            'text-red-400': !mlEyeTracking.isActive.value
+          }">
+            {{ mlEyeTracking.isCalibrated.value && isGazeControlActive ? 'Active' : 
+               mlEyeTracking.isActive.value ? 'Tracking' : 'Inactive' }}
+          </span>
+          • FPS: {{ mlEyeTracking.fps.value }}
+          • Conf: {{ Math.round(mlEyeTracking.confidence.value * 100) }}%
+        </span>
+      </div>
+    </div>
+    
     <!-- Transparency Controls Panel -->
     <Transition name="transparency-panel">
       <div v-if="showTransparencyControls" class="transparency-panel-container">
         <TransparencyControls />
-      </div>
-    </Transition>
-
-    <!-- Eye Tracking Test Panel -->
-    <Transition name="eye-tracking-panel">
-      <div v-if="showEyeTrackingTest" class="eye-tracking-panel-container">
-        <EyeTrackingTest class="eye-tracking-test" />
       </div>
     </Transition>
   </div>
@@ -197,98 +268,20 @@ onUnmounted(() => {
   position: relative;
 }
 
-/* Animation for transparency panel */
+/* Panel transitions */
 .transparency-panel-enter-active,
 .transparency-panel-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s ease;
 }
 
-.transparency-panel-enter-from {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-10px) scale(0.95);
-}
-
+.transparency-panel-enter-from,
 .transparency-panel-leave-to {
   opacity: 0;
-  transform: translateX(-50%) translateY(-10px) scale(0.95);
+  transform: translateY(-10px) translateX(-50%);
 }
 
-.transparency-panel-enter-to,
-.transparency-panel-leave-from {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0) scale(1);
-}
-
-/* Ensure the panel container has proper positioning context */
-.p-3 {
-  position: relative;
-}
-
-/* Command button active state */
-.command-btn.btn-accent {
-  @apply bg-purple-500/20 border-purple-500/30 text-purple-300;
-}
-
-.command-btn.btn-accent:hover {
-  @apply bg-purple-500/30 border-purple-500/50;
-}
-
-/* Enhanced z-index for transparency controls */
-.transparency-panel-container {
-  z-index: 10000 !important;
-}
-
-/* Ensure transparency controls are always interactive */
-.transparency-panel-container * {
-  pointer-events: auto !important;
-}
-
-/* Eye tracking panel styles */
-.eye-tracking-panel-container {
-  @apply fixed inset-0 z-50;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(10px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
-
-.eye-tracking-test {
-  @apply w-full h-full max-w-7xl max-h-full overflow-auto;
-  background: rgba(17, 24, 39, 0.95);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* Eye tracking button active state */
-.eye-tracking-btn.btn-primary {
-  @apply bg-blue-500/20 border-blue-500/30 text-blue-300;
-}
-
-.eye-tracking-btn.btn-primary:hover {
-  @apply bg-blue-500/30 border-blue-500/50;
-}
-
-/* Animation for eye tracking panel */
-.eye-tracking-panel-enter-active,
-.eye-tracking-panel-leave-active {
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.eye-tracking-panel-enter-from {
-  opacity: 0;
-  transform: scale(0.95);
-}
-
-.eye-tracking-panel-leave-to {
-  opacity: 0;
-  transform: scale(0.95);
-}
-
-.eye-tracking-panel-enter-to,
-.eye-tracking-panel-leave-from {
-  opacity: 1;
-  transform: scale(1);
+/* Status indicator animation */
+.glass-panel-compact {
+  transition: all 0.3s ease;
 }
 </style> 
