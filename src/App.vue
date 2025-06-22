@@ -88,7 +88,7 @@ onMounted(() => {
 }
 
 .content-overlay {
-  @apply absolute inset-0 pt-14;
+  @apply absolute inset-0 pt-8;
   background: linear-gradient(
     180deg,
     rgba(0, 0, 0, 0.1) 0%,

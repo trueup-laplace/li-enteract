@@ -17,10 +17,10 @@ defineEmits<{
 <template>
   <div class="p-8">
     <div class="flex justify-center">
-      <div class="glass-panel-enhanced flex items-center gap-6 px-10 py-6">
+      <div class="glass-panel-enhanced flex items-center justify-center gap-6 px-10 py-6">
         <!-- AI Assistant Button -->
         <button 
-          class="btn btn-circle btn-xl glass-btn-enhanced group"
+          class="btn btn-circle btn-xl glass-btn-enhanced group flex items-center justify-center"
         >
           <SparklesIcon class="w-7 h-7 text-white/80 group-hover:text-white transition-colors" />
         </button>
@@ -28,7 +28,7 @@ defineEmits<{
         <!-- Microphone Button -->
         <button 
           @click="store.toggleMic"
-          class="btn btn-circle btn-xl glass-btn-enhanced group tooltip"
+          class="btn btn-circle btn-xl glass-btn-enhanced group tooltip flex items-center justify-center"
           :class="{ 'btn-primary': store.micEnabled, 'glass-btn-enhanced': !store.micEnabled }"
           data-tip="Toggle Microphone"
         >
@@ -38,7 +38,7 @@ defineEmits<{
         
         <!-- Command Mode Button -->
         <button 
-          class="btn btn-circle btn-xl glass-btn-enhanced group"
+          class="btn btn-circle btn-xl glass-btn-enhanced group flex items-center justify-center"
         >
           <CommandLineIcon class="w-7 h-7 text-white/80 group-hover:text-white transition-colors" />
         </button>
@@ -46,7 +46,7 @@ defineEmits<{
         <!-- Chat Button -->
         <button 
           @click="store.toggleChat"
-          class="btn btn-circle btn-xl glass-btn-enhanced group tooltip"
+          class="btn btn-circle btn-xl glass-btn-enhanced group tooltip flex items-center justify-center"
           :class="{ 'btn-accent': store.chatOpen, 'glass-btn-enhanced': !store.chatOpen }"
           data-tip="Toggle Chat"
         >
@@ -72,10 +72,24 @@ defineEmits<{
 
 .btn-xl {
   @apply w-16 h-16;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .glass-btn-enhanced:hover {
   transform: translateY(-2px) scale(1.05);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* Ensure icons are perfectly centered */
+.btn-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-circle svg {
+  flex-shrink: 0;
 }
 </style> 
