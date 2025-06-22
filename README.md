@@ -18,7 +18,7 @@ The **Embedded Agentic Assistant** is a next-generation, hyper-personalized desk
 - **Frontend:** Vue 3 + TypeScript + Vite
 - **Backend:** Rust + Tauri
 - **3D Graphics:** Three.js
-- **Styling:** TailwindCSS + Custom themes
+- **Styling:** TailwindCSS + Custom themes + DaisyUI
 - **Eye Tracking:** OpenCV.js + MediaDevices API
 - **Animations:** GSAP + CSS transitions
 - **State Management:** Pinia
