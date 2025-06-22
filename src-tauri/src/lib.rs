@@ -160,6 +160,54 @@ async fn get_screen_size() -> Result<(u32, u32), String> {
 }
 
 #[tauri::command]
+async fn get_virtual_desktop_size() -> Result<(u32, u32), String> {
+    // Get full virtual desktop size (all monitors combined)
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN};
+        
+        unsafe {
+            let width = GetSystemMetrics(SM_CXVIRTUALSCREEN) as u32;
+            let height = GetSystemMetrics(SM_CYVIRTUALSCREEN) as u32;
+            println!("🖥️ Virtual desktop detected: {}x{}", width, height);
+            return Ok((width, height));
+        }
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        // For macOS, sum up all displays
+        use core_graphics::display::{CGDisplay, CGDisplayBounds};
+        
+        let displays = CGDisplay::active_displays()
+            .map_err(|e| format!("Failed to get displays: {:?}", e))?;
+        
+        let mut min_x = f64::INFINITY;
+        let mut min_y = f64::INFINITY;
+        let mut max_x = f64::NEG_INFINITY;
+        let mut max_y = f64::NEG_INFINITY;
+        
+        for display in displays {
+            let bounds = CGDisplayBounds(display);
+            min_x = min_x.min(bounds.origin.x);
+            min_y = min_y.min(bounds.origin.y);
+            max_x = max_x.max(bounds.origin.x + bounds.size.width);
+            max_y = max_y.max(bounds.origin.y + bounds.size.height);
+        }
+        
+        let width = (max_x - min_x) as u32;
+        let height = (max_y - min_y) as u32;
+        return Ok((width, height));
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        // For Linux, fall back to primary display
+        return get_screen_size().await;
+    }
+}
+
+#[tauri::command]
 async fn set_window_bounds(window: Window, x: i32, y: i32, width: u32, height: u32) -> Result<(), String> {
     use tauri::{PhysicalPosition, PhysicalSize};
     
@@ -241,10 +289,15 @@ impl MLEyeTrackingProcess {
         ];
 
         let mut python_script = None;
+        let mut found_scripts = Vec::new();
+        
         for path in possible_paths {
             if path.exists() {
-                python_script = Some(path);
-                break;
+                found_scripts.push(path.display().to_string());
+                if python_script.is_none() {
+                    python_script = Some(path.clone());
+                    println!("✅ Found Python script: {}", path.display());
+                }
             }
         }
 
@@ -258,6 +311,11 @@ impl MLEyeTrackingProcess {
             format!("Python script not found. Attempted paths: {:?}. Current dir: {:?}", 
                 attempted_paths, std::env::current_dir().unwrap())
         })?;
+        
+        println!("🐍 Using Python script: {}", python_script.display());
+        if found_scripts.len() > 1 {
+            println!("📝 Available scripts: {:?}", found_scripts);
+        }
 
         // Build command arguments - try different Python commands
         let python_cmd = if cfg!(target_os = "windows") {
@@ -398,7 +456,16 @@ lazy_static::lazy_static! {
 
 // ML Eye tracking commands
 #[tauri::command]
-async fn start_ml_eye_tracking(config: MLEyeTrackingConfig) -> Result<String, String> {
+async fn start_ml_eye_tracking(mut config: MLEyeTrackingConfig) -> Result<String, String> {
+    // Auto-detect virtual desktop size if not properly set
+    let (virtual_width, virtual_height) = get_virtual_desktop_size().await?;
+    
+    // Override config with correct virtual desktop dimensions
+    config.screen_width = virtual_width as i32;
+    config.screen_height = virtual_height as i32;
+    
+    println!("🎯 Starting ML eye tracking with virtual desktop: {}x{}", config.screen_width, config.screen_height);
+    
     let mut tracker = ML_EYE_TRACKING.lock().unwrap();
     
     // Stop existing tracker if running
@@ -623,6 +690,7 @@ pub fn run() {
             get_window_position,
             get_window_size,
             get_screen_size,
+            get_virtual_desktop_size,
             set_window_bounds,
             start_ml_eye_tracking,
             stop_ml_eye_tracking,
