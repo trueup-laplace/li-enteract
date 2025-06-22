@@ -12,9 +12,18 @@
   "app": {
     "windows": [
       {
-        "title": "enteract",
+        "title": "Agentic Assistant",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "minWidth": 300,
+        "minHeight": 80,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "center": true,
+        "resizable": true,
+        "shadow": true,
+        "visibleOnAllWorkspaces": false
       }
     ],
     "security": {

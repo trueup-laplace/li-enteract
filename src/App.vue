@@ -1,269 +1,144 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import * as THREE from 'three'
-import { 
-  MicrophoneIcon, 
-  EyeIcon, 
-  EyeSlashIcon, 
-  ChatBubbleLeftRightIcon,
-  PaperAirplaneIcon,
-  XMarkIcon
-} from '@heroicons/vue/24/outline'
+import { onMounted } from 'vue'
+import { useWindowManager } from './composables/useWindowManager'
+import { useAppStore } from './stores/app'
 
-// Reactive state
-const micEnabled = ref(false)
-const eyeTrackingEnabled = ref(false)
-const chatOpen = ref(false)
-const chatMessages = ref([
-  { id: 1, text: "Welcome to your agentic assistant", sender: "assistant", timestamp: new Date() },
-  { id: 2, text: "How can I help you today?", sender: "assistant", timestamp: new Date() }
-])
-const newMessage = ref('')
+// Components
+import WindowHeader from './components/core/WindowHeader.vue'
+import ThreeScene from './components/three/ThreeScene.vue'
+import ControlPanel from './components/core/ControlPanel.vue'
+import ChatDrawer from './components/core/ChatDrawer.vue'
+import MinimizedView from './components/core/MinimizedView.vue'
 
-// Three.js refs
-let scene: THREE.Scene
-let camera: THREE.PerspectiveCamera
-let renderer: THREE.WebGLRenderer
-let cube: THREE.Mesh
-let animationId: number
-
-const threeContainer = ref<HTMLElement>()
-
-const initThreeJS = () => {
-  if (!threeContainer.value) return
-
-  // Scene setup
-  scene = new THREE.Scene()
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
-  renderer = new THREE.WebGLRenderer({ 
-    alpha: true, 
-    antialias: true,
-    powerPreference: "high-performance"
-  })
-  
-  renderer.setSize(window.innerWidth, window.innerHeight)
-  renderer.setClearColor(0x000000, 0)
-  threeContainer.value.appendChild(renderer.domElement)
-
-  // Create cube with glassmorphic material
-  const geometry = new THREE.BoxGeometry(2, 2, 2)
-  const material = new THREE.MeshBasicMaterial({ 
-    color: 0x3b82f6,
-    transparent: true,
-    opacity: 0.6,
-    wireframe: true
-  })
-  
-  cube = new THREE.Mesh(geometry, material)
-  scene.add(cube)
-
-  // Add ambient light
-  const ambientLight = new THREE.AmbientLight(0x404040, 0.6)
-  scene.add(ambientLight)
-
-  // Add directional light
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
-  directionalLight.position.set(1, 1, 1)
-  scene.add(directionalLight)
-
-  camera.position.z = 5
-
-  animate()
-}
-
-const animate = () => {
-  animationId = requestAnimationFrame(animate)
-  
-  if (cube) {
-    cube.rotation.x += 0.01
-    cube.rotation.y += 0.01
-  }
-  
-  renderer.render(scene, camera)
-}
-
-const handleResize = () => {
-  if (!camera || !renderer) return
-  
-  camera.aspect = window.innerWidth / window.innerHeight
-  camera.updateProjectionMatrix()
-  renderer.setSize(window.innerWidth, window.innerHeight)
-}
-
-const toggleMic = () => {
-  micEnabled.value = !micEnabled.value
-}
-
-const toggleEyeTracking = () => {
-  eyeTrackingEnabled.value = !eyeTrackingEnabled.value
-}
-
-const toggleChat = () => {
-  chatOpen.value = !chatOpen.value
-}
-
-const sendMessage = () => {
-  if (!newMessage.value.trim()) return
-  
-  chatMessages.value.push({
-    id: Date.now(),
-    text: newMessage.value,
-    sender: "user",
-    timestamp: new Date()
-  })
-  
-  // Simulate assistant response
-  setTimeout(() => {
-    chatMessages.value.push({
-      id: Date.now(),
-      text: "I understand. Let me help you with that.",
-      sender: "assistant", 
-      timestamp: new Date()
-    })
-  }, 1000)
-  
-  newMessage.value = ''
-}
+// Composables
+const { initializeWindow } = useWindowManager()
+const store = useAppStore()
 
 onMounted(() => {
-  initThreeJS()
-  window.addEventListener('resize', handleResize)
-})
-
-onUnmounted(() => {
-  if (animationId) {
-    cancelAnimationFrame(animationId)
-  }
-  window.removeEventListener('resize', handleResize)
+  initializeWindow()
 })
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 relative overflow-hidden" data-theme="dark">
-    <!-- Three.js Container -->
-    <div ref="threeContainer" class="absolute inset-0 z-0"></div>
-    
-    <!-- Background overlay for better contrast -->
-    <div class="absolute inset-0 bg-black/20 z-10"></div>
-    
-    <!-- Main Content -->
-    <div class="relative z-20 min-h-screen flex flex-col">
-      <!-- Top section with breathing room -->
-      <div class="flex-1"></div>
-      
-      <!-- Bottom Control Panel -->
-      <div class="p-6">
-        <div class="flex justify-center">
-          <div class="glass-panel flex items-center gap-4 px-8 py-4">
-            <!-- Microphone Button -->
-            <button 
-              @click="toggleMic"
-              class="btn btn-circle btn-lg glass-btn"
-              :class="{ 'btn-primary': micEnabled, 'btn-ghost': !micEnabled }"
-            >
-              <MicrophoneIcon class="w-6 h-6" />
-            </button>
-            
-            <!-- Eye Tracking Button -->
-            <button 
-              @click="toggleEyeTracking"
-              class="btn btn-circle btn-lg glass-btn"
-              :class="{ 'btn-secondary': eyeTrackingEnabled, 'btn-ghost': !eyeTrackingEnabled }"
-            >
-              <EyeIcon v-if="eyeTrackingEnabled" class="w-6 h-6" />
-              <EyeSlashIcon v-else class="w-6 h-6" />
-            </button>
-            
-            <!-- Chat Button -->
-            <button 
-              @click="toggleChat"
-              class="btn btn-circle btn-lg glass-btn"
-              :class="{ 'btn-accent': chatOpen, 'btn-ghost': !chatOpen }"
-            >
-              <ChatBubbleLeftRightIcon class="w-6 h-6" />
-            </button>
-          </div>
+  <div class="app-container" data-theme="dark">
+    <!-- Minimized State -->
+    <template v-if="store.windowCollapsed">
+      <div class="fixed inset-0 bg-transparent">
+        <div class="absolute top-2 left-2 right-2">
+          <MinimizedView />
         </div>
       </div>
-    </div>
+    </template>
     
-    <!-- Chat Drawer -->
-    <div 
-      class="fixed top-0 right-0 h-full w-96 z-50 transform transition-transform duration-300 ease-in-out"
-      :class="chatOpen ? 'translate-x-0' : 'translate-x-full'"
-    >
-      <div class="h-full glass-panel-vertical flex flex-col">
-        <!-- Chat Header -->
-        <div class="flex items-center justify-between p-4 border-b border-glass">
-          <h3 class="text-lg font-semibold text-white">Chat History</h3>
-          <button @click="toggleChat" class="btn btn-sm btn-circle btn-ghost">
-            <XMarkIcon class="w-5 h-5" />
-          </button>
-        </div>
+    <!-- Normal State -->
+    <template v-else>
+      <!-- Window with fade edges -->
+      <div class="window-wrapper">
+        <!-- Window Header -->
+        <WindowHeader />
         
-        <!-- Chat Messages -->
-        <div class="flex-1 overflow-y-auto p-4 space-y-4">
-          <div 
-            v-for="message in chatMessages" 
-            :key="message.id"
-            class="flex"
-            :class="message.sender === 'user' ? 'justify-end' : 'justify-start'"
-          >
-            <div 
-              class="max-w-xs rounded-lg px-4 py-2 text-sm"
-              :class="message.sender === 'user' 
-                ? 'bg-primary text-primary-content' 
-                : 'bg-glass-dark text-white border border-glass'"
-            >
-              {{ message.text }}
-            </div>
+        <!-- Three.js Background -->
+        <ThreeScene />
+        
+        <!-- Content overlay with subtle gradient -->
+        <div class="content-overlay">
+          <!-- Main Content Area -->
+          <div class="main-content">
+            <!-- Breathing room -->
+            <div class="flex-1"></div>
+            
+            <!-- Control Panel -->
+            <ControlPanel />
           </div>
         </div>
         
-        <!-- Chat Input -->
-        <div class="p-4 border-t border-glass">
-          <div class="flex gap-2">
-            <input 
-              v-model="newMessage"
-              @keyup.enter="sendMessage"
-              type="text" 
-              placeholder="Type a message..."
-              class="input input-bordered flex-1 bg-glass-dark border-glass text-white placeholder-gray-400"
-            />
-            <button 
-              @click="sendMessage"
-              class="btn btn-primary btn-circle"
-            >
-              <PaperAirplaneIcon class="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+        <!-- Chat Drawer -->
+        <ChatDrawer />
       </div>
-    </div>
-    
-    <!-- Backdrop for chat -->
-    <div 
-      v-if="chatOpen"
-      @click="toggleChat"
-      class="fixed inset-0 bg-black/30 backdrop-blur-sm z-40"
-    ></div>
+    </template>
   </div>
 </template>
 
-<style scoped>
-.glass-panel {
-  @apply bg-glass-dark/30 backdrop-blur-lg border border-glass rounded-2xl shadow-2xl;
+<style>
+.app-container {
+  @apply min-h-screen overflow-hidden;
 }
 
-.glass-panel-vertical {
-  @apply bg-glass-dark/40 backdrop-blur-xl border-l border-glass shadow-2xl;
+.window-wrapper {
+  @apply relative min-h-screen;
+  background: linear-gradient(135deg, 
+    rgba(17, 24, 39, 0.95) 0%,
+    rgba(31, 41, 55, 0.90) 25%,
+    rgba(55, 65, 81, 0.85) 50%,
+    rgba(75, 85, 99, 0.80) 75%,
+    rgba(107, 114, 128, 0.70) 100%
+  );
+  
+  /* Fade edges effect */
+  mask: 
+    radial-gradient(ellipse 80% 100% at center, black 60%, transparent 100%),
+    linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%),
+    linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
+  mask-composite: intersect;
+  -webkit-mask: 
+    radial-gradient(ellipse 80% 100% at center, black 60%, transparent 100%),
+    linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%),
+    linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
+  -webkit-mask-composite: source-in;
 }
 
-.glass-btn {
-  @apply backdrop-blur-sm border border-glass/50 hover:border-glass transition-all duration-200;
+.content-overlay {
+  @apply absolute inset-0 pt-14;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.1) 0%,
+    rgba(0, 0, 0, 0.05) 50%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
 }
 
-.glass-btn:hover {
-  @apply scale-105 shadow-lg;
+.main-content {
+  @apply relative z-20 min-h-full flex flex-col;
+}
+
+/* Enhanced glass effects */
+.glass-enhanced {
+  backdrop-filter: blur(40px) saturate(180%);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    rgba(255, 255, 255, 0.1) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* Smooth animations */
+* {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 </style>
+
+
