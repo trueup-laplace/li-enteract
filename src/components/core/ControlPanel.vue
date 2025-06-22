@@ -6,15 +6,18 @@ import {
   SparklesIcon,
   CommandLineIcon,
   EyeIcon,
-  ArrowsPointingOutIcon
+  ArrowsPointingOutIcon,
+  CpuChipIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 import { useGazeWindowControl } from '../../composables/useGazeWindowControl'
+import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
 import TransparencyControls from './TransparencyControls.vue'
 import EyeTrackingTest from './EyeTrackingTest.vue'
 
 const store = useAppStore()
 const gazeControl = useGazeWindowControl()
+const mlEyeTracking = useMLEyeTracking()
 
 // Transparency controls state
 const showTransparencyControls = ref(false)
@@ -40,6 +43,14 @@ const toggleEyeTrackingTest = () => {
 
 const toggleGazeControl = async () => {
   await gazeControl.toggleGazeControl()
+}
+
+const toggleMLEyeTracking = async () => {
+  if (mlEyeTracking.isActive.value) {
+    await mlEyeTracking.stopTracking()
+  } else {
+    await mlEyeTracking.startTracking()
+  }
 }
 
 // Click outside to close controls
@@ -108,6 +119,24 @@ onUnmounted(() => {
         >
           <ArrowsPointingOutIcon class="w-3.5 h-3.5 transition-colors"
             :class="gazeControl.isActive.value ? 'text-white' : 'text-white/80 group-hover:text-white'" />
+        </button>
+
+        <!-- ML Eye Tracking Button (Phase 3) -->
+        <button 
+          @click="toggleMLEyeTracking"
+          class="btn btn-circle btn-sm glass-btn-compact group tooltip flex items-center justify-center"
+          :class="{ 
+            'btn-info': mlEyeTracking.isActive.value && mlEyeTracking.isCalibrated.value,
+            'btn-warning': mlEyeTracking.isActive.value && !mlEyeTracking.isCalibrated.value,
+            'glass-btn-compact': !mlEyeTracking.isActive.value 
+          }"
+          :data-tip="mlEyeTracking.isActive.value ? 
+            (mlEyeTracking.isCalibrated.value ? 'Stop ML Eye Tracking (Calibrated)' : 'ML Eye Tracking (Needs Calibration)') : 
+            'Start ML Eye Tracking (Phase 3)'"
+          :disabled="mlEyeTracking.isLoading.value"
+        >
+          <CpuChipIcon class="w-3.5 h-3.5 transition-colors"
+            :class="mlEyeTracking.isActive.value ? 'text-white' : 'text-white/80 group-hover:text-white'" />
         </button>
 
         <!-- Command Mode Button (Transparency Controls) -->
