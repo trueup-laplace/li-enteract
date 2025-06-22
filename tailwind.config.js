@@ -6,6 +6,10 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        mono: ['IBM Plex Mono', 'Courier New', 'monospace'],
+        sans: ['IBM Plex Mono', 'Courier New', 'monospace'], // Use as default
+      },
       backdropBlur: {
         'xs': '2px',
         '4xl': '72px',

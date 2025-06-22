@@ -1,11 +1,11 @@
 import { ref, watch } from 'vue'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { Window } from '@tauri-apps/api/window'
 import { LogicalSize, LogicalPosition } from '@tauri-apps/api/dpi'
 import { useAppStore } from '../stores/app'
 
 export function useWindowManager() {
   const store = useAppStore()
-  const currentWindow = getCurrentWindow()
+  const currentWindow = Window.getCurrent()
   
   const isDragging = ref(false)
   const isResizing = ref(false)
@@ -49,8 +49,6 @@ export function useWindowManager() {
     }
   }
 
-
-
   const startDrag = async () => {
     try {
       isDragging.value = true
@@ -64,37 +62,67 @@ export function useWindowManager() {
 
   const minimizeWindow = async () => {
     try {
-      console.log('Minimizing window...')
+      console.log('Attempting to minimize window...')
+      
+      // Try the minimize method
       await currentWindow.minimize()
       console.log('Window minimized successfully')
+      
     } catch (error) {
       console.error('Failed to minimize window:', error)
+      console.error('Error details:', error)
+      
       // Fallback: try to hide the window
       try {
+        console.log('Trying fallback: hiding window...')
         await currentWindow.hide()
+        console.log('Window hidden successfully as fallback')
       } catch (hideError) {
         console.error('Failed to hide window as fallback:', hideError)
+        
+        // Last resort: try setting size to very small
+        try {
+          console.log('Last resort: minimizing by size...')
+          await currentWindow.setSize(new LogicalSize(1, 1))
+          await currentWindow.setPosition(new LogicalPosition(-1000, -1000))
+        } catch (sizeError) {
+          console.error('All minimize attempts failed:', sizeError)
+        }
       }
     }
   }
 
   const closeWindow = async () => {
     try {
-      console.log('Closing window...')
+      console.log('Attempting to close window...')
+      
+      // Try the close method
       await currentWindow.close()
       console.log('Window closed successfully')
+      
     } catch (error) {
       console.error('Failed to close window:', error)
-      // Force close if needed
+      console.error('Error details:', error)
+      
+      // Try destroy as fallback
       try {
+        console.log('Trying fallback: destroying window...')
         await currentWindow.destroy()
+        console.log('Window destroyed successfully as fallback')
       } catch (destroyError) {
         console.error('Failed to destroy window as fallback:', destroyError)
+        
+        // Final fallback: try to exit the app
+        try {
+          console.log('Final fallback: attempting app exit...')
+          // In a real Tauri app, you might use process.exit() or tauri.exit()
+          window.close()
+        } catch (exitError) {
+          console.error('All close attempts failed:', exitError)
+        }
       }
     }
   }
-
-
 
   // Listen for window events
   const setupWindowListeners = () => {

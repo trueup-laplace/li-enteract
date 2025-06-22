@@ -33,8 +33,10 @@ onMounted(() => {
     <template v-else>
       <!-- Window with fade edges -->
       <div class="window-wrapper">
-        <!-- Window Header -->
-        <WindowHeader />
+        <!-- Window Header - Always on top -->
+        <div class="header-container">
+          <WindowHeader />
+        </div>
         
         <!-- Content overlay with subtle gradient -->
         <div class="content-overlay">
@@ -83,18 +85,30 @@ onMounted(() => {
   -webkit-mask-composite: source-in;
 }
 
+.header-container {
+  @apply relative;
+  z-index: 9999;
+  position: relative;
+  pointer-events: auto;
+}
+
 .content-overlay {
-  @apply absolute inset-0 pt-8;
+  @apply absolute inset-0;
+  top: 32px; /* Start below the 8 * 4px = 32px header */
   background: linear-gradient(
     180deg,
     rgba(0, 0, 0, 0.1) 0%,
     rgba(0, 0, 0, 0.05) 50%,
     rgba(0, 0, 0, 0.1) 100%
   );
+  z-index: 10;
+  pointer-events: none;
 }
 
 .main-content {
-  @apply relative z-20 min-h-full flex flex-col;
+  @apply relative min-h-full flex flex-col;
+  z-index: 20;
+  pointer-events: auto;
 }
 
 /* Enhanced glass effects */

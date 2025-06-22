@@ -10,56 +10,95 @@ import { useAppStore } from '../../stores/app'
 const { toggleCollapse, minimizeWindow, closeWindow, startDrag } = useWindowManager()
 const store = useAppStore()
 
-// Fallback drag handler
-const handleDrag = (event: MouseEvent) => {
+// Debug handlers with more detailed logging
+const handleMinimize = (event: Event) => {
+  event.stopPropagation()
   event.preventDefault()
-  startDrag()
+  console.log('Minimize button clicked!')
+  minimizeWindow()
+}
+
+const handleClose = (event: Event) => {
+  event.stopPropagation()
+  event.preventDefault()
+  console.log('Close button clicked!')
+  closeWindow()
+}
+
+const handleToggleCollapse = (event: Event) => {
+  event.stopPropagation()
+  event.preventDefault()
+  console.log('Collapse button clicked!')
+  toggleCollapse()
+}
+
+// Simple test handler
+const testClick = () => {
+  console.log('Test button works!')
+  alert('Button is clickable!')
+}
+
+// Mouse event debugging
+const onMouseOver = () => {
+  console.log('Mouse over WindowHeader detected!')
+}
+
+const onTestMouseOver = () => {
+  console.log('Mouse over TEST button!')
 }
 </script>
 
 <template>
-  <div 
-    class="window-header"
-    data-tauri-drag-region
-    @mousedown="handleDrag"
-  >
-    <!-- Left: App Title -->
-    <div class="header-section cursor-move" data-tauri-drag-region>
+  <div class="window-header" @mouseover="onMouseOver">
+    <!-- Left: App Title (draggable) -->
+    <div class="header-section draggable-area">
       <div class="w-2 h-2 rounded-full bg-gradient-to-r from-blue-400 to-purple-500"></div>
       <span class="text-xs text-white/60 select-none font-medium">Agentic Assistant</span>
     </div>
 
-    <!-- Center: Status -->
-    <div class="header-section cursor-move" data-tauri-drag-region>
+    <!-- Center: Status (draggable) -->
+    <div class="header-section draggable-area">
       <div class="w-1 h-1 rounded-full bg-green-400"></div>
       <span class="text-[10px] text-white/30">Active</span>
     </div>
 
-    <!-- Right: Window Controls -->
-    <div class="flex items-center gap-1">
+    <!-- Right: Window Controls (NOT draggable) -->
+    <div class="controls-container">
+      <!-- Test Button (much more prominent) -->
+      <button 
+        @click="testClick"
+        @mouseover="onTestMouseOver"
+        class="test-button"
+      >
+        TEST
+      </button>
+      
       <!-- Collapse/Expand -->
       <button 
-        @click="toggleCollapse"
-        @mousedown.stop
+        @click="handleToggleCollapse"
+        @mousedown.stop.prevent
         class="window-control-btn"
+        style="pointer-events: auto; position: relative; z-index: 1000;"
       >
-        <Squares2X2Icon class="w-2.5 h-2.5 text-white/50" />
+        <Squares2X2Icon class="w-2.5 h-2.5 text-white/70" />
       </button>
       
       <!-- Minimize -->
       <button 
-        @click="minimizeWindow"
-        @mousedown.stop
+        @click="handleMinimize"
+        @mousedown.stop.prevent
         class="window-control-btn"
+        style="pointer-events: auto; position: relative; z-index: 1000;"
       >
-        <MinusIcon class="w-2.5 h-2.5 text-white/50" />
+        <MinusIcon class="w-2.5 h-2.5 text-white/70" />
       </button>
       
       <!-- Close -->
       <button 
-        @click="closeWindow"
-        @mousedown.stop
+        @click="handleClose"
+        @mousedown.stop.prevent
         class="window-control-btn bg-red-500/10 hover:bg-red-500/30"
+        style="pointer-events: auto; position: relative; z-index: 1000;"
       >
         <XMarkIcon class="w-2.5 h-2.5 text-red-400/70" />
       </button>
@@ -70,8 +109,10 @@ const handleDrag = (event: MouseEvent) => {
 <style scoped>
 .window-header {
   @apply flex items-center justify-between px-3 py-1.5 h-8 bg-gradient-to-r from-black/10 via-black/5 to-transparent backdrop-blur-md border-b border-white/5;
-  -webkit-app-region: drag;
+  position: relative;
   cursor: grab;
+  z-index: 10000;
+  pointer-events: auto;
 }
 
 .window-header:active {
@@ -80,17 +121,51 @@ const handleDrag = (event: MouseEvent) => {
 
 .header-section {
   @apply flex items-center gap-2;
+}
+
+.draggable-area {
   -webkit-app-region: drag;
+  cursor: move;
+}
+
+.controls-container {
+  @apply flex items-center gap-1;
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+  position: relative;
+  z-index: 100;
+}
+
+.test-button {
+  @apply px-3 py-1 rounded bg-red-600 text-white font-bold text-xs;
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 10001;
+  position: relative;
+  min-width: 40px;
+  border: 2px solid white;
+}
+
+.test-button:hover {
+  @apply bg-red-700;
 }
 
 .window-control-btn {
   @apply w-5 h-5 rounded-full bg-white/5 hover:bg-white/15 flex items-center justify-center transition-all duration-200 hover:scale-110;
+  @apply border border-white/20 hover:border-white/40;
   -webkit-app-region: no-drag;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-/* Ensure buttons don't inherit drag behavior */
-button {
-  -webkit-app-region: no-drag;
+.window-control-btn:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.window-control-btn:active {
+  transform: scale(0.95);
 }
 
 /* Enhanced backdrop blur */

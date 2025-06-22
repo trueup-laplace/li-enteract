@@ -2,6 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
+/* IBM Plex Mono Font Faces */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('/fonts/IBMPlexMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('/fonts/IBMPlexMono-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('/fonts/IBMPlexMono-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Base styles */
+@layer base {
+  html {
+    font-family: 'IBM Plex Mono', 'Courier New', monospace;
+  }
+  
+  body {
+    font-family: 'IBM Plex Mono', 'Courier New', monospace;
+    font-weight: 400;
+  }
+}
+
 /* Global glass utility classes */
 @layer utilities {
   .border-glass {
