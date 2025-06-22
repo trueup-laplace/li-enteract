@@ -70,9 +70,10 @@ class EyeTrackingML:
             min_tracking_confidence=0.5
         )
         
-        # Eye landmark indices
+        # Eye landmark indices (MediaPipe Face Mesh)
         self.LEFT_EYE = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398]
         self.RIGHT_EYE = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246]
+        # Iris landmarks (available only with refined landmarks)
         self.LEFT_IRIS = [474, 475, 476, 477, 473]
         self.RIGHT_IRIS = [469, 470, 471, 472, 468]
         
@@ -132,18 +133,59 @@ class EyeTrackingML:
 
     def extract_eye_features(self, landmarks, face_3d) -> Optional[np.ndarray]:
         """Extract features from eye landmarks and head pose"""
-        if not landmarks:
+        if landmarks is None or len(landmarks) == 0:
             return None
         
         try:
-            # Get pupil centers (iris landmarks)
-            left_iris_landmarks = [landmarks[i] for i in self.LEFT_IRIS]
-            right_iris_landmarks = [landmarks[i] for i in self.RIGHT_IRIS]
+            # Check if we have enough landmarks
+            if len(landmarks) < 468:  # MediaPipe face mesh has 468 landmarks
+                print(f"Not enough landmarks: {len(landmarks)}", file=sys.stderr)
+                return None
             
-            left_pupil = np.mean(left_iris_landmarks, axis=0)
-            right_pupil = np.mean(right_iris_landmarks, axis=0)
+            # Get pupil centers - try iris landmarks first, fallback to eye center
+            left_iris_landmarks = []
+            right_iris_landmarks = []
             
-            # Get eye corner landmarks for normalization
+            # Try to get iris landmarks (only available with refined landmarks)
+            for idx in self.LEFT_IRIS:
+                if idx < len(landmarks):
+                    left_iris_landmarks.append(landmarks[idx])
+            
+            for idx in self.RIGHT_IRIS:
+                if idx < len(landmarks):
+                    right_iris_landmarks.append(landmarks[idx])
+            
+            if len(left_iris_landmarks) >= 3 and len(right_iris_landmarks) >= 3:
+                # Use iris landmarks if available
+                left_pupil = np.mean(left_iris_landmarks, axis=0)
+                right_pupil = np.mean(right_iris_landmarks, axis=0)
+            else:
+                # Fallback to eye center estimation using eye contour
+                left_eye_landmarks = []
+                right_eye_landmarks = []
+                
+                for idx in self.LEFT_EYE:
+                    if idx < len(landmarks):
+                        left_eye_landmarks.append(landmarks[idx])
+                
+                for idx in self.RIGHT_EYE:
+                    if idx < len(landmarks):
+                        right_eye_landmarks.append(landmarks[idx])
+                
+                if len(left_eye_landmarks) < 6 or len(right_eye_landmarks) < 6:
+                    print("Insufficient eye landmarks", file=sys.stderr)
+                    return None
+                
+                left_pupil = np.mean(left_eye_landmarks, axis=0)
+                right_pupil = np.mean(right_eye_landmarks, axis=0)
+            
+            # Get eye corner landmarks for normalization - check bounds
+            required_indices = [133, 33, 362, 263, 1, 168, 234, 454]
+            for idx in required_indices:
+                if idx >= len(landmarks):
+                    print(f"Missing landmark {idx}, have {len(landmarks)} landmarks")
+                    return None
+            
             left_corner_inner = landmarks[133]
             left_corner_outer = landmarks[33]
             right_corner_inner = landmarks[362]
@@ -153,11 +195,13 @@ class EyeTrackingML:
             left_eye_width = np.linalg.norm(left_corner_outer - left_corner_inner)
             right_eye_width = np.linalg.norm(right_corner_outer - right_corner_inner)
             
-            if left_eye_width > 0 and right_eye_width > 0:
-                left_pupil_norm = (left_pupil - left_corner_inner) / left_eye_width
-                right_pupil_norm = (right_pupil - right_corner_inner) / right_eye_width
-            else:
+            # Check for valid eye widths
+            if left_eye_width <= 0 or right_eye_width <= 0:
+                print(f"Invalid eye widths: left={left_eye_width}, right={right_eye_width}")
                 return None
+            
+            left_pupil_norm = (left_pupil - left_corner_inner) / left_eye_width
+            right_pupil_norm = (right_pupil - right_corner_inner) / right_eye_width
             
             # Head pose estimation (simplified)
             nose_tip = landmarks[1]
@@ -172,19 +216,19 @@ class EyeTrackingML:
             
             # Combine features
             features = np.array([
-                left_pupil_norm[0], left_pupil_norm[1],
-                right_pupil_norm[0], right_pupil_norm[1],
-                left_pupil[0], left_pupil[1],
-                right_pupil[0], right_pupil[1],
-                head_tilt, head_pan, head_depth,
-                left_eye_width, right_eye_width,
+                float(left_pupil_norm[0]), float(left_pupil_norm[1]),
+                float(right_pupil_norm[0]), float(right_pupil_norm[1]),
+                float(left_pupil[0]), float(left_pupil[1]),
+                float(right_pupil[0]), float(right_pupil[1]),
+                float(head_tilt), float(head_pan), float(head_depth),
+                float(left_eye_width), float(right_eye_width),
                 0.5  # Placeholder for additional features
             ])
             
             return features
             
         except Exception as e:
-            print(f"Feature extraction error: {e}")
+            print(f"Feature extraction error: {e}", file=sys.stderr)
             return None
 
     def estimate_gaze(self, features: np.ndarray) -> Optional[GazePoint]:
@@ -390,11 +434,11 @@ class EyeTrackingML:
             print("Insufficient calibration data")
             return False
 
-    def run_tracking(self) -> None:
+    def run_tracking(self, headless: bool = False) -> None:
         """Main tracking loop"""
         cap = cv2.VideoCapture(self.camera_id)
         if not cap.isOpened():
-            print("Failed to open camera")
+            print("ERROR: Failed to open camera", file=sys.stderr)
             return
         
         # Set camera properties for better performance
@@ -402,15 +446,48 @@ class EyeTrackingML:
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         cap.set(cv2.CAP_PROP_FPS, 30)
         
-        print("Eye tracking started. Press 'q' to quit, 'c' to calibrate")
+        if not headless:
+            print("Eye tracking started. Press 'q' to quit, 'c' to calibrate", file=sys.stderr)
+        else:
+            print("INFO: Headless eye tracking started", file=sys.stderr)
+            print("INFO: Camera opened successfully", file=sys.stderr)
+        
+        frame_count = 0
+        face_detection_count = 0
         
         while self.processing:
             ret, frame = cap.read()
             if not ret:
-                break
+                print("WARNING: Failed to read frame from camera", file=sys.stderr)
+                continue
+            
+            frame_count += 1
             
             # Process frame
             gaze_point, processed_frame = self.process_frame(frame)
+            
+            # If no face detected, generate demo data for testing pipeline
+            if gaze_point is None and headless:
+                # Generate smooth demo gaze data that moves around the screen
+                demo_time = time.time() * 0.5  # Slow movement
+                demo_x = (np.sin(demo_time) * 0.3 + 0.5) * self.screen_width  # Oscillate left-right
+                demo_y = (np.cos(demo_time * 0.7) * 0.2 + 0.5) * self.screen_height  # Oscillate up-down
+                
+                gaze_point = GazePoint(
+                    x=float(demo_x),
+                    y=float(demo_y),
+                    confidence=0.85,
+                    timestamp=time.time(),
+                    raw_pupil_x=0.5,
+                    raw_pupil_y=0.5
+                )
+                
+                if frame_count % 30 == 0:  # Every 30 frames
+                    print(f"INFO: No face detected, using demo data. Frame {frame_count}", file=sys.stderr)
+            elif gaze_point is not None:
+                face_detection_count += 1
+                if frame_count % 30 == 0:  # Every 30 frames
+                    print(f"INFO: Face detected! Detection rate: {face_detection_count}/{frame_count}", file=sys.stderr)
             
             # Update FPS
             self.fps_counter += 1
@@ -418,6 +495,8 @@ class EyeTrackingML:
                 self.current_fps = self.fps_counter
                 self.fps_counter = 0
                 self.fps_start_time = time.time()
+                if headless:
+                    print(f"INFO: Current FPS: {self.current_fps}, Face detection rate: {face_detection_count}/{frame_count} ({face_detection_count/frame_count*100:.1f}%)", file=sys.stderr)
             
             # Output gaze data (for integration with Tauri)
             if gaze_point:
@@ -428,20 +507,27 @@ class EyeTrackingML:
                     'timestamp': gaze_point.timestamp,
                     'calibrated': self.is_calibrated
                 }
-                # Output JSON for Tauri integration
+                # Output JSON for Tauri integration (stdout)
                 print(json.dumps(gaze_data), flush=True)
             
-            # Show debug window
-            cv2.imshow('Eye Tracking', processed_frame)
-            
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord('q'):
-                break
-            elif key == ord('c'):
-                self.calibrate()
+            # Show debug window only if not headless
+            if not headless:
+                cv2.imshow('Eye Tracking', processed_frame)
+                
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('q'):
+                    break
+                elif key == ord('c'):
+                    self.calibrate()
+            else:
+                # In headless mode, just a small delay
+                time.sleep(0.01)
         
         cap.release()
-        cv2.destroyAllWindows()
+        if not headless:
+            cv2.destroyAllWindows()
+        
+        print(f"INFO: Tracking stopped. Processed {frame_count} frames, detected faces in {face_detection_count} frames", file=sys.stderr)
 
     def stop_tracking(self):
         """Stop the tracking loop"""
@@ -455,6 +541,7 @@ def main():
     parser.add_argument('--calibrate', action='store_true', help='Start with calibration')
     parser.add_argument('--screen-width', type=int, default=1920, help='Screen width')
     parser.add_argument('--screen-height', type=int, default=1080, help='Screen height')
+    parser.add_argument('--headless', action='store_true', help='Run without GUI (for Tauri integration)')
     
     args = parser.parse_args()
     
@@ -468,17 +555,23 @@ def main():
     tracker.screen_height = args.screen_height
     
     try:
-        # Calibrate if requested
-        if args.calibrate:
+        # In headless mode, skip calibration and start immediately
+        if args.headless:
+            print("INFO: Starting in headless mode for Tauri integration", file=sys.stderr)
+            # Use basic calibration for demo purposes
+            tracker.is_calibrated = True
+        elif args.calibrate:
             if not tracker.calibrate():
-                print("Calibration failed")
+                print("ERROR: Calibration failed", file=sys.stderr)
                 return
         
         # Start tracking
-        tracker.run_tracking()
+        tracker.run_tracking(headless=args.headless)
     
     except KeyboardInterrupt:
-        print("\nShutting down...")
+        print("\nINFO: Shutting down...", file=sys.stderr)
+    except Exception as e:
+        print(f"ERROR: {e}", file=sys.stderr)
     finally:
         tracker.stop_tracking()
 

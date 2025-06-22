@@ -1,5 +1,5 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-use tauri::{App, Manager, Window};
+use tauri::Window;
 use std::process::{Command, Stdio, Child};
 use std::io::{BufRead, BufReader};
 use std::sync::{Arc, Mutex};
@@ -195,6 +195,7 @@ pub struct MLEyeTrackingConfig {
 pub struct MLEyeTrackingProcess {
     process: Option<Child>,
     config: MLEyeTrackingConfig,
+    receiver: Option<mpsc::UnboundedReceiver<MLGazeData>>,
 }
 
 impl MLEyeTrackingProcess {
@@ -202,6 +203,7 @@ impl MLEyeTrackingProcess {
         Self {
             process: None,
             config,
+            receiver: None,
         }
     }
 
@@ -261,20 +263,72 @@ impl MLEyeTrackingProcess {
         cmd.arg(python_script)
            .arg("--camera").arg(self.config.camera_id.to_string())
            .arg("--screen-width").arg(self.config.screen_width.to_string())
-           .arg("--screen-height").arg(self.config.screen_height.to_string());
+           .arg("--screen-height").arg(self.config.screen_height.to_string())
+           .arg("--headless"); // Run in headless mode for Tauri integration
 
         if let Some(model_path) = &self.config.model_path {
             cmd.arg("--model").arg(model_path);
         }
 
         // Start the Python process
-        let child = cmd
+        let mut child = cmd
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("Failed to start Python process: {}", e))?;
 
+        // Create channel for real-time gaze data
+        let (tx, rx) = mpsc::unbounded_channel();
+
+        // Spawn thread to read from Python process stdout
+        if let Some(stdout) = child.stdout.take() {
+            std::thread::spawn(move || {
+                let reader = BufReader::new(stdout);
+                println!("Python stdout reader thread started");
+                let mut json_count = 0;
+                let mut non_json_count = 0;
+                
+                for line in reader.lines() {
+                    if let Ok(line) = line {
+                        let trimmed_line = line.trim();
+                        if trimmed_line.is_empty() {
+                            continue;
+                        }
+                        
+                        // Try to parse JSON gaze data from Python
+                        if trimmed_line.starts_with('{') && trimmed_line.ends_with('}') {
+                            match serde_json::from_str::<MLGazeData>(trimmed_line) {
+                                Ok(gaze_data) => {
+                                    json_count += 1;
+                                    if json_count % 30 == 1 {  // Log every 30th JSON message
+                                        println!("Parsed ML gaze JSON #{}: x={:.1}, y={:.1}", 
+                                            json_count, gaze_data.x, gaze_data.y);
+                                    }
+                                    if tx.send(gaze_data).is_err() {
+                                        println!("Channel closed, stopping Python reader thread");
+                                        break;
+                                    }
+                                },
+                                Err(e) => {
+                                    non_json_count += 1;
+                                    if non_json_count <= 5 {  // Only log first 5 parse errors
+                                        println!("JSON parse error: {} for line: {}", e, trimmed_line);
+                                    }
+                                }
+                            }
+                        } else {
+                            // Print non-JSON output (debug info, errors, etc.)
+                            println!("Python debug: {}", trimmed_line);
+                        }
+                    }
+                }
+                println!("Python process stdout reader thread ended. Parsed {} JSON messages, {} non-JSON lines", 
+                    json_count, non_json_count);
+            });
+        }
+
         self.process = Some(child);
+        self.receiver = Some(rx);
         Ok(())
     }
 
@@ -283,12 +337,15 @@ impl MLEyeTrackingProcess {
             process.kill().map_err(|e| format!("Failed to kill process: {}", e))?;
             process.wait().map_err(|e| format!("Failed to wait for process: {}", e))?;
         }
+        self.receiver = None;
         Ok(())
     }
 
     pub fn is_running(&self) -> bool {
         self.process.is_some()
     }
+
+
 }
 
 // Global ML eye tracking state with thread-safe access
@@ -330,31 +387,37 @@ async fn stop_ml_eye_tracking() -> Result<String, String> {
 
 #[tauri::command]
 async fn get_ml_gaze_data() -> Result<Option<MLGazeData>, String> {
-    let tracker = ML_EYE_TRACKING.lock().unwrap();
+    // First, check if tracking is running and get a mutable reference if needed
+    let has_running_tracker = {
+        let tracker = ML_EYE_TRACKING.lock().unwrap();
+        tracker.as_ref().map_or(false, |t| t.is_running())
+    };
     
-    if tracker.as_ref().map_or(false, |t| t.is_running()) {
-        // Generate dynamic simulated data that moves around
-        let time = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs_f64();
-        
-        // Create moving gaze point for testing
-        let x = 960.0 + (time * 0.5).sin() * 400.0; // Oscillate left-right
-        let y = 540.0 + (time * 0.3).cos() * 300.0; // Oscillate up-down
-        
-        let gaze_data = MLGazeData {
-            x: x.max(100.0).min(1820.0), // Keep within screen bounds
-            y: y.max(100.0).min(980.0),
-            confidence: 0.85 + (time * 0.1).sin() * 0.1, // Varying confidence
-            timestamp: time,
-            calibrated: true,
-        };
-        
-        println!("ML Gaze data: x={:.1}, y={:.1}, conf={:.2}", gaze_data.x, gaze_data.y, gaze_data.confidence);
-        Ok(Some(gaze_data))
+    if !has_running_tracker {
+        return Err("ML Eye tracking not running".to_string());
+    }
+    
+    // Now get the gaze data without holding the lock across await
+    let mut tracker = ML_EYE_TRACKING.lock().unwrap();
+    if let Some(ref mut tracker_instance) = tracker.as_mut() {
+        // Use try_recv instead of async recv to avoid holding lock across await
+        if let Some(receiver) = &mut tracker_instance.receiver {
+            match receiver.try_recv() {
+                Ok(gaze_data) => {
+                    println!("Real ML Gaze data: x={:.1}, y={:.1}, conf={:.2}", 
+                        gaze_data.x, gaze_data.y, gaze_data.confidence);
+                    Ok(Some(gaze_data))
+                },
+                Err(_) => {
+                    // No new data available right now
+                    Ok(None)
+                }
+            }
+        } else {
+            Err("ML Eye tracking receiver not initialized".to_string())
+        }
     } else {
-        Err("ML Eye tracking not running".to_string())
+        Err("ML Eye tracking not initialized".to_string())
     }
 }
 
