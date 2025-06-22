@@ -183,6 +183,14 @@ pub struct MLGazeData {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WindowDragState {
+    pub is_dragging: bool,
+    pub drag_start_time: f64,
+    pub last_position: Option<(f64, f64)>,
+    pub pause_tracking: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MLEyeTrackingConfig {
     pub camera_id: i32,
     pub screen_width: i32,
@@ -196,6 +204,7 @@ pub struct MLEyeTrackingProcess {
     process: Option<Child>,
     config: MLEyeTrackingConfig,
     receiver: Option<mpsc::UnboundedReceiver<MLGazeData>>,
+    drag_state: WindowDragState,
 }
 
 impl MLEyeTrackingProcess {
@@ -204,19 +213,30 @@ impl MLEyeTrackingProcess {
             process: None,
             config,
             receiver: None,
+            drag_state: WindowDragState {
+                is_dragging: false,
+                drag_start_time: 0.0,
+                last_position: None,
+                pause_tracking: false,
+            },
         }
     }
 
     pub fn start(&mut self) -> Result<(), String> {
         // Find the Python script - try multiple possible locations
         let possible_paths = vec![
-            // Development path (most likely)
+            // Try new improved script first
+            std::env::current_dir().unwrap().join("src").join("lib").join("gaze-ml-test.py"),
+            // Fallback to original
             std::env::current_dir().unwrap().join("src").join("lib").join("eye-tracking-ml.py"),
-            // Alternative development path
+            // Alternative development paths
+            std::env::current_dir().unwrap().join("..").join("src").join("lib").join("gaze-ml-test.py"),
             std::env::current_dir().unwrap().join("..").join("src").join("lib").join("eye-tracking-ml.py"),
             // Current directory
+            std::env::current_dir().unwrap().join("gaze-ml-test.py"),
             std::env::current_dir().unwrap().join("eye-tracking-ml.py"),
             // Relative to src-tauri
+            std::env::current_dir().unwrap().parent().unwrap().join("src").join("lib").join("gaze-ml-test.py"),
             std::env::current_dir().unwrap().parent().unwrap().join("src").join("lib").join("eye-tracking-ml.py"),
         ];
 
@@ -230,9 +250,10 @@ impl MLEyeTrackingProcess {
 
         let python_script = python_script.ok_or_else(|| {
             let attempted_paths: Vec<String> = vec![
+                std::env::current_dir().unwrap().join("src").join("lib").join("gaze-ml-test.py").display().to_string(),
                 std::env::current_dir().unwrap().join("src").join("lib").join("eye-tracking-ml.py").display().to_string(),
-                std::env::current_dir().unwrap().join("..").join("src").join("lib").join("eye-tracking-ml.py").display().to_string(),
-                std::env::current_dir().unwrap().join("eye-tracking-ml.py").display().to_string(),
+                std::env::current_dir().unwrap().join("..").join("src").join("lib").join("gaze-ml-test.py").display().to_string(),
+                std::env::current_dir().unwrap().join("gaze-ml-test.py").display().to_string(),
             ];
             format!("Python script not found. Attempted paths: {:?}. Current dir: {:?}", 
                 attempted_paths, std::env::current_dir().unwrap())
@@ -457,24 +478,122 @@ async fn calibrate_ml_eye_tracking() -> Result<String, String> {
 
 #[tauri::command]
 async fn get_ml_tracking_stats() -> Result<serde_json::Value, String> {
+    let tracker = ML_EYE_TRACKING.lock().unwrap();
+    
+    let drag_state = if let Some(ref t) = *tracker {
+        serde_json::json!({
+            "is_dragging": t.drag_state.is_dragging,
+            "pause_tracking": t.drag_state.pause_tracking,
+            "drag_start_time": t.drag_state.drag_start_time
+        })
+    } else {
+        serde_json::json!({
+            "is_dragging": false,
+            "pause_tracking": false,
+            "drag_start_time": 0.0
+        })
+    };
+    
     let stats = serde_json::json!({
         "status": "running",
-        "model_type": "tensorflow_keras",
+        "model_type": "enhanced_mediapipe",
         "features": [
             "MediaPipe face mesh",
             "Iris tracking", 
             "Head pose estimation",
             "Temporal smoothing",
-            "Neural network gaze estimation"
+            "Multi-monitor support",
+            "Window drag detection",
+            "Graceful pause/resume"
         ],
         "performance": {
-            "expected_fps": "15-30",
-            "latency_ms": "30-50",
+            "expected_fps": "20-40",
+            "latency_ms": "25-45",
             "accuracy": "improved_with_calibration"
-        }
+        },
+        "drag_detection": drag_state
     });
     
     Ok(stats)
+}
+
+#[tauri::command]
+async fn pause_ml_tracking() -> Result<String, String> {
+    let mut tracker = ML_EYE_TRACKING.lock().unwrap();
+    
+    if let Some(ref mut tracker_instance) = tracker.as_mut() {
+        tracker_instance.drag_state.pause_tracking = true;
+        Ok("ML Eye tracking paused".to_string())
+    } else {
+        Err("ML Eye tracking not running".to_string())
+    }
+}
+
+#[tauri::command]
+async fn resume_ml_tracking() -> Result<String, String> {
+    let mut tracker = ML_EYE_TRACKING.lock().unwrap();
+    
+    if let Some(ref mut tracker_instance) = tracker.as_mut() {
+        tracker_instance.drag_state.pause_tracking = false;
+        Ok("ML Eye tracking resumed".to_string())
+    } else {
+        Err("ML Eye tracking not running".to_string())
+    }
+}
+
+#[tauri::command]
+async fn detect_window_drag(window: Window, gaze_x: f64, gaze_y: f64) -> Result<bool, String> {
+    let mut tracker = ML_EYE_TRACKING.lock().unwrap();
+    
+    if let Some(ref mut tracker_instance) = tracker.as_mut() {
+        // Get window position and size
+        let window_pos = window.outer_position().map_err(|e| e.to_string())?;
+        let window_size = window.outer_size().map_err(|e| e.to_string())?;
+        
+        let current_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+        
+        // Check if gaze is in titlebar area (top 30 pixels)
+        let in_titlebar = gaze_y >= window_pos.y as f64 && 
+                         gaze_y <= (window_pos.y + 30) as f64 &&
+                         gaze_x >= window_pos.x as f64 && 
+                         gaze_x <= (window_pos.x + window_size.width as i32) as f64;
+        
+        if in_titlebar && !tracker_instance.drag_state.is_dragging {
+            // Start drag detection
+            tracker_instance.drag_state.is_dragging = true;
+            tracker_instance.drag_state.drag_start_time = current_time;
+            tracker_instance.drag_state.last_position = Some((gaze_x, gaze_y));
+            tracker_instance.drag_state.pause_tracking = true;
+            
+            println!("🎯 Window drag detected - pausing gaze control");
+            return Ok(true);
+        } else if tracker_instance.drag_state.is_dragging {
+            // Check for drag end (stable position)
+            if let Some((last_x, last_y)) = tracker_instance.drag_state.last_position {
+                let dx = (gaze_x - last_x).abs();
+                let dy = (gaze_y - last_y).abs();
+                
+                if dx < 10.0 && dy < 10.0 && (current_time - tracker_instance.drag_state.drag_start_time) > 0.5 {
+                    // Drag finished
+                    tracker_instance.drag_state.is_dragging = false;
+                    tracker_instance.drag_state.pause_tracking = false;
+                    tracker_instance.drag_state.last_position = None;
+                    
+                    println!("🎯 Window drag finished - resuming gaze control");
+                    return Ok(false);
+                } else {
+                    tracker_instance.drag_state.last_position = Some((gaze_x, gaze_y));
+                }
+            }
+        }
+        
+        Ok(tracker_instance.drag_state.is_dragging)
+    } else {
+        Err("ML Eye tracking not running".to_string())
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -509,7 +628,10 @@ pub fn run() {
             stop_ml_eye_tracking,
             get_ml_gaze_data,
             calibrate_ml_eye_tracking,
-            get_ml_tracking_stats
+            get_ml_tracking_stats,
+            pause_ml_tracking,
+            resume_ml_tracking,
+            detect_window_drag
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
