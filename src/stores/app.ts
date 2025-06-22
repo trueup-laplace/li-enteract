@@ -10,6 +10,11 @@ export const useAppStore = defineStore('app', () => {
   const isRecording = ref(false)
   const recordingTime = ref(0)
   
+  // Transparency state
+  const transparencyEnabled = ref(false)
+  const transparencyLevel = ref(1.0)
+  const showTransparencyControls = ref(false)
+  
   const chatMessages = ref<ChatMessage[]>([
     { id: 1, text: "Welcome to your agentic assistant", sender: "assistant", timestamp: new Date() },
     { id: 2, text: "How can I help you today?", sender: "assistant", timestamp: new Date() }
@@ -37,6 +42,16 @@ export const useAppStore = defineStore('app', () => {
     } else {
       recordingTime.value = 0
     }
+  }
+
+  // Transparency actions
+  const toggleTransparencyControls = () => {
+    showTransparencyControls.value = !showTransparencyControls.value
+  }
+
+  const updateTransparencyState = (enabled: boolean, level: number) => {
+    transparencyEnabled.value = enabled
+    transparencyLevel.value = level
   }
 
   const startRecordingTimer = () => {
@@ -78,6 +93,9 @@ export const useAppStore = defineStore('app', () => {
     recordingTime,
     chatMessages,
     windowPosition,
+    transparencyEnabled,
+    transparencyLevel,
+    showTransparencyControls,
     // Actions
     toggleMic,
     toggleChat,
@@ -85,6 +103,8 @@ export const useAppStore = defineStore('app', () => {
     toggleRecording,
     addMessage,
     updateWindowPosition,
-    formatRecordingTime
+    formatRecordingTime,
+    toggleTransparencyControls,
+    updateTransparencyState
   }
 }) 

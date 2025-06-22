@@ -15,4 +15,18 @@ export interface AppState {
 export interface WindowPosition {
   x: number
   y: number
+}
+
+export interface TransparencyState {
+  level: number
+  isTransparent: boolean
+  isClickThrough: boolean
+  isVisible: boolean
+}
+
+export interface TransparencyPresets {
+  invisible: () => Promise<void>
+  ghostMode: () => Promise<void>
+  semiTransparent: () => Promise<void>
+  solid: () => Promise<void>
 } 
