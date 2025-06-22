@@ -259,8 +259,11 @@ impl MLEyeTrackingProcess {
             }
         };
 
+        // Debug: Print the script path before using it
+        println!("DEBUG: Using Python script at: {:?}", python_script);
+        
         let mut cmd = Command::new(python_cmd);
-        cmd.arg(python_script)
+        cmd.arg(&python_script)
            .arg("--camera").arg(self.config.camera_id.to_string())
            .arg("--screen-width").arg(self.config.screen_width.to_string())
            .arg("--screen-height").arg(self.config.screen_height.to_string())
@@ -270,15 +273,34 @@ impl MLEyeTrackingProcess {
             cmd.arg("--model").arg(model_path);
         }
 
+        // Debug: Print the command we're about to run
+        println!("DEBUG: Starting Python process with command: {:?}", cmd);
+        
         // Start the Python process
         let mut child = cmd
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("Failed to start Python process: {}", e))?;
+        
+        println!("DEBUG: Python process started successfully with PID: {:?}", child.id());
 
         // Create channel for real-time gaze data
         let (tx, rx) = mpsc::unbounded_channel();
+
+        // Spawn thread to read from Python process stderr (for debug info)
+        if let Some(stderr) = child.stderr.take() {
+            std::thread::spawn(move || {
+                let reader = BufReader::new(stderr);
+                println!("Python stderr reader thread started");
+                for line in reader.lines() {
+                    if let Ok(line) = line {
+                        println!("Python stderr: {}", line);
+                    }
+                }
+                println!("Python stderr reader thread ended");
+            });
+        }
 
         // Spawn thread to read from Python process stdout
         if let Some(stdout) = child.stdout.take() {

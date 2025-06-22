@@ -436,35 +436,86 @@ class EyeTrackingML:
 
     def run_tracking(self, headless: bool = False) -> None:
         """Main tracking loop"""
-        cap = cv2.VideoCapture(self.camera_id)
-        if not cap.isOpened():
-            print("ERROR: Failed to open camera", file=sys.stderr)
-            return
+        cap = None
+        camera_available = False
         
-        # Set camera properties for better performance
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        cap.set(cv2.CAP_PROP_FPS, 30)
+        # Try to open camera with multiple attempts and backends
+        for attempt in range(3):
+            for backend in [cv2.CAP_DSHOW, cv2.CAP_ANY, cv2.CAP_MSMF]:  # Windows backends
+                try:
+                    cap = cv2.VideoCapture(self.camera_id, backend)
+                    if cap.isOpened():
+                        # Test if we can actually read a frame
+                        ret, test_frame = cap.read()
+                        if ret and test_frame is not None:
+                            camera_available = True
+                            print(f"INFO: Camera opened successfully with backend {backend} on attempt {attempt + 1}", file=sys.stderr)
+                            break
+                        else:
+                            cap.release()
+                            cap = None
+                    else:
+                        if cap:
+                            cap.release()
+                            cap = None
+                except Exception as e:
+                    print(f"INFO: Camera attempt {attempt + 1} with backend {backend} failed: {e}", file=sys.stderr)
+                    if cap:
+                        cap.release()
+                        cap = None
+            
+            if camera_available:
+                break
+            
+            print(f"INFO: Camera attempt {attempt + 1} failed, retrying...", file=sys.stderr)
+            time.sleep(1)
+        
+        if not camera_available or cap is None:
+            print("WARNING: Camera not available, running in demo mode only", file=sys.stderr)
+            cap = None
+        else:
+            # Set camera properties for better performance
+            try:
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                cap.set(cv2.CAP_PROP_FPS, 30)
+                print("INFO: Camera properties set successfully", file=sys.stderr)
+            except Exception as e:
+                print(f"WARNING: Failed to set camera properties: {e}", file=sys.stderr)
         
         if not headless:
             print("Eye tracking started. Press 'q' to quit, 'c' to calibrate", file=sys.stderr)
         else:
             print("INFO: Headless eye tracking started", file=sys.stderr)
-            print("INFO: Camera opened successfully", file=sys.stderr)
+            if camera_available:
+                print("INFO: Camera opened successfully", file=sys.stderr)
+            else:
+                print("INFO: Running in demo mode (no camera)", file=sys.stderr)
         
         frame_count = 0
         face_detection_count = 0
         
         while self.processing:
-            ret, frame = cap.read()
-            if not ret:
-                print("WARNING: Failed to read frame from camera", file=sys.stderr)
-                continue
+            gaze_point = None
+            processed_frame = None
             
-            frame_count += 1
+            if camera_available and cap is not None:
+                ret, frame = cap.read()
+                if not ret:
+                    print("WARNING: Failed to read frame from camera", file=sys.stderr)
+                    # Don't continue, fall through to demo mode for this frame
+                    camera_available = False
+                    if cap:
+                        cap.release()
+                        cap = None
+                else:
+                    frame_count += 1
+                    # Process frame
+                    gaze_point, processed_frame = self.process_frame(frame)
             
-            # Process frame
-            gaze_point, processed_frame = self.process_frame(frame)
+            # If no camera or failed to read, generate demo data
+            if not camera_available:
+                frame_count += 1
             
             # If no face detected, generate demo data for testing pipeline
             if gaze_point is None and headless:
@@ -523,7 +574,8 @@ class EyeTrackingML:
                 # In headless mode, just a small delay
                 time.sleep(0.01)
         
-        cap.release()
+        if cap is not None:
+            cap.release()
         if not headless:
             cv2.destroyAllWindows()
         
