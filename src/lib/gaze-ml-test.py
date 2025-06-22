@@ -210,11 +210,11 @@ class GazeControlledWindow:
         # Create content
         self.setup_ui()
         
-        # Position window initially at center of PRIMARY monitor (where camera is)
+        # Position window initially at center of LAPTOP SCREEN (where camera is)
         if self.monitor_mesh.primary_monitor:
             initial_x = self.monitor_mesh.primary_monitor.center_x - self.window_size[0] // 2
             initial_y = self.monitor_mesh.primary_monitor.center_y - self.window_size[1] // 2
-            print(f"🎯 Starting window on PRIMARY monitor at ({initial_x}, {initial_y})")
+            print(f"🎯 Starting window on LAPTOP SCREEN ({self.monitor_mesh.primary_monitor.name}) at ({initial_x}, {initial_y})")
             self.root.geometry(f"+{initial_x}+{initial_y}")
             self.last_position = (initial_x, initial_y)
         else:
@@ -409,7 +409,7 @@ class SimpleEyeTracker:
         self.current_fps = 0
     
     def estimate_gaze_simple(self, landmarks) -> Optional[GazePoint]:
-        """Simple gaze estimation using iris position with corrected direction mapping"""
+        """Simple gaze estimation with improved sensitivity for larger displays"""
         try:
             if len(landmarks) < 468:
                 return None
@@ -430,33 +430,60 @@ class SimpleEyeTracker:
             avg_iris_y = (left_iris_center[1] + right_iris_center[1]) / 2
             
             # CORRECTED DIRECTION MAPPING
-            # MediaPipe gives normalized coordinates (0-1), we need to map correctly to screen
-            
-            # For X: looking left should move left (iris moves right in camera view)
             # Invert X direction to match natural expectation
             corrected_iris_x = 1.0 - avg_iris_x
-            
-            # For Y: looking up should move up
-            # Y direction is typically correct as-is
             corrected_iris_y = avg_iris_y
             
+            # ADAPTIVE SENSITIVITY based on monitor sizes
+            laptop_screen = self.monitor_mesh.primary_monitor  # This is now the actual laptop screen
+            
+            # Calculate sensitivity multipliers
+            # Larger external monitors need higher sensitivity for comfortable use
+            if laptop_screen:
+                base_resolution = laptop_screen.width * laptop_screen.height
+                
+                # Find the largest external monitor for sensitivity scaling
+                external_monitors = [m for m in self.monitor_mesh.monitors if m != laptop_screen]
+                if external_monitors:
+                    largest_external = max(external_monitors, key=lambda m: m.width * m.height)
+                    external_resolution = largest_external.width * largest_external.height
+                    
+                    # Calculate sensitivity multiplier (larger screens = higher sensitivity)
+                    sensitivity_multiplier = max(1.0, (external_resolution / base_resolution) ** 0.3)
+                    print(f"🎯 Sensitivity multiplier: {sensitivity_multiplier:.2f} for external {largest_external.width}x{largest_external.height}")
+                else:
+                    sensitivity_multiplier = 1.0
+            else:
+                sensitivity_multiplier = 1.0
+            
+            # Apply sensitivity scaling to iris movement
+            # INCREASED Y-AXIS SENSITIVITY for better vertical tracking
+            y_sensitivity_boost = 1.4  # 40% more sensitive in Y direction
+            
+            # Center the normalized coordinates around 0.5, apply sensitivity, then normalize back
+            centered_x = (corrected_iris_x - 0.5) * sensitivity_multiplier + 0.5
+            centered_y = (corrected_iris_y - 0.5) * sensitivity_multiplier * y_sensitivity_boost + 0.5
+            
+            # Clamp to valid range
+            centered_x = max(0.0, min(1.0, centered_x))
+            centered_y = max(0.0, min(1.0, centered_y))
+            
             # Convert to screen coordinates across the virtual desktop
-            # Map from [0,1] to the virtual desktop bounds
-            base_screen_x = self.monitor_mesh.virtual_left + (corrected_iris_x * self.monitor_mesh.virtual_width)
-            base_screen_y = self.monitor_mesh.virtual_top + (corrected_iris_y * self.monitor_mesh.virtual_height)
+            base_screen_x = self.monitor_mesh.virtual_left + (centered_x * self.monitor_mesh.virtual_width)
+            base_screen_y = self.monitor_mesh.virtual_top + (centered_y * self.monitor_mesh.virtual_height)
             
-            # Add some demo movement for testing when no real calibration exists
-            demo_time = time.time() * 0.2  # Slower movement
-            demo_offset_x = np.sin(demo_time) * 150  # Smaller amplitude
-            demo_offset_y = np.cos(demo_time * 0.5) * 80
+            # Add gentle demo movement for testing (reduced influence)
+            demo_time = time.time() * 0.15  # Even slower movement
+            demo_offset_x = np.sin(demo_time) * 100  # Smaller amplitude
+            demo_offset_y = np.cos(demo_time * 0.4) * 60
             
-            # Start from primary monitor center as base
-            primary_center_x = self.monitor_mesh.primary_monitor.center_x if self.monitor_mesh.primary_monitor else 0
-            primary_center_y = self.monitor_mesh.primary_monitor.center_y if self.monitor_mesh.primary_monitor else 0
+            # Start from laptop screen center as base (where camera is)
+            laptop_center_x = laptop_screen.center_x if laptop_screen else 0
+            laptop_center_y = laptop_screen.center_y if laptop_screen else 0
             
-            # Blend real tracking with demo movement (favor real tracking more)
-            final_x = primary_center_x + demo_offset_x + (base_screen_x - primary_center_x) * 0.6
-            final_y = primary_center_y + demo_offset_y + (base_screen_y - primary_center_y) * 0.6
+            # Favor real tracking more heavily now
+            final_x = laptop_center_x + demo_offset_x + (base_screen_x - laptop_center_x) * 0.8
+            final_y = laptop_center_y + demo_offset_y + (base_screen_y - laptop_center_y) * 0.8
             
             # Clamp to virtual desktop bounds
             final_x = max(self.monitor_mesh.virtual_left, 
@@ -536,16 +563,16 @@ class SimpleEyeTracker:
                 # Create smooth demo movement starting from PRIMARY monitor
                 demo_time = time.time() * 0.3
                 
-                # Base movement around primary monitor center
-                primary_center_x = self.monitor_mesh.primary_monitor.center_x if self.monitor_mesh.primary_monitor else 0
-                primary_center_y = self.monitor_mesh.primary_monitor.center_y if self.monitor_mesh.primary_monitor else 0
+                # Base movement around laptop screen center (where camera is)
+                laptop_center_x = self.monitor_mesh.primary_monitor.center_x if self.monitor_mesh.primary_monitor else 0
+                laptop_center_y = self.monitor_mesh.primary_monitor.center_y if self.monitor_mesh.primary_monitor else 0
                 
                 # Create a more natural movement pattern within and between monitors
                 demo_range_x = self.monitor_mesh.virtual_width * 0.6  # Use 60% of total width
                 demo_range_y = self.monitor_mesh.virtual_height * 0.4  # Use 40% of total height
                 
-                demo_x = primary_center_x + np.sin(demo_time) * demo_range_x * 0.5
-                demo_y = primary_center_y + np.sin(demo_time * 0.7) * demo_range_y * 0.5
+                demo_x = laptop_center_x + np.sin(demo_time) * demo_range_x * 0.5
+                demo_y = laptop_center_y + np.sin(demo_time * 0.7) * demo_range_y * 0.5
                 
                 # Ensure demo coordinates stay within bounds
                 demo_x = max(self.monitor_mesh.virtual_left, 
@@ -594,6 +621,7 @@ def main():
     parser = argparse.ArgumentParser(description='Gaze-Controlled GUI Demo')
     parser.add_argument('--camera', type=int, default=0, help='Camera device ID')
     parser.add_argument('--demo-only', action='store_true', help='Run in demo mode without camera')
+    parser.add_argument('--force-laptop-size', type=str, help='Force laptop screen by resolution (e.g., "1280x720")')
     
     args = parser.parse_args()
     
@@ -604,18 +632,50 @@ def main():
     print("🔍 Detecting monitor configuration...")
     monitor_mesh = detect_monitor_mesh()
     
+    # Manual override for laptop screen if detection fails
+    if args.force_laptop_size:
+        try:
+            forced_width, forced_height = map(int, args.force_laptop_size.split('x'))
+            print(f"🔧 MANUAL OVERRIDE: Looking for laptop screen with resolution {forced_width}x{forced_height}")
+            
+            # Find monitor with exact resolution
+            forced_laptop = None
+            for monitor in monitor_mesh.monitors:
+                if monitor.width == forced_width and monitor.height == forced_height:
+                    forced_laptop = monitor
+                    break
+            
+            if forced_laptop:
+                # Reset all monitors
+                for monitor in monitor_mesh.monitors:
+                    monitor.is_primary = False
+                
+                # Force this monitor as laptop screen
+                forced_laptop.is_primary = True
+                forced_laptop.name = "Laptop_Screen_FORCED"
+                monitor_mesh.primary_monitor = forced_laptop
+                
+                print(f"✅ FORCED LAPTOP SCREEN: {forced_laptop.name} at ({forced_laptop.x}, {forced_laptop.y})")
+            else:
+                print(f"❌ Could not find monitor with resolution {forced_width}x{forced_height}")
+                
+        except ValueError:
+            print(f"❌ Invalid resolution format. Use format like: --force-laptop-size 1280x720")
+    
     print(f"\n📐 Virtual Desktop Setup:")
     print(f"   Size: {monitor_mesh.virtual_width} x {monitor_mesh.virtual_height}")
     print(f"   Bounds: ({monitor_mesh.virtual_left}, {monitor_mesh.virtual_top}) to ({monitor_mesh.virtual_right}, {monitor_mesh.virtual_bottom})")
     print(f"   Monitors: {len(monitor_mesh.monitors)}")
     
     for i, monitor in enumerate(monitor_mesh.monitors, 1):
-        print(f"   {i}. {monitor.name}: {monitor.width}x{monitor.height} at ({monitor.x}, {monitor.y}) {'👑' if monitor.is_primary else ''}")
+        camera_indicator = "📹" if monitor.is_primary else "🖥️ "
+        print(f"   {i}. {monitor.name}: {monitor.width}x{monitor.height} at ({monitor.x}, {monitor.y}) {camera_indicator}")
     
     print("\n🎮 Controls:")
     print("   • Look around to move the window across monitors")
     print("   • Close the window or press Ctrl+C to exit")
     print("   • Window will show gaze coordinates and confidence")
+    print("   • Use --force-laptop-size WIDTHxHEIGHT to manually set laptop screen")
     
     print("\n🚀 Starting demo...")
     
