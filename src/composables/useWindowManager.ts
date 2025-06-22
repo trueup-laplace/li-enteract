@@ -64,17 +64,33 @@ export function useWindowManager() {
 
   const minimizeWindow = async () => {
     try {
+      console.log('Minimizing window...')
       await currentWindow.minimize()
+      console.log('Window minimized successfully')
     } catch (error) {
       console.error('Failed to minimize window:', error)
+      // Fallback: try to hide the window
+      try {
+        await currentWindow.hide()
+      } catch (hideError) {
+        console.error('Failed to hide window as fallback:', hideError)
+      }
     }
   }
 
   const closeWindow = async () => {
     try {
+      console.log('Closing window...')
       await currentWindow.close()
+      console.log('Window closed successfully')
     } catch (error) {
       console.error('Failed to close window:', error)
+      // Force close if needed
+      try {
+        await currentWindow.destroy()
+      } catch (destroyError) {
+        console.error('Failed to destroy window as fallback:', destroyError)
+      }
     }
   }
 

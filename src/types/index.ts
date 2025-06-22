@@ -23,6 +23,6 @@ export interface ThreeJSRefs {
   scene?: THREE.Scene
   camera?: THREE.PerspectiveCamera
   renderer?: THREE.WebGLRenderer
-  cube?: THREE.Mesh
+  cube?: THREE.Mesh | THREE.Group
   animationId?: number
 } 

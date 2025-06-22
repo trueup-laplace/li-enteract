@@ -22,31 +22,66 @@ export function useThreeScene() {
     renderer.setClearColor(0x000000, 0)
     threeContainer.value.appendChild(renderer.domElement)
 
-    // Create cube with glassmorphic material
-    const geometry = new THREE.BoxGeometry(2, 2, 2)
-    const material = new THREE.MeshBasicMaterial({ 
-      color: 0x3b82f6,
-      transparent: true,
-      opacity: 0.6,
-      wireframe: true
-    })
+    // Create glass-like cube geometry
+    const geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5)
     
-    const cube = new THREE.Mesh(geometry, material)
-    scene.add(cube)
+    // Create multiple materials for glass effect
+    const glassMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x4f46e5,
+      transparent: true,
+      opacity: 0.15,
+      roughness: 0.1,
+      metalness: 0.1,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.1,
+      transmission: 0.8,
+      ior: 1.5,
+    })
 
-    // Add ambient light
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.6)
+    // Create wireframe material
+    const wireframeMaterial = new THREE.MeshBasicMaterial({
+      color: 0x8b5cf6,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.3,
+    })
+
+    // Create the main glass cube
+    const glassCube = new THREE.Mesh(geometry, glassMaterial)
+    
+    // Create wireframe overlay
+    const wireframeCube = new THREE.Mesh(geometry, wireframeMaterial)
+    
+    // Group them together
+    const cubeGroup = new THREE.Group()
+    cubeGroup.add(glassCube)
+    cubeGroup.add(wireframeCube)
+    
+    scene.add(cubeGroup)
+
+    // Add ambient light for glass effect
+    const ambientLight = new THREE.AmbientLight(0x4f46e5, 0.4)
     scene.add(ambientLight)
 
-    // Add directional light
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
-    directionalLight.position.set(1, 1, 1)
+    // Add directional light for glass reflections
+    const directionalLight = new THREE.DirectionalLight(0x8b5cf6, 1.0)
+    directionalLight.position.set(2, 2, 2)
     scene.add(directionalLight)
 
-    camera.position.z = 5
+    // Add point light for internal glow
+    const pointLight = new THREE.PointLight(0x06b6d4, 0.8, 10)
+    pointLight.position.set(0, 0, 2)
+    scene.add(pointLight)
+
+    // Add rim light
+    const rimLight = new THREE.DirectionalLight(0xffffff, 0.5)
+    rimLight.position.set(-2, -2, -2)
+    scene.add(rimLight)
+
+    camera.position.z = 4
 
     // Store refs
-    threeRefs.value = { scene, camera, renderer, cube }
+    threeRefs.value = { scene, camera, renderer, cube: cubeGroup }
 
     animate()
   }
@@ -57,8 +92,13 @@ export function useThreeScene() {
     threeRefs.value.animationId = requestAnimationFrame(animate)
     
     if (threeRefs.value.cube) {
-      threeRefs.value.cube.rotation.x += 0.01
-      threeRefs.value.cube.rotation.y += 0.01
+      // Smooth, organic rotation
+      threeRefs.value.cube.rotation.x += 0.005
+      threeRefs.value.cube.rotation.y += 0.008
+      threeRefs.value.cube.rotation.z += 0.003
+      
+      // Subtle floating motion
+      threeRefs.value.cube.position.y = Math.sin(Date.now() * 0.001) * 0.1
     }
     
     threeRefs.value.renderer.render(threeRefs.value.scene, threeRefs.value.camera)
@@ -83,12 +123,17 @@ export function useThreeScene() {
     }
     
     if (threeRefs.value.cube) {
-      threeRefs.value.cube.geometry.dispose()
-      if (Array.isArray(threeRefs.value.cube.material)) {
-        threeRefs.value.cube.material.forEach(material => material.dispose())
-      } else {
-        threeRefs.value.cube.material.dispose()
-      }
+      // Clean up geometry and materials
+      threeRefs.value.cube.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose()
+          if (Array.isArray(child.material)) {
+            child.material.forEach(material => material.dispose())
+          } else {
+            child.material.dispose()
+          }
+        }
+      })
     }
   }
 
