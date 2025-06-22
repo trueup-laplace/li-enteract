@@ -4,7 +4,8 @@ import {
   EyeIcon, 
   EyeSlashIcon,
   ArrowUturnLeftIcon,
-  ExclamationTriangleIcon 
+  ExclamationTriangleIcon,
+  SparklesIcon
 } from '@heroicons/vue/24/outline'
 import { useTransparency } from '../../composables/useTransparency'
 
@@ -22,6 +23,12 @@ const statusColor = computed(() => {
 const statusIcon = computed(() => {
   if (!transparency.isVisible.value) return EyeSlashIcon
   return EyeIcon
+})
+
+// Refraction effect indicator
+const refractionIntensity = computed(() => {
+  if (!transparency.isTransparent.value) return 0
+  return Math.min((1 - transparency.transparencyLevel.value) * 1.5, 1)
 })
 
 // Handle slider input
@@ -48,6 +55,14 @@ const handleSliderChange = (event: Event) => {
         <span class="text-xs" :class="statusColor">
           {{ transparency.getVisibilityStatus() }}
         </span>
+        
+        <!-- Refraction Effect Indicator -->
+        <div v-if="transparency.isTransparent.value" class="refraction-indicator">
+          <SparklesIcon class="w-3 h-3 text-cyan-400" />
+          <span class="text-xs text-cyan-400">
+            {{ Math.round(refractionIntensity * 100) }}%
+          </span>
+        </div>
       </div>
       
       <!-- Emergency restore button - always visible -->
@@ -64,6 +79,16 @@ const handleSliderChange = (event: Event) => {
     <div v-if="transparency.lastError.value" class="error-message">
       <ExclamationTriangleIcon class="w-4 h-4" />
       <span class="text-xs">{{ transparency.lastError.value }}</span>
+    </div>
+
+    <!-- Refraction Status -->
+    <div v-if="transparency.isTransparent.value" class="refraction-status">
+      <div class="flex items-center justify-between">
+        <span class="text-xs text-white/70">Border Refraction:</span>
+        <div class="refraction-preview" :style="{ '--refraction-intensity': refractionIntensity }">
+          <div class="refraction-sample"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Main toggle button -->
@@ -153,7 +178,7 @@ const handleSliderChange = (event: Event) => {
     <!-- Click-through warning -->
     <div v-if="transparency.isClickThrough.value" class="click-through-warning">
       <ExclamationTriangleIcon class="w-3 h-3" />
-      <span class="text-xs">Click-through enabled</span>
+      <span class="text-xs">Click-through enabled - Border effects active</span>
     </div>
 
     <!-- Keyboard shortcuts info -->
@@ -181,6 +206,47 @@ const handleSliderChange = (event: Event) => {
 
 .controls-header {
   @apply flex items-center justify-between;
+}
+
+.refraction-indicator {
+  @apply flex items-center gap-1 px-2 py-1 rounded-lg;
+  @apply bg-cyan-500/10 border border-cyan-500/20;
+  animation: refractionPulse 2s ease-in-out infinite;
+}
+
+@keyframes refractionPulse {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.02); }
+}
+
+.refraction-status {
+  @apply p-2 rounded-lg bg-white/5 border border-white/10;
+}
+
+.refraction-preview {
+  @apply w-12 h-4 rounded overflow-hidden border border-white/20;
+  background: linear-gradient(45deg, 
+    rgba(255, 255, 255, calc(var(--refraction-intensity) * 0.3)),
+    rgba(0, 255, 255, calc(var(--refraction-intensity) * 0.2)),
+    rgba(255, 0, 255, calc(var(--refraction-intensity) * 0.15))
+  );
+}
+
+.refraction-sample {
+  @apply w-full h-full;
+  background: linear-gradient(
+    90deg,
+    transparent 30%, 
+    rgba(255, 255, 255, calc(var(--refraction-intensity) * 0.6)) 50%, 
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  animation: miniShimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes miniShimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 .emergency-btn {
