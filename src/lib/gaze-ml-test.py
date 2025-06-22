@@ -210,10 +210,18 @@ class GazeControlledWindow:
         # Create content
         self.setup_ui()
         
-        # Position window initially at center of primary monitor
+        # Position window initially at center of PRIMARY monitor (where camera is)
         if self.monitor_mesh.primary_monitor:
             initial_x = self.monitor_mesh.primary_monitor.center_x - self.window_size[0] // 2
             initial_y = self.monitor_mesh.primary_monitor.center_y - self.window_size[1] // 2
+            print(f"🎯 Starting window on PRIMARY monitor at ({initial_x}, {initial_y})")
+            self.root.geometry(f"+{initial_x}+{initial_y}")
+            self.last_position = (initial_x, initial_y)
+        else:
+            # Fallback to virtual desktop center
+            initial_x = self.monitor_mesh.virtual_left + self.monitor_mesh.virtual_width // 2 - self.window_size[0] // 2
+            initial_y = self.monitor_mesh.virtual_top + self.monitor_mesh.virtual_height // 2 - self.window_size[1] // 2
+            print(f"🎯 Starting window at virtual center ({initial_x}, {initial_y})")
             self.root.geometry(f"+{initial_x}+{initial_y}")
             self.last_position = (initial_x, initial_y)
     
@@ -401,7 +409,7 @@ class SimpleEyeTracker:
         self.current_fps = 0
     
     def estimate_gaze_simple(self, landmarks) -> Optional[GazePoint]:
-        """Simple gaze estimation using iris position"""
+        """Simple gaze estimation using iris position with corrected direction mapping"""
         try:
             if len(landmarks) < 468:
                 return None
@@ -421,22 +429,34 @@ class SimpleEyeTracker:
             avg_iris_x = (left_iris_center[0] + right_iris_center[0]) / 2
             avg_iris_y = (left_iris_center[1] + right_iris_center[1]) / 2
             
-            # Convert normalized coordinates to screen coordinates
-            # This is a simplified mapping - a real system would use calibration
-            screen_x = (avg_iris_x * self.scale_factor_x * self.monitor_mesh.virtual_width) + self.calibration_offset_x
-            screen_y = (avg_iris_y * self.scale_factor_y * self.monitor_mesh.virtual_height) + self.calibration_offset_y
+            # CORRECTED DIRECTION MAPPING
+            # MediaPipe gives normalized coordinates (0-1), we need to map correctly to screen
             
-            # Add some demo movement based on time for testing
-            demo_time = time.time() * 0.3
-            demo_offset_x = np.sin(demo_time) * 200
-            demo_offset_y = np.cos(demo_time * 0.7) * 100
+            # For X: looking left should move left (iris moves right in camera view)
+            # Invert X direction to match natural expectation
+            corrected_iris_x = 1.0 - avg_iris_x
             
-            # Blend real tracking with demo movement
-            demo_center_x = self.monitor_mesh.virtual_left + self.monitor_mesh.virtual_width // 2
-            demo_center_y = self.monitor_mesh.virtual_top + self.monitor_mesh.virtual_height // 2
+            # For Y: looking up should move up
+            # Y direction is typically correct as-is
+            corrected_iris_y = avg_iris_y
             
-            final_x = demo_center_x + demo_offset_x + (screen_x - demo_center_x) * 0.3
-            final_y = demo_center_y + demo_offset_y + (screen_y - demo_center_y) * 0.3
+            # Convert to screen coordinates across the virtual desktop
+            # Map from [0,1] to the virtual desktop bounds
+            base_screen_x = self.monitor_mesh.virtual_left + (corrected_iris_x * self.monitor_mesh.virtual_width)
+            base_screen_y = self.monitor_mesh.virtual_top + (corrected_iris_y * self.monitor_mesh.virtual_height)
+            
+            # Add some demo movement for testing when no real calibration exists
+            demo_time = time.time() * 0.2  # Slower movement
+            demo_offset_x = np.sin(demo_time) * 150  # Smaller amplitude
+            demo_offset_y = np.cos(demo_time * 0.5) * 80
+            
+            # Start from primary monitor center as base
+            primary_center_x = self.monitor_mesh.primary_monitor.center_x if self.monitor_mesh.primary_monitor else 0
+            primary_center_y = self.monitor_mesh.primary_monitor.center_y if self.monitor_mesh.primary_monitor else 0
+            
+            # Blend real tracking with demo movement (favor real tracking more)
+            final_x = primary_center_x + demo_offset_x + (base_screen_x - primary_center_x) * 0.6
+            final_y = primary_center_y + demo_offset_y + (base_screen_y - primary_center_y) * 0.6
             
             # Clamp to virtual desktop bounds
             final_x = max(self.monitor_mesh.virtual_left, 
@@ -513,12 +533,25 @@ class SimpleEyeTracker:
             if gaze_point is None:
                 frame_count += 1
                 
-                # Create smooth demo movement across monitors
-                demo_time = time.time() * 0.4
+                # Create smooth demo movement starting from PRIMARY monitor
+                demo_time = time.time() * 0.3
                 
-                # Move between monitors in a figure-8 pattern
-                demo_x = self.monitor_mesh.virtual_left + (np.sin(demo_time) * 0.4 + 0.5) * self.monitor_mesh.virtual_width
-                demo_y = self.monitor_mesh.virtual_top + (np.sin(demo_time * 2) * 0.3 + 0.5) * self.monitor_mesh.virtual_height
+                # Base movement around primary monitor center
+                primary_center_x = self.monitor_mesh.primary_monitor.center_x if self.monitor_mesh.primary_monitor else 0
+                primary_center_y = self.monitor_mesh.primary_monitor.center_y if self.monitor_mesh.primary_monitor else 0
+                
+                # Create a more natural movement pattern within and between monitors
+                demo_range_x = self.monitor_mesh.virtual_width * 0.6  # Use 60% of total width
+                demo_range_y = self.monitor_mesh.virtual_height * 0.4  # Use 40% of total height
+                
+                demo_x = primary_center_x + np.sin(demo_time) * demo_range_x * 0.5
+                demo_y = primary_center_y + np.sin(demo_time * 0.7) * demo_range_y * 0.5
+                
+                # Ensure demo coordinates stay within bounds
+                demo_x = max(self.monitor_mesh.virtual_left, 
+                           min(demo_x, self.monitor_mesh.virtual_right - 1))
+                demo_y = max(self.monitor_mesh.virtual_top,
+                           min(demo_y, self.monitor_mesh.virtual_bottom - 1))
                 
                 gaze_point = GazePoint(
                     x=float(demo_x),
@@ -623,7 +656,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 # Full demo with camera
 # python gaze-ml-test.py --camera 0
