@@ -4,7 +4,7 @@ Advanced Eye Tracking ML System
 High-performance eye tracking using MediaPipe, OpenCV, and TensorFlow
 Designed for integration with Tauri applications
 
-ENHANCED VERSION with standalone GUI testing capabilities
+ENHANCED VERSION with standalone GUI testing capabilities and multi-monitor support
 """
 
 import cv2
@@ -20,6 +20,212 @@ from typing import List, Tuple, Optional, Dict
 from collections import deque
 import argparse
 import os
+import platform
+
+# Multi-monitor detection
+def get_auto_screen_dimensions() -> Tuple[int, int]:
+    """
+    Automatically detect total screen dimensions across all monitors
+    Returns (total_width, total_height) of virtual desktop
+    """
+    system = platform.system().lower()
+    
+    try:
+        if system == "windows":
+            # Method 1: Try using win32api with GetSystemMetrics
+            try:
+                import win32api
+                # Get virtual screen dimensions (spans all monitors)
+                virtual_width = win32api.GetSystemMetrics(78)  # SM_CXVIRTUALSCREEN
+                virtual_height = win32api.GetSystemMetrics(79)  # SM_CYVIRTUALSCREEN
+                
+                if virtual_width > 0 and virtual_height > 0:
+                    print(f"DEBUG: Windows virtual screen detected: {virtual_width}x{virtual_height}", file=sys.stderr)
+                    return (virtual_width, virtual_height)
+            except Exception as e:
+                print(f"DEBUG: win32api virtual screen method failed: {e}", file=sys.stderr)
+            
+            # Method 2: Try using tkinter (more reliable)
+            try:
+                import tkinter as tk
+                root = tk.Tk()
+                
+                # Get the virtual screen size (all monitors combined)
+                width = root.winfo_screenwidth()
+                height = root.winfo_screenheight()
+                
+                # Try to get more accurate measurements
+                try:
+                    # This might give us the virtual desktop size
+                    root.update_idletasks()
+                    width = root.winfo_vrootwidth() if hasattr(root, 'winfo_vrootwidth') else width
+                    height = root.winfo_vrootheight() if hasattr(root, 'winfo_vrootheight') else height
+                except:
+                    pass
+                
+                root.destroy()
+                
+                if width > 0 and height > 0:
+                    print(f"DEBUG: Windows tkinter detected: {width}x{height}", file=sys.stderr)
+                    return (width, height)
+            except Exception as e:
+                print(f"DEBUG: tkinter method failed: {e}", file=sys.stderr)
+            
+            # Method 3: Try using ctypes with user32.dll
+            try:
+                import ctypes
+                from ctypes import wintypes
+                
+                user32 = ctypes.windll.user32
+                
+                # Get virtual screen metrics
+                virtual_width = user32.GetSystemMetrics(78)  # SM_CXVIRTUALSCREEN
+                virtual_height = user32.GetSystemMetrics(79)  # SM_CYVIRTUALSCREEN
+                
+                if virtual_width > 0 and virtual_height > 0:
+                    print(f"DEBUG: Windows ctypes detected: {virtual_width}x{virtual_height}", file=sys.stderr)
+                    return (virtual_width, virtual_height)
+                
+                # Fallback to primary screen if virtual screen returns 0
+                primary_width = user32.GetSystemMetrics(0)  # SM_CXSCREEN
+                primary_height = user32.GetSystemMetrics(1)  # SM_CYSCREEN
+                
+                if primary_width > 0 and primary_height > 0:
+                    print(f"DEBUG: Windows primary screen detected: {primary_width}x{primary_height}", file=sys.stderr)
+                    return (primary_width, primary_height)
+                    
+            except Exception as e:
+                print(f"DEBUG: ctypes method failed: {e}", file=sys.stderr)
+            
+            # Method 4: Try using PyQt5/PySide if available
+            try:
+                try:
+                    from PyQt5.QtWidgets import QApplication, QDesktopWidget
+                    app = QApplication.instance() or QApplication([])
+                    desktop = QDesktopWidget()
+                    
+                    # Get the virtual desktop (all screens combined)
+                    virtual_rect = desktop.screenGeometry(-1)  # -1 gets virtual desktop
+                    width = virtual_rect.width()
+                    height = virtual_rect.height()
+                    
+                    if width > 0 and height > 0:
+                        print(f"DEBUG: Windows PyQt5 detected: {width}x{height}", file=sys.stderr)
+                        return (width, height)
+                except ImportError:
+                    pass
+                
+                try:
+                    from PySide2.QtWidgets import QApplication, QDesktopWidget
+                    app = QApplication.instance() or QApplication([])
+                    desktop = QDesktopWidget()
+                    
+                    virtual_rect = desktop.screenGeometry(-1)
+                    width = virtual_rect.width()
+                    height = virtual_rect.height()
+                    
+                    if width > 0 and height > 0:
+                        print(f"DEBUG: Windows PySide2 detected: {width}x{height}", file=sys.stderr)
+                        return (width, height)
+                except ImportError:
+                    pass
+                    
+            except Exception as e:
+                print(f"DEBUG: Qt method failed: {e}", file=sys.stderr)
+        
+        elif system == "darwin":  # macOS
+            try:
+                from Quartz import CGGetActiveDisplayList, CGDisplayBounds
+                
+                max_displays = 10
+                (err, active_displays, num_displays) = CGGetActiveDisplayList(max_displays, None, None)
+                
+                if err == 0 and num_displays > 0:
+                    bounds_list = []
+                    for display_id in active_displays[:num_displays]:
+                        bounds = CGDisplayBounds(display_id)
+                        bounds_list.append(bounds)
+                    
+                    # Calculate virtual screen bounds
+                    left = min(bounds.origin.x for bounds in bounds_list)
+                    top = min(bounds.origin.y for bounds in bounds_list)
+                    right = max(bounds.origin.x + bounds.size.width for bounds in bounds_list)
+                    bottom = max(bounds.origin.y + bounds.size.height for bounds in bounds_list)
+                    
+                    width = int(right - left)
+                    height = int(bottom - top)
+                    
+                    print(f"DEBUG: macOS Quartz detected {num_displays} displays: {width}x{height}", file=sys.stderr)
+                    return (width, height)
+            except Exception as e:
+                print(f"DEBUG: macOS Quartz method failed: {e}", file=sys.stderr)
+        
+        elif system == "linux":
+            # Method 1: Try xrandr command
+            try:
+                import subprocess
+                result = subprocess.run(['xrandr', '--current'], capture_output=True, text=True, timeout=5)
+                
+                if result.returncode == 0:
+                    max_x, max_y = 0, 0
+                    
+                    for line in result.stdout.split('\n'):
+                        if ' connected' in line:
+                            # Look for resolution and position like "1920x1080+1920+0"
+                            for part in line.split():
+                                if 'x' in part and '+' in part:
+                                    try:
+                                        res_pos = part.split('+')
+                                        if len(res_pos) >= 3:
+                                            res_part = res_pos[0]
+                                            x_pos = int(res_pos[1])
+                                            y_pos = int(res_pos[2])
+                                            
+                                            width, height = map(int, res_part.split('x'))
+                                            
+                                            # Calculate the rightmost and bottommost points
+                                            max_x = max(max_x, x_pos + width)
+                                            max_y = max(max_y, y_pos + height)
+                                    except (ValueError, IndexError):
+                                        continue
+                    
+                    if max_x > 0 and max_y > 0:
+                        print(f"DEBUG: Linux xrandr detected: {max_x}x{max_y}", file=sys.stderr)
+                        return (max_x, max_y)
+                        
+            except Exception as e:
+                print(f"DEBUG: xrandr method failed: {e}", file=sys.stderr)
+            
+            # Method 2: Try tkinter
+            try:
+                import tkinter as tk
+                root = tk.Tk()
+                width = root.winfo_screenwidth()
+                height = root.winfo_screenheight()
+                root.destroy()
+                
+                if width > 0 and height > 0:
+                    print(f"DEBUG: Linux tkinter detected: {width}x{height}", file=sys.stderr)
+                    return (width, height)
+            except Exception as e:
+                print(f"DEBUG: Linux tkinter method failed: {e}", file=sys.stderr)
+    
+    except Exception as e:
+        print(f"WARNING: Platform-specific detection failed: {e}", file=sys.stderr)
+    
+    # Ultimate fallback to tkinter
+    try:
+        import tkinter as tk
+        root = tk.Tk()
+        width = root.winfo_screenwidth()
+        height = root.winfo_screenheight()
+        root.destroy()
+        print(f"DEBUG: Fallback tkinter detected: {width}x{height}", file=sys.stderr)
+        return (width, height)
+    except Exception as e:
+        print(f"WARNING: All detection methods failed: {e}", file=sys.stderr)
+        print("WARNING: Using default 1920x1080 resolution", file=sys.stderr)
+        return (1920, 1080)
 
 @dataclass
 class GazePoint:
@@ -782,12 +988,13 @@ def main():
     parser.add_argument('--camera', type=int, default=0, help='Camera device ID')
     parser.add_argument('--model', type=str, help='Path to pre-trained model')
     parser.add_argument('--calibrate', action='store_true', help='Start with calibration')
-    parser.add_argument('--screen-width', type=int, default=1920, help='Screen width')
-    parser.add_argument('--screen-height', type=int, default=1080, help='Screen height')
+    parser.add_argument('--screen-width', type=int, help='Screen width (auto-detected if not specified)')
+    parser.add_argument('--screen-height', type=int, help='Screen height (auto-detected if not specified)')
     parser.add_argument('--headless', action='store_true', help='Run without GUI (for Tauri integration)')
     parser.add_argument('--gui', action='store_true', help='Run with enhanced GUI mode and live preview')
     parser.add_argument('--debug', action='store_true', help='Enable verbose debug output')
     parser.add_argument('--smoothing', type=int, default=5, help='Smoothing window size')
+    parser.add_argument('--auto-screen', action='store_true', help='Auto-detect screen dimensions')
     
     args = parser.parse_args()
     
@@ -795,6 +1002,23 @@ def main():
     if args.headless and args.gui:
         print("ERROR: Cannot use both --headless and --gui modes", file=sys.stderr)
         return
+    
+    # Auto-detect screen dimensions if not provided
+    if args.auto_screen or (args.screen_width is None or args.screen_height is None):
+        print("🔍 Auto-detecting screen configuration...", file=sys.stderr)
+        auto_width, auto_height = get_auto_screen_dimensions()
+        
+        screen_width = args.screen_width if args.screen_width else auto_width
+        screen_height = args.screen_height if args.screen_height else auto_height
+        
+        print(f"📺 Detected screen: {auto_width} x {auto_height}", file=sys.stderr)
+        if args.screen_width or args.screen_height:
+            print(f"🎯 Using: {screen_width} x {screen_height} (manual override)", file=sys.stderr)
+        else:
+            print(f"🎯 Using: {screen_width} x {screen_height} (auto-detected)", file=sys.stderr)
+    else:
+        screen_width = args.screen_width
+        screen_height = args.screen_height
     
     # Initialize eye tracker
     tracker = EyeTrackingML(
@@ -805,8 +1029,8 @@ def main():
         gui_mode=args.gui
     )
     
-    tracker.screen_width = args.screen_width
-    tracker.screen_height = args.screen_height
+    tracker.screen_width = screen_width
+    tracker.screen_height = screen_height
     
     try:
         # Print startup info
@@ -817,10 +1041,12 @@ def main():
             mode_info.append("GUI")
         if args.debug:
             mode_info.append("DEBUG")
+        if args.auto_screen:
+            mode_info.append("AUTO-SCREEN")
         
         mode_str = " + ".join(mode_info) if mode_info else "STANDARD"
         print(f"INFO: Starting Eye Tracking ML System in {mode_str} mode", file=sys.stderr)
-        print(f"INFO: Screen resolution: {args.screen_width}x{args.screen_height}", file=sys.stderr)
+        print(f"INFO: Screen resolution: {screen_width}x{screen_height}", file=sys.stderr)
         print(f"INFO: Camera ID: {args.camera}", file=sys.stderr)
         print(f"INFO: Smoothing window: {args.smoothing}", file=sys.stderr)
         
@@ -851,6 +1077,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Auto-detects all monitors and uses total virtual screen size
+# python eye-tracking-ml.py --auto-screen --gui --debug
 
 # Basic Test (Camera + Debug)
 # python eye-tracking-ml.py --debug
