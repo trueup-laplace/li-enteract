@@ -313,6 +313,13 @@ class EyeTrackingML:
         else:
             self.build_simple_model()
         
+        # Eye tracking ML integration types
+        self.monitor_mesh = None
+        self.use_monitor_mesh = gui_mode  # Enable mesh for GUI mode
+        
+        if self.use_monitor_mesh:
+            self.initialize_monitor_mesh()
+        
         # Performance tracking
         self.fps_counter = 0
         self.fps_start_time = time.time()
@@ -327,6 +334,31 @@ class EyeTrackingML:
         if self.gui_mode:
             self.gaze_overlay = None
             self.initialize_gaze_overlay()
+
+    def initialize_monitor_mesh(self):
+        """Initialize the multi-monitor mesh system"""
+        try:
+            from multi_monitor_mesh import detect_monitor_mesh
+            self.monitor_mesh = detect_monitor_mesh()
+            
+            if self.debug_mode:
+                print(f"DEBUG: Monitor mesh initialized with {len(self.monitor_mesh.monitors)} monitors", file=sys.stderr)
+                print(f"DEBUG: Virtual desktop: {self.monitor_mesh.virtual_width}x{self.monitor_mesh.virtual_height}", file=sys.stderr)
+                print(f"DEBUG: Layout type: {self.monitor_mesh.get_monitor_layout_type()}", file=sys.stderr)
+                
+                # Update screen dimensions to match mesh
+                if (self.screen_width != self.monitor_mesh.virtual_width or 
+                    self.screen_height != self.monitor_mesh.virtual_height):
+                    print(f"DEBUG: Updating screen dimensions from {self.screen_width}x{self.screen_height} to {self.monitor_mesh.virtual_width}x{self.monitor_mesh.virtual_height}", file=sys.stderr)
+                    self.screen_width = self.monitor_mesh.virtual_width
+                    self.screen_height = self.monitor_mesh.virtual_height
+                
+        except ImportError:
+            print("WARNING: Multi-monitor mesh not available, using basic detection", file=sys.stderr)
+            self.monitor_mesh = None
+        except Exception as e:
+            print(f"WARNING: Failed to initialize monitor mesh: {e}", file=sys.stderr)
+            self.monitor_mesh = None
 
     def initialize_gaze_overlay(self):
         """Initialize the gaze overlay window for GUI mode"""
@@ -480,7 +512,7 @@ class EyeTrackingML:
             return None
 
     def estimate_gaze(self, features: np.ndarray) -> Optional[GazePoint]:
-        """Estimate gaze point using the ML model"""
+        """Estimate gaze point using the ML model with monitor mesh enhancement"""
         if self.gaze_model is None or features is None:
             return None
         
@@ -492,11 +524,39 @@ class EyeTrackingML:
             prediction = self.gaze_model.predict(features_reshaped, verbose=0)[0]
             
             # Convert to screen coordinates
-            screen_x = prediction[0] * self.screen_width
-            screen_y = prediction[1] * self.screen_height
+            if self.monitor_mesh:
+                # Use monitor mesh for more accurate coordinate mapping
+                norm_x, norm_y = prediction[0], prediction[1]
+                screen_x, screen_y = self.monitor_mesh.denormalize_coordinates(norm_x, norm_y)
+                
+                # Clamp to virtual desktop bounds
+                screen_x = max(self.monitor_mesh.virtual_left, 
+                              min(screen_x, self.monitor_mesh.virtual_right - 1))
+                screen_y = max(self.monitor_mesh.virtual_top,
+                              min(screen_y, self.monitor_mesh.virtual_bottom - 1))
+                
+                if self.debug_mode and self.fps_counter % 60 == 0:
+                    # Analyze which monitor we're looking at
+                    monitor = self.monitor_mesh.get_monitor_at_point(screen_x, screen_y)
+                    monitor_name = monitor.name if monitor else "outside"
+                    print(f"DEBUG: Gaze on {monitor_name}: ({screen_x:.1f}, {screen_y:.1f})", file=sys.stderr)
+            else:
+                # Fallback to basic coordinate conversion
+                screen_x = prediction[0] * self.screen_width
+                screen_y = prediction[1] * self.screen_height
             
-            # Calculate confidence (simplified)
-            confidence = 0.8  # Placeholder - could be based on model uncertainty
+            # Calculate confidence (could be enhanced with monitor context)
+            confidence = 0.8  # Placeholder
+            
+            # Enhance confidence based on monitor mesh if available
+            if self.monitor_mesh:
+                monitor = self.monitor_mesh.get_monitor_at_point(int(screen_x), int(screen_y))
+                if monitor:
+                    # Boost confidence if gaze is within a known monitor
+                    confidence = min(0.95, confidence + 0.1)
+                else:
+                    # Reduce confidence if gaze is outside known monitors
+                    confidence = max(0.3, confidence - 0.3)
             
             gaze_point = GazePoint(
                 x=float(screen_x),
@@ -515,6 +575,7 @@ class EyeTrackingML:
         except Exception as e:
             if self.debug_mode:
                 print(f"DEBUG: Gaze estimation error: {e}", file=sys.stderr)
+            return None
             return None
 
     def smooth_gaze(self, gaze_point: GazePoint) -> GazePoint:
@@ -582,7 +643,7 @@ class EyeTrackingML:
         return gaze_point, frame
 
     def draw_debug_info(self, frame: np.ndarray, landmarks: np.ndarray, gaze_point: Optional[GazePoint], results=None):
-        """Draw debug information on the frame"""
+        """Draw debug information on the frame with monitor mesh context"""
         h, w = frame.shape[:2]
         
         # Draw face mesh if in GUI mode
@@ -625,7 +686,7 @@ class EyeTrackingML:
                 x, y = landmarks[idx]
                 cv2.circle(frame, (int(x * w), int(y * h)), 3, (255, 0, 0), -1)
         
-        # Draw gaze point info
+        # Draw gaze point info with monitor context
         if gaze_point:
             info_text = [
                 f"Gaze: ({gaze_point.x:.0f}, {gaze_point.y:.0f})",
@@ -633,6 +694,17 @@ class EyeTrackingML:
                 f"Calibrated: {'Yes' if self.is_calibrated else 'No'}",
                 f"Smooth Window: {len(self.gaze_history)}/{self.smoothing_window}"
             ]
+            
+            # Add monitor mesh information
+            if self.monitor_mesh:
+                analysis = self.monitor_mesh.get_intelligent_gaze_region(
+                    int(gaze_point.x), int(gaze_point.y), gaze_point.confidence)
+                
+                info_text.extend([
+                    f"Monitor: {analysis['monitor']} {'(Primary)' if analysis['is_primary'] else ''}",
+                    f"Region: {analysis['region']}",
+                    f"Relative: ({analysis['relative_pos'][0]:.2f}, {analysis['relative_pos'][1]:.2f})"
+                ])
             
             for i, text in enumerate(info_text):
                 cv2.putText(frame, text, (10, 30 + i * 25), 
@@ -645,8 +717,15 @@ class EyeTrackingML:
             f"Screen: {self.screen_width}x{self.screen_height}"
         ]
         
+        # Add monitor mesh info
+        if self.monitor_mesh:
+            debug_info.extend([
+                f"Monitors: {len(self.monitor_mesh.monitors)}",
+                f"Layout: {self.monitor_mesh.get_monitor_layout_type()}"
+            ])
+        
         for i, text in enumerate(debug_info):
-            cv2.putText(frame, text, (10, h - 80 + i * 25), 
+            cv2.putText(frame, text, (10, h - 120 + i * 25), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
         
         # Draw controls
@@ -657,6 +736,7 @@ class EyeTrackingML:
                 "C - Calibrate", 
                 "D - Toggle Debug",
                 "R - Reset Model",
+                "M - Show Mesh Info",
                 "SPACE - Toggle Overlay"
             ]
             
@@ -665,33 +745,79 @@ class EyeTrackingML:
                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
 
     def update_gaze_overlay(self, gaze_point: Optional[GazePoint]):
-        """Update the gaze overlay window"""
+        """Update the gaze overlay window with monitor mesh visualization"""
         if not self.gui_mode or self.gaze_overlay is None:
             return
         
         # Clear overlay
         self.gaze_overlay.fill(0)
         
+        # Draw monitor boundaries if mesh is available
+        if self.monitor_mesh:
+            for i, monitor in enumerate(self.monitor_mesh.monitors):
+                # Adjust coordinates to overlay space (assuming overlay matches virtual desktop)
+                x, y = monitor.x - self.monitor_mesh.virtual_left, monitor.y - self.monitor_mesh.virtual_top
+                w, h = monitor.width, monitor.height
+                
+                # Draw monitor boundary
+                color = (0, 255, 0) if monitor.is_primary else (0, 150, 255)  # Green for primary, blue for secondary
+                cv2.rectangle(self.gaze_overlay, (x, y), (x + w, y + h), color, 2)
+                
+                # Draw monitor label
+                label = f"{monitor.name} {'(PRIMARY)' if monitor.is_primary else ''}"
+                cv2.putText(self.gaze_overlay, label, (x + 10, y + 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+                
+                # Draw center crosshair
+                center_x, center_y = x + w // 2, y + h // 2
+                cv2.line(self.gaze_overlay, (center_x - 20, center_y), (center_x + 20, center_y), color, 1)
+                cv2.line(self.gaze_overlay, (center_x, center_y - 20), (center_x, center_y + 20), color, 1)
+        
         if gaze_point:
-            # Draw gaze point
-            x, y = int(gaze_point.x), int(gaze_point.y)
+            # Adjust gaze coordinates to overlay space
+            if self.monitor_mesh:
+                x = int(gaze_point.x - self.monitor_mesh.virtual_left)
+                y = int(gaze_point.y - self.monitor_mesh.virtual_top)
+            else:
+                x, y = int(gaze_point.x), int(gaze_point.y)
             
-            # Ensure coordinates are within screen bounds
-            x = max(0, min(x, self.screen_width - 1))
-            y = max(0, min(y, self.screen_height - 1))
+            # Ensure coordinates are within overlay bounds
+            x = max(0, min(x, self.gaze_overlay.shape[1] - 1))
+            y = max(0, min(y, self.gaze_overlay.shape[0] - 1))
             
             # Draw gaze point with varying size based on confidence
             radius = int(20 * gaze_point.confidence)
             cv2.circle(self.gaze_overlay, (x, y), radius, (0, 255, 0), 2)
             cv2.circle(self.gaze_overlay, (x, y), 5, (0, 255, 255), -1)
             
-            # Draw gaze trail
+            # Draw gaze trail with monitor context
             if len(self.gaze_history) > 1:
-                points = [(int(gp.x), int(gp.y)) for gp in self.gaze_history]
+                points = []
+                for gp in self.gaze_history:
+                    if self.monitor_mesh:
+                        trail_x = int(gp.x - self.monitor_mesh.virtual_left)
+                        trail_y = int(gp.y - self.monitor_mesh.virtual_top)
+                    else:
+                        trail_x, trail_y = int(gp.x), int(gp.y)
+                    
+                    # Clamp to bounds
+                    trail_x = max(0, min(trail_x, self.gaze_overlay.shape[1] - 1))
+                    trail_y = max(0, min(trail_y, self.gaze_overlay.shape[0] - 1))
+                    points.append((trail_x, trail_y))
+                
                 for i in range(1, len(points)):
                     alpha = i / len(points)
                     cv2.line(self.gaze_overlay, points[i-1], points[i], 
                             (int(255 * alpha), int(100 * alpha), 0), 2)
+            
+            # Show which monitor we're looking at
+            if self.monitor_mesh:
+                analysis = self.monitor_mesh.get_intelligent_gaze_region(
+                    int(gaze_point.x), int(gaze_point.y), gaze_point.confidence)
+                
+                info_text = f"Looking at: {analysis['monitor']} - {analysis['region']}"
+                cv2.putText(self.gaze_overlay, info_text, (10, self.gaze_overlay.shape[0] - 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
         # Show overlay
         cv2.imshow('Gaze Overlay', self.gaze_overlay)
@@ -951,6 +1077,16 @@ class EyeTrackingML:
                         print("INFO: Resetting model...", file=sys.stderr)
                         self.build_simple_model()
                         self.is_calibrated = False
+                    elif key == ord('m'):
+                        if self.monitor_mesh:
+                            print("INFO: Monitor Mesh Configuration:", file=sys.stderr)
+                            print(f"  Virtual Desktop: {self.monitor_mesh.virtual_width}x{self.monitor_mesh.virtual_height}", file=sys.stderr)
+                            print(f"  Monitors: {len(self.monitor_mesh.monitors)}", file=sys.stderr)
+                            for i, monitor in enumerate(self.monitor_mesh.monitors):
+                                print(f"    {i+1}. {monitor.name}: {monitor.width}x{monitor.height} at ({monitor.x}, {monitor.y}) {'(PRIMARY)' if monitor.is_primary else ''}", file=sys.stderr)
+                            print(f"  Layout: {self.monitor_mesh.get_monitor_layout_type()}", file=sys.stderr)
+                        else:
+                            print("INFO: Monitor mesh not available", file=sys.stderr)
                     elif key == ord(' '):
                         show_overlay = not show_overlay
                         print(f"INFO: Gaze overlay {'enabled' if show_overlay else 'disabled'}", file=sys.stderr)
