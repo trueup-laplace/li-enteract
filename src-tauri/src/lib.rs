@@ -6,6 +6,13 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use serde_json;
 
+// Speech transcription imports
+use std::path::PathBuf;
+use std::fs;
+use base64::{Engine as _, engine::general_purpose};
+use tempfile::NamedTempFile;
+use anyhow::Result;
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -663,6 +670,84 @@ async fn detect_window_drag(window: Window, gaze_x: f64, gaze_y: f64) -> Result<
     }
 }
 
+// Speech transcription structures and commands
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WhisperModelConfig {
+    pub model_size: String,
+    pub language: Option<String>,
+    pub enable_vad: bool,
+    pub silence_threshold: f32,
+    pub max_segment_length: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TranscriptionResult {
+    pub text: String,
+    pub confidence: f32,
+    pub start_time: f32,
+    pub end_time: f32,
+    pub language: Option<String>,
+}
+
+lazy_static::lazy_static! {
+    static ref WHISPER_AVAILABLE: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+}
+
+#[tauri::command]
+async fn initialize_whisper_model(config: WhisperModelConfig) -> Result<String, String> {
+    // Stub implementation for now - will use actual whisper-rs once dependencies are resolved
+    let mut available = WHISPER_AVAILABLE.lock().unwrap();
+    *available = false; // Set to false until we get whisper-rs working
+    Ok("Web Speech API ready - Whisper will be enabled once dependencies are installed".to_string())
+}
+
+#[tauri::command]
+async fn transcribe_audio_base64(audio_data: String, config: WhisperModelConfig) -> Result<TranscriptionResult, String> {
+    // For now, return a placeholder result
+    // This will be implemented with actual whisper-rs once compilation works
+    Ok(TranscriptionResult {
+        text: "[Whisper transcription pending - currently using Web Speech API only]".to_string(),
+        confidence: 0.0,
+        start_time: 0.0,
+        end_time: 0.0,
+        language: config.language,
+    })
+}
+
+#[tauri::command]
+async fn transcribe_audio_file(file_path: String, config: WhisperModelConfig) -> Result<TranscriptionResult, String> {
+    // For now, return a placeholder result
+    Ok(TranscriptionResult {
+        text: "[Whisper transcription pending - currently using Web Speech API only]".to_string(),
+        confidence: 0.0,
+        start_time: 0.0,
+        end_time: 0.0,
+        language: config.language,
+    })
+}
+
+#[tauri::command]
+async fn check_whisper_model_availability(_model_size: String) -> Result<bool, String> {
+    let available = WHISPER_AVAILABLE.lock().unwrap();
+    Ok(*available)
+}
+
+#[tauri::command]
+async fn download_whisper_model(_model_size: String) -> Result<String, String> {
+    Ok("Whisper model download not implemented yet - using Web Speech API".to_string())
+}
+
+#[tauri::command]
+async fn list_available_models() -> Result<Vec<String>, String> {
+    Ok(vec![
+        "tiny".to_string(),
+        "base".to_string(),
+        "small".to_string(),
+        "medium".to_string(),
+        "large".to_string(),
+    ])
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -699,7 +784,14 @@ pub fn run() {
             get_ml_tracking_stats,
             pause_ml_tracking,
             resume_ml_tracking,
-            detect_window_drag
+            detect_window_drag,
+            // Speech transcription commands
+            initialize_whisper_model,
+            transcribe_audio_base64,
+            transcribe_audio_file,
+            check_whisper_model_availability,
+            download_whisper_model,
+            list_available_models
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

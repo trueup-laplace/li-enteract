@@ -1,8 +1,11 @@
 export interface ChatMessage {
   id: number
   text: string
-  sender: 'user' | 'assistant'
+  sender: 'user' | 'assistant' | 'transcription'
   timestamp: Date
+  isInterim?: boolean
+  confidence?: number
+  source?: 'web-speech' | 'whisper' | 'typed'
 }
 
 export interface AppState {
@@ -29,4 +32,7 @@ export interface TransparencyPresets {
   ghostMode: () => Promise<void>
   semiTransparent: () => Promise<void>
   solid: () => Promise<void>
-} 
+}
+
+// Re-export speech transcription types
+export * from './speechTranscription' 
