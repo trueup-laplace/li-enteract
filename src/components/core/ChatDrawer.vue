@@ -3,8 +3,7 @@ import { ref } from 'vue'
 import { 
   PaperAirplaneIcon,
   XMarkIcon,
-  MicrophoneIcon,
-  StopIcon
+  MicrophoneIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 
@@ -26,16 +25,16 @@ const sendMessage = () => {
   newMessage.value = ''
 }
 
-const toggleSpeechTranscription = async () => {
+// Speech transcription - minimal controls
+const toggleSpeechFromChat = async () => {
   if (store.speechStatus.isRecording) {
     await store.stopSpeechTranscription()
   } else {
+    if (!store.speechStatus.isInitialized) {
+      await store.initializeSpeechTranscription('base')
+    }
     await store.startSpeechTranscription()
   }
-}
-
-const initializeTranscription = async () => {
-  await store.initializeSpeechTranscription('base')
 }
 </script>
 
@@ -93,73 +92,48 @@ const initializeTranscription = async () => {
       </div>
       
       <!-- Chat Input -->
-      <div class="p-4 border-t border-white/10 space-y-3">
-        <!-- Speech Status -->
-        <div v-if="store.speechStatus.isRecording || store.speechStatus.isProcessing" class="flex items-center gap-2 text-sm text-orange-300">
-          <div class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-          <span v-if="store.speechStatus.isRecording">Listening...</span>
-          <span v-else-if="store.speechStatus.isProcessing">Processing with Whisper...</span>
+      <div class="p-4 border-t border-white/10">
+        <!-- Speech Transcription Info -->
+        <div v-if="store.speechStatus.error" class="mb-3 text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg p-2">
+          Speech Error: {{ store.speechStatus.error }}
         </div>
 
-        <!-- Error Display -->
-        <div v-if="store.speechStatus.error" class="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg p-2">
-          {{ store.speechStatus.error }}
-        </div>
-
-        <!-- Speech Controls -->
-        <div class="flex items-center gap-2">
-          <!-- Initialize Button -->
+        <!-- Clear Transcription Button -->
+        <div v-if="store.isTranscriptionEnabled" class="mb-3 flex justify-center">
           <button 
-            v-if="!store.speechStatus.isInitialized"
-            @click="initializeTranscription"
-            class="btn-speech-init"
-            title="Initialize Speech Transcription"
-          >
-            🎤 Setup
-          </button>
-
-          <!-- Record/Stop Button -->
-          <button 
-            v-else
-            @click="toggleSpeechTranscription"
-            class="btn-speech"
-            :class="{
-              'btn-speech-recording': store.speechStatus.isRecording,
-              'btn-speech-idle': !store.speechStatus.isRecording
-            }"
-            :disabled="store.speechStatus.isProcessing"
-            :title="store.speechStatus.isRecording ? 'Stop Recording' : 'Start Recording'"
-          >
-            <MicrophoneIcon v-if="!store.speechStatus.isRecording" class="w-4 h-4" />
-            <StopIcon v-else class="w-4 h-4" />
-          </button>
-
-          <!-- Clear Transcription -->
-          <button 
-            v-if="store.isTranscriptionEnabled"
             @click="store.clearTranscription"
-            class="btn-clear text-xs px-2 py-1"
-            title="Clear Transcriptions"
+            class="btn-clear text-xs px-3 py-1"
+            title="Clear All Transcriptions"
           >
-            Clear
+            Clear Transcriptions
           </button>
-
-          <!-- Status Indicators -->
-          <div class="flex gap-1 ml-auto">
-            <span v-if="store.speechStatus.hasWebSpeechSupport" class="status-indicator bg-green-500" title="Web Speech API available"></span>
-            <span v-if="store.speechStatus.hasWhisperModel" class="status-indicator bg-purple-500" title="Whisper model loaded"></span>
-          </div>
         </div>
 
-        <!-- Text Input -->
-        <div class="flex gap-3">
+        <!-- Text Input with Minimal Mic -->
+        <div class="flex gap-2">
           <input 
             v-model="newMessage"
             @keyup.enter="sendMessage"
             type="text" 
-            placeholder="Type your message or use speech..."
+            placeholder="Type your message..."
             class="input-enhanced flex-1"
           />
+          
+          <!-- Minimal Mic Button -->
+          <button 
+            @click="toggleSpeechFromChat"
+            class="btn-mic-minimal"
+            :class="{
+              'btn-mic-recording': store.speechStatus.isRecording,
+              'btn-mic-processing': store.speechStatus.isProcessing,
+              'btn-mic-ready': store.isTranscriptionEnabled && !store.speechStatus.isRecording
+            }"
+            :disabled="store.speechStatus.isProcessing"
+            :title="store.speechStatus.isRecording ? 'Stop Recording' : 'Start Speech Recording'"
+          >
+            <MicrophoneIcon class="w-4 h-4" />
+          </button>
+          
           <button 
             @click="sendMessage"
             class="btn-send"
@@ -229,37 +203,25 @@ const initializeTranscription = async () => {
   border-radius: 2px;
 }
 
-/* Speech Transcription Controls */
-.btn-speech-init {
-  @apply px-3 py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white text-sm font-medium transition-all duration-200;
-  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
-}
-
-.btn-speech {
-  @apply w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200;
-}
-
-.btn-speech-idle {
-  @apply bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white;
-  box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
-}
-
-.btn-speech-idle:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
-}
-
-.btn-speech-recording {
-  @apply bg-gradient-to-r from-red-500 to-pink-600 text-white animate-pulse;
-  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
-}
-
 .btn-clear {
   @apply bg-white/10 hover:bg-white/20 text-white/70 hover:text-white rounded-lg transition-all duration-200;
 }
 
-.status-indicator {
-  @apply w-2 h-2 rounded-full;
+/* Minimal mic button */
+.btn-mic-minimal {
+  @apply w-12 h-12 rounded-xl bg-white/5 hover:bg-white/10 border border-white/20 hover:border-white/30 text-white/70 hover:text-white flex items-center justify-center transition-all duration-200;
+}
+
+.btn-mic-ready {
+  @apply bg-green-500/20 hover:bg-green-500/30 border-green-400/40 text-green-300;
+}
+
+.btn-mic-recording {
+  @apply bg-red-500/30 border-red-400/50 text-red-300 animate-pulse;
+}
+
+.btn-mic-processing {
+  @apply bg-yellow-500/20 border-yellow-400/40 text-yellow-300;
 }
 
 @keyframes fade-in {

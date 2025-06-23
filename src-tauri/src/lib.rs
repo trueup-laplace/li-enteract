@@ -12,6 +12,7 @@ use std::fs;
 use base64::{Engine as _, engine::general_purpose};
 use tempfile::NamedTempFile;
 use anyhow::Result;
+use whisper_rs::{WhisperContext, WhisperContextParameters, FullParams, SamplingStrategy};
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -690,51 +691,139 @@ pub struct TranscriptionResult {
 }
 
 lazy_static::lazy_static! {
-    static ref WHISPER_AVAILABLE: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+    static ref WHISPER_CONTEXT: Arc<Mutex<Option<WhisperContext>>> = Arc::new(Mutex::new(None));
+    static ref MODEL_CACHE_DIR: PathBuf = {
+        let mut cache_dir = std::env::temp_dir();
+        cache_dir.push("enteract");
+        cache_dir.push("whisper_models");
+        cache_dir
+    };
 }
 
 #[tauri::command]
 async fn initialize_whisper_model(config: WhisperModelConfig) -> Result<String, String> {
-    // Stub implementation for now - will use actual whisper-rs once dependencies are resolved
-    let mut available = WHISPER_AVAILABLE.lock().unwrap();
-    *available = false; // Set to false until we get whisper-rs working
-    Ok("Web Speech API ready - Whisper will be enabled once dependencies are installed".to_string())
+    let model_path = get_or_download_model(&config.model_size).await?;
+    
+    let ctx = WhisperContext::new_with_params(
+        model_path.to_str().ok_or("Invalid model path")?,
+        WhisperContextParameters::default()
+    ).map_err(|e| format!("Failed to initialize Whisper context: {}", e))?;
+    
+    let mut whisper_ctx = WHISPER_CONTEXT.lock().unwrap();
+    *whisper_ctx = Some(ctx);
+    
+    Ok(format!("Whisper model '{}' initialized successfully", config.model_size))
 }
 
 #[tauri::command]
 async fn transcribe_audio_base64(audio_data: String, config: WhisperModelConfig) -> Result<TranscriptionResult, String> {
-    // For now, return a placeholder result
-    // This will be implemented with actual whisper-rs once compilation works
-    Ok(TranscriptionResult {
-        text: "[Whisper transcription pending - currently using Web Speech API only]".to_string(),
-        confidence: 0.0,
-        start_time: 0.0,
-        end_time: 0.0,
-        language: config.language,
-    })
+    // Decode base64 audio data
+    let audio_bytes = general_purpose::STANDARD
+        .decode(&audio_data)
+        .map_err(|e| format!("Failed to decode base64 audio: {}", e))?;
+    
+    // Create temporary file for audio
+    let temp_file = NamedTempFile::with_suffix(".wav")
+        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+    
+    fs::write(temp_file.path(), audio_bytes)
+        .map_err(|e| format!("Failed to write audio to temp file: {}", e))?;
+    
+    transcribe_audio_file(temp_file.path().to_string_lossy().to_string(), config).await
 }
 
 #[tauri::command]
 async fn transcribe_audio_file(file_path: String, config: WhisperModelConfig) -> Result<TranscriptionResult, String> {
-    // For now, return a placeholder result
+    // Ensure model is initialized
+    let needs_init = {
+        let whisper_ctx = WHISPER_CONTEXT.lock().unwrap();
+        whisper_ctx.is_none()
+    };
+    
+    if needs_init {
+        initialize_whisper_model(config.clone()).await?;
+    }
+    
+    // Load and preprocess audio
+    let audio_data = load_audio_file(&file_path)?;
+    
+    // Get Whisper context
+    let whisper_ctx = WHISPER_CONTEXT.lock().unwrap();
+    let ctx = whisper_ctx.as_ref().ok_or("Whisper context not initialized")?;
+    
+    // Set up transcription parameters
+    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+    
+    if let Some(ref lang) = config.language {
+        params.set_language(Some(lang));
+    } else {
+        params.set_language(Some("auto"));
+    }
+    
+    params.set_translate(false);
+    params.set_print_special(false);
+    params.set_print_progress(false);
+    params.set_print_realtime(false);
+    params.set_print_timestamps(false);
+    
+    // Run transcription
+    let mut state = ctx.create_state().map_err(|e| format!("Failed to create state: {}", e))?;
+    state.full(params, &audio_data)
+        .map_err(|e| format!("Transcription failed: {}", e))?;
+    
+    // Extract results
+    let num_segments = state.full_n_segments()
+        .map_err(|e| format!("Failed to get segment count: {}", e))?;
+    
+    let mut full_text = String::new();
+    let mut total_confidence = 0.0;
+    let mut start_time: f32 = f32::MAX;
+    let mut end_time: f32 = 0.0;
+    
+    for i in 0..num_segments {
+        let segment_text = state.full_get_segment_text(i)
+            .map_err(|e| format!("Failed to get segment text: {}", e))?;
+        
+        let segment_start = state.full_get_segment_t0(i)
+            .map_err(|e| format!("Failed to get segment start time: {}", e))? as f32 / 100.0;
+        
+        let segment_end = state.full_get_segment_t1(i)
+            .map_err(|e| format!("Failed to get segment end time: {}", e))? as f32 / 100.0;
+        
+        full_text.push_str(&segment_text);
+        start_time = start_time.min(segment_start);
+        end_time = end_time.max(segment_end);
+        total_confidence += 1.0; // Whisper doesn't provide confidence scores directly
+    }
+    
+    let avg_confidence = if num_segments > 0 { total_confidence / num_segments as f32 } else { 0.0 };
+    
     Ok(TranscriptionResult {
-        text: "[Whisper transcription pending - currently using Web Speech API only]".to_string(),
-        confidence: 0.0,
-        start_time: 0.0,
-        end_time: 0.0,
+        text: full_text.trim().to_string(),
+        confidence: avg_confidence,
+        start_time,
+        end_time,
         language: config.language,
     })
 }
 
 #[tauri::command]
-async fn check_whisper_model_availability(_model_size: String) -> Result<bool, String> {
-    let available = WHISPER_AVAILABLE.lock().unwrap();
-    Ok(*available)
+async fn check_whisper_model_availability(model_size: String) -> Result<bool, String> {
+    let model_path = get_model_path(&model_size);
+    Ok(model_path.exists())
 }
 
 #[tauri::command]
-async fn download_whisper_model(_model_size: String) -> Result<String, String> {
-    Ok("Whisper model download not implemented yet - using Web Speech API".to_string())
+async fn download_whisper_model(model_size: String) -> Result<String, String> {
+    // Force re-download by removing existing file
+    let model_path = get_model_path(&model_size);
+    if model_path.exists() {
+        fs::remove_file(&model_path)
+            .map_err(|e| format!("Failed to remove existing model: {}", e))?;
+    }
+    
+    get_or_download_model(&model_size).await?;
+    Ok(format!("Model '{}' downloaded successfully", model_size))
 }
 
 #[tauri::command]
@@ -746,6 +835,92 @@ async fn list_available_models() -> Result<Vec<String>, String> {
         "medium".to_string(),
         "large".to_string(),
     ])
+}
+
+// Helper functions
+async fn get_or_download_model(model_size: &str) -> Result<PathBuf, String> {
+    let model_path = get_model_path(model_size);
+    
+    // Check if model exists and is valid
+    if !model_path.exists() || !is_valid_model_file(&model_path) {
+        // Remove invalid file if it exists
+        if model_path.exists() {
+            fs::remove_file(&model_path)
+                .map_err(|e| format!("Failed to remove invalid model: {}", e))?;
+        }
+        download_model(model_size).await?;
+    }
+    
+    Ok(model_path)
+}
+
+fn is_valid_model_file(path: &PathBuf) -> bool {
+    // Check if file is large enough to be a real model (should be at least 1MB)
+    if let Ok(metadata) = fs::metadata(path) {
+        metadata.len() > 1_000_000 // 1MB minimum
+    } else {
+        false
+    }
+}
+
+fn get_model_path(model_size: &str) -> PathBuf {
+    let mut path = MODEL_CACHE_DIR.clone();
+    path.push(format!("ggml-{}.bin", model_size));
+    path
+}
+
+async fn download_model(model_size: &str) -> Result<(), String> {
+    // Create cache directory if it doesn't exist
+    fs::create_dir_all(&*MODEL_CACHE_DIR)
+        .map_err(|e| format!("Failed to create cache directory: {}", e))?;
+    
+    let model_url = format!(
+        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{}.bin",
+        model_size
+    );
+    
+    let model_path = get_model_path(model_size);
+    
+    println!("Downloading Whisper model '{}' from: {}", model_size, model_url);
+    
+    // Download the model
+    let response = reqwest::get(&model_url).await
+        .map_err(|e| format!("Failed to download model: {}", e))?;
+    
+    if !response.status().is_success() {
+        return Err(format!("Failed to download model: HTTP {}", response.status()));
+    }
+    
+    let bytes = response.bytes().await
+        .map_err(|e| format!("Failed to read model data: {}", e))?;
+    
+    fs::write(&model_path, bytes)
+        .map_err(|e| format!("Failed to save model: {}", e))?;
+    
+    println!("Successfully downloaded Whisper model '{}' to: {:?}", model_size, model_path);
+    
+    Ok(())
+}
+
+fn load_audio_file(file_path: &str) -> Result<Vec<f32>, String> {
+    // For now, we'll assume the audio is already in the correct format
+    // In a production app, you'd want to use a proper audio library like symphonia
+    // to handle various audio formats and convert to 16kHz mono f32
+    
+    let audio_bytes = fs::read(file_path)
+        .map_err(|e| format!("Failed to read audio file: {}", e))?;
+    
+    // Simple conversion assuming 16-bit PCM audio
+    // This is a simplified implementation - you should use proper audio processing
+    let mut audio_f32 = Vec::new();
+    for chunk in audio_bytes.chunks(2) {
+        if chunk.len() == 2 {
+            let sample = i16::from_le_bytes([chunk[0], chunk[1]]) as f32 / 32768.0;
+            audio_f32.push(sample);
+        }
+    }
+    
+    Ok(audio_f32)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

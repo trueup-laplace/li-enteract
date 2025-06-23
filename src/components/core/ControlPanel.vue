@@ -22,6 +22,33 @@ const showTransparencyControls = ref(false)
 // ML Eye tracking with window movement state
 const isGazeControlActive = ref(false)
 
+// Speech transcription functions
+const toggleSpeechTranscription = async () => {
+  if (store.speechStatus.isRecording) {
+    await store.stopSpeechTranscription()
+  } else {
+    if (!store.speechStatus.isInitialized) {
+      await store.initializeSpeechTranscription('base')
+    }
+    await store.startSpeechTranscription()
+  }
+}
+
+const getSpeechTooltip = () => {
+  if (store.speechStatus.isProcessing) return 'Processing with Whisper...'
+  if (store.speechStatus.isRecording) return 'Stop Recording (Click to stop)'
+  if (store.speechStatus.error) return `Error: ${store.speechStatus.error}`
+  if (!store.speechStatus.isInitialized) return 'Initialize Speech Transcription'
+  return 'Start Speech Recording'
+}
+
+const getSpeechIconClass = () => {
+  if (store.speechStatus.isRecording) return 'text-white'
+  if (store.speechStatus.isProcessing) return 'text-white'
+  if (store.isTranscriptionEnabled) return 'text-white'
+  return 'text-white/80 group-hover:text-white'
+}
+
 const toggleTransparencyControls = () => {
   showTransparencyControls.value = !showTransparencyControls.value
 }
@@ -140,15 +167,21 @@ onUnmounted(() => {
           <SparklesIcon class="w-3.5 h-3.5 text-white/80 group-hover:text-white transition-colors" />
         </button>
         
-        <!-- Microphone Button -->
+        <!-- Speech Transcription Button -->
         <button 
-          @click="store.toggleMic"
+          @click="toggleSpeechTranscription"
           class="btn btn-circle btn-sm glass-btn-compact group tooltip flex items-center justify-center"
-          :class="{ 'btn-primary': store.micEnabled, 'glass-btn-compact': !store.micEnabled }"
-          data-tip="Toggle Microphone"
+          :class="{ 
+            'btn-error animate-pulse': store.speechStatus.isRecording,
+            'btn-warning': store.speechStatus.isProcessing,
+            'btn-success': store.isTranscriptionEnabled && !store.speechStatus.isRecording,
+            'glass-btn-compact': !store.isTranscriptionEnabled 
+          }"
+          :data-tip="getSpeechTooltip()"
+          :disabled="store.speechStatus.isProcessing"
         >
           <MicrophoneIcon class="w-3.5 h-3.5 transition-colors" 
-            :class="store.micEnabled ? 'text-white' : 'text-white/80 group-hover:text-white'" />
+            :class="getSpeechIconClass()" />
         </button>
         
         <!-- ML Eye Tracking + Window Movement Button -->
@@ -193,9 +226,10 @@ onUnmounted(() => {
       </div>
     </div>
     
-    <!-- Status Indicator -->
-    <div v-if="mlEyeTracking.isActive.value" class="mt-2 text-center">
-      <div class="glass-panel-compact px-3 py-1 inline-block">
+    <!-- Status Indicators -->
+    <div class="mt-2 text-center space-y-1">
+      <!-- ML Eye Tracking Status -->
+      <div v-if="mlEyeTracking.isActive.value" class="glass-panel-compact px-3 py-1 inline-block">
         <span class="text-xs text-white/80">
           ML Gaze Control: 
           <span :class="{
@@ -208,6 +242,24 @@ onUnmounted(() => {
           </span>
           • FPS: {{ mlEyeTracking.fps.value }}
           • Conf: {{ Math.round(mlEyeTracking.confidence.value * 100) }}%
+        </span>
+      </div>
+
+      <!-- Speech Transcription Status -->
+      <div v-if="store.speechStatus.isRecording || store.speechStatus.isProcessing || store.speechStatus.error" class="glass-panel-compact px-3 py-1 inline-block">
+        <span class="text-xs text-white/80">
+          Speech: 
+          <span :class="{
+            'text-red-400 animate-pulse': store.speechStatus.isRecording,
+            'text-yellow-400': store.speechStatus.isProcessing,
+            'text-red-300': store.speechStatus.error
+          }">
+            {{ store.speechStatus.isRecording ? 'Recording...' : 
+               store.speechStatus.isProcessing ? 'Processing...' : 
+               store.speechStatus.error ? 'Error' : 'Ready' }}
+          </span>
+          <span v-if="store.speechStatus.hasWebSpeechSupport" class="ml-1 text-green-400">• WebAPI</span>
+          <span v-if="store.speechStatus.hasWhisperModel" class="ml-1 text-purple-400">• Whisper</span>
         </span>
       </div>
     </div>
