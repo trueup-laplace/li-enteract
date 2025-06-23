@@ -1,48 +1,83 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick, onMounted, watch } from 'vue'
 import { 
   PaperAirplaneIcon,
   XMarkIcon,
   MicrophoneIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
+import type { ChatMessage } from '../../types'
 
-const store = useAppStore()
+const appStore = useAppStore()
+
 const newMessage = ref('')
 const apiKey = ref('')
 const showApiKeyInput = ref(false)
+const messagesContainer = ref<HTMLElement>()
+const editingMessageId = ref<number | null>(null)
+const editText = ref('')
+const editInput = ref<HTMLInputElement>()
+
+onMounted(() => {
+  appStore.initializeSpeechTranscription()
+})
 
 const sendMessage = () => {
-  if (!newMessage.value.trim()) return
-  
-  store.addMessage(newMessage.value, 'user', { source: 'typed' })
-  
-  // Simulate assistant response
-  setTimeout(() => {
-    store.addMessage("I understand. Let me help you with that.", 'assistant')
-  }, 1000)
-  
-  newMessage.value = ''
-}
-
-// Speech transcription - minimal controls
-const toggleSpeechFromChat = async () => {
-  if (store.speechStatus.isRecording) {
-    await store.stopSpeechTranscription()
-  } else {
-    if (!store.speechStatus.isInitialized) {
-      await store.initializeSpeechTranscription('base')
-    }
-    await store.startSpeechTranscription()
+  if (newMessage.value.trim()) {
+    appStore.addMessage(newMessage.value, 'user', { source: 'typed' })
+    newMessage.value = ''
+    scrollToBottom()
   }
 }
+
+const toggleSpeechTranscription = () => {
+  if (appStore.speechStatus.isRecording) {
+    appStore.stopSpeechTranscription()
+  } else {
+    appStore.startSpeechTranscription()
+  }
+}
+
+const startEditing = (message: ChatMessage) => {
+  if (message.sender === 'transcription' && !message.isInterim) {
+    editingMessageId.value = message.id
+    editText.value = message.text
+    nextTick(() => {
+      editInput.value?.focus()
+      editInput.value?.select()
+    })
+  }
+}
+
+const saveEdit = () => {
+  if (editingMessageId.value && editText.value.trim()) {
+    appStore.updateMessage(editingMessageId.value, editText.value.trim())
+  }
+  cancelEdit()
+}
+
+const cancelEdit = () => {
+  editingMessageId.value = null
+  editText.value = ''
+}
+
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    }
+  })
+}
+
+// Auto-scroll when new messages arrive
+watch(() => appStore.chatMessages.length, scrollToBottom)
 </script>
 
 <template>
   <!-- Chat Drawer -->
   <div 
     class="fixed top-0 right-0 h-full w-96 z-50 transform transition-all duration-500 ease-out"
-    :class="store.chatOpen ? 'translate-x-0' : 'translate-x-full'"
+    :class="appStore.chatOpen ? 'translate-x-0' : 'translate-x-full'"
   >
     <div class="h-full chat-panel flex flex-col">
       <!-- Chat Header -->
@@ -51,42 +86,83 @@ const toggleSpeechFromChat = async () => {
           <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
           <h3 class="text-lg font-medium text-white/90">Assistant Chat</h3>
         </div>
-        <button @click="store.toggleChat" class="btn btn-sm btn-circle btn-ghost hover:bg-white/10">
+        <button @click="appStore.toggleChat" class="btn btn-sm btn-circle btn-ghost hover:bg-white/10">
           <XMarkIcon class="w-4 h-4 text-white/70" />
         </button>
       </div>
       
       <!-- Chat Messages -->
-      <div class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-        <div 
-          v-for="message in store.chatMessages" 
+      <div 
+        ref="messagesContainer" 
+        class="flex-1 p-4 space-y-3 overflow-y-auto max-h-[300px] scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
+      >
+        <div
+          v-for="message in appStore.chatMessages"
           :key="message.id"
-          class="flex animate-fade-in"
-          :class="message.sender === 'user' ? 'justify-end' : 'justify-start'"
+          :class="[
+            'p-3 rounded-lg max-w-[80%] break-words',
+            message.sender === 'user' 
+              ? 'bg-blue-600 text-white ml-auto' 
+              : message.sender === 'transcription'
+              ? `${message.isInterim ? 'bg-orange-500/20 text-orange-200 border border-orange-500/30' : 'bg-green-600/20 text-green-200 border border-green-600/30'} mr-auto`
+              : 'bg-gray-700 text-white mr-auto'
+          ]"
         >
+          <!-- Editable transcription message -->
           <div 
-            class="max-w-xs rounded-2xl px-4 py-3 text-sm shadow-lg relative"
-            :class="{
-              'bg-gradient-to-r from-blue-500 to-purple-600 text-white': message.sender === 'user',
-              'bg-white/5 text-white/90 border border-white/10 backdrop-blur-sm': message.sender === 'assistant',
-              'bg-gradient-to-r from-orange-500/20 to-red-500/20 text-orange-200 border border-orange-400/30 backdrop-blur-sm': message.sender === 'transcription',
-              'opacity-60 italic': message.isInterim
-            }"
+            v-if="message.sender === 'transcription'"
+            @click="startEditing(message)"
+            class="cursor-pointer group relative"
           >
-            {{ message.text }}
-            
-            <!-- Transcription metadata -->
-            <div v-if="message.sender === 'transcription' && !message.isInterim" class="mt-1 flex items-center gap-1 text-xs opacity-70">
-              <span v-if="message.source === 'whisper'" class="px-1 py-0.5 rounded bg-purple-500/30 text-purple-200">
-                Whisper
-              </span>
-              <span v-else-if="message.source === 'web-speech'" class="px-1 py-0.5 rounded bg-blue-500/30 text-blue-200">
-                WebSpeech
-              </span>
-              <span v-if="message.confidence" class="text-xs">
-                {{ Math.round(message.confidence * 100) }}%
-              </span>
+            <div v-if="editingMessageId === message.id" class="space-y-2">
+              <input
+                v-model="editText"
+                @keyup.enter="saveEdit"
+                @keyup.escape="cancelEdit"
+                @blur="saveEdit"
+                class="w-full bg-transparent border-b border-white/30 text-white outline-none"
+                :placeholder="message.text"
+                ref="editInput"
+              />
+              <div class="text-xs text-white/60">
+                Press Enter to save, Esc to cancel
+              </div>
             </div>
+            <div v-else>
+              <!-- Thought stream animation for interim messages -->
+              <div 
+                v-if="message.isInterim"
+                :class="['flex items-center', message.isInterim ? 'animate-pulse' : '']"
+              >
+                <span class="text-orange-300 mr-2">💭</span>
+                <span :class="message.isInterim ? 'italic' : ''">{{ message.text }}</span>
+                <span v-if="message.isInterim" class="ml-2 text-orange-400 animate-pulse">...</span>
+              </div>
+              <!-- Final transcription -->
+              <div v-else class="flex items-center">
+                <span class="text-green-300 mr-2">🎤</span>
+                <span>{{ message.text }}</span>
+              </div>
+              
+              <!-- Edit hint on hover -->
+              <div class="absolute -top-6 right-0 text-xs text-white/60 opacity-0 group-hover:opacity-100 transition-opacity">
+                Click to edit
+              </div>
+              
+              <!-- Confidence indicator for final messages -->
+              <div v-if="!message.isInterim && message.confidence" class="text-xs text-white/60 mt-1">
+                Confidence: {{ Math.round(message.confidence * 100) }}%
+              </div>
+            </div>
+          </div>
+          
+          <!-- Regular messages -->
+          <div v-else>
+            {{ message.text }}
+          </div>
+          
+          <div class="text-xs opacity-60 mt-1">
+            {{ message.timestamp.toLocaleTimeString() }}
           </div>
         </div>
       </div>
@@ -94,24 +170,24 @@ const toggleSpeechFromChat = async () => {
       <!-- Chat Input -->
       <div class="p-4 border-t border-white/10">
         <!-- Speech Transcription Info -->
-        <div v-if="store.speechStatus.error" class="mb-3 text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg p-2">
-          Speech Error: {{ store.speechStatus.error }}
+        <div v-if="appStore.speechStatus.error" class="mb-3 text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg p-2">
+          Speech Error: {{ appStore.speechStatus.error }}
         </div>
 
-        <!-- Clear Transcription Button -->
-        <div v-if="store.isTranscriptionEnabled" class="mb-3 flex justify-center">
+        <!-- Clear Chat Button -->
+        <div v-if="appStore.isTranscriptionEnabled" class="mb-3 flex justify-center">
           <button 
-            @click="store.clearTranscription"
+            @click="appStore.clearChat"
             class="btn-clear text-xs px-3 py-1"
-            title="Clear All Transcriptions"
+            title="Clear All Chat Messages"
           >
-            Clear Transcriptions
+            Clear Chat
           </button>
         </div>
 
         <!-- Text Input with Minimal Mic -->
         <div class="flex gap-2">
-          <input 
+          <input
             v-model="newMessage"
             @keyup.enter="sendMessage"
             type="text" 
@@ -120,21 +196,21 @@ const toggleSpeechFromChat = async () => {
           />
           
           <!-- Minimal Mic Button -->
-          <button 
-            @click="toggleSpeechFromChat"
+          <button
+            @click="toggleSpeechTranscription"
             class="btn-mic-minimal"
             :class="{
-              'btn-mic-recording': store.speechStatus.isRecording,
-              'btn-mic-processing': store.speechStatus.isProcessing,
-              'btn-mic-ready': store.isTranscriptionEnabled && !store.speechStatus.isRecording
+              'btn-mic-recording': appStore.speechStatus.isRecording,
+              'btn-mic-processing': appStore.speechStatus.isProcessing,
+              'btn-mic-ready': appStore.isTranscriptionEnabled && !appStore.speechStatus.isRecording
             }"
-            :disabled="store.speechStatus.isProcessing"
-            :title="store.speechStatus.isRecording ? 'Stop Recording' : 'Start Speech Recording'"
+            :disabled="appStore.speechStatus.isProcessing"
+            :title="appStore.speechStatus.isRecording ? 'Stop Recording' : 'Start Speech Recording'"
           >
             <MicrophoneIcon class="w-4 h-4" />
           </button>
           
-          <button 
+          <button
             @click="sendMessage"
             class="btn-send"
             :disabled="!newMessage.trim()"
@@ -148,8 +224,8 @@ const toggleSpeechFromChat = async () => {
   
   <!-- Backdrop -->
   <div 
-    v-if="store.chatOpen"
-    @click="store.toggleChat"
+    v-if="appStore.chatOpen"
+    @click="appStore.toggleChat"
     class="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-all duration-500"
   ></div>
 </template>

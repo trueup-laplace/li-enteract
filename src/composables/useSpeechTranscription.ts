@@ -260,35 +260,32 @@ export function useSpeechTranscription() {
   }
 
   // Stop recording
-  async function stopRecording() {
+  const stopRecording = async () => {
+    if (!isRecording.value) return
+
     try {
       isRecording.value = false
+      
+      // Stop Web Speech API
+      if (recognition) {
+        recognition.stop()
+      }
 
-      // Stop speech recognition
-      recognition?.stop()
-
-      // Stop media recorder
-      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      // Stop MediaRecorder and process with Whisper
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
         mediaRecorder.stop()
+        isProcessing.value = true
+        
+        // Wait for the recorded data to be processed
+        // The Whisper processing will happen in the dataavailable event
       }
 
-      // Stop audio stream
-      if (audioStream) {
-        audioStream.getTracks().forEach(track => track.stop())
-        audioStream = null
-      }
-
-      // End session
-      if (currentSession.value) {
-        currentSession.value.isActive = false
-        currentSession.value = null
-      }
-
-      console.log('Recording stopped')
+      // Clear interim text when stopping
+      interimText.value = ''
+      
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      error.value = `Failed to stop recording: ${message}`
-      throw err
+      console.error('Error stopping recording:', err)
+      error.value = err instanceof Error ? err.message : 'Failed to stop recording'
     }
   }
 

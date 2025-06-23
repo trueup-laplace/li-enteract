@@ -94,20 +94,48 @@ export const useAppStore = defineStore('app', () => {
       ...options
     }
     
-    // If this is a transcription update, replace the existing interim message
-    if (sender === 'transcription' && currentTranscriptionId.value) {
-      const existingIndex = chatMessages.value.findIndex(m => m.id === currentTranscriptionId.value)
-      if (existingIndex !== -1) {
-        chatMessages.value[existingIndex] = message
-        return
+    // For transcription messages, always update the current active transcription
+    if (sender === 'transcription') {
+      if (currentTranscriptionId.value) {
+        // Update existing transcription message
+        const existingIndex = chatMessages.value.findIndex(m => m.id === currentTranscriptionId.value)
+        if (existingIndex !== -1) {
+          // Keep the original ID and timestamp for the thought stream
+          chatMessages.value[existingIndex] = {
+            ...message,
+            id: currentTranscriptionId.value,
+            timestamp: chatMessages.value[existingIndex].timestamp
+          }
+          return
+        }
       }
+      
+      // Create new transcription message
+      chatMessages.value.push(message)
+      currentTranscriptionId.value = message.id
+      return
     }
     
+    // For non-transcription messages, just add normally
     chatMessages.value.push(message)
-    
-    // Track transcription messages
-    if (sender === 'transcription') {
-      currentTranscriptionId.value = message.id
+  }
+
+  const finalizeTranscription = () => {
+    // Mark the current transcription as final and clear the ID
+    if (currentTranscriptionId.value) {
+      const existingIndex = chatMessages.value.findIndex(m => m.id === currentTranscriptionId.value)
+      if (existingIndex !== -1) {
+        chatMessages.value[existingIndex].isInterim = false
+      }
+      currentTranscriptionId.value = null
+    }
+  }
+
+  const updateMessage = (messageId: number, newText: string) => {
+    const messageIndex = chatMessages.value.findIndex(m => m.id === messageId)
+    if (messageIndex !== -1) {
+      chatMessages.value[messageIndex].text = newText
+      chatMessages.value[messageIndex].source = 'typed' // Mark as manually edited
     }
   }
 
@@ -153,17 +181,17 @@ export const useAppStore = defineStore('app', () => {
   }
 
   const watchTranscriptionUpdates = () => {
-    // Watch for interim results from Web Speech API
+    // Watch for interim results from Web Speech API - show as thought stream
     watch(() => speechTranscription.interimText.value, (newText: string) => {
       if (newText && newText.trim()) {
-        addMessage(`[Speaking...] ${newText}`, 'transcription', {
+        addMessage(newText, 'transcription', {
           isInterim: true,
           source: 'web-speech'
         })
       }
     })
 
-    // Watch for final results from Web Speech API or Whisper
+    // Watch for final results from Web Speech API
     watch(() => speechTranscription.finalText.value, (newText: string) => {
       if (newText && newText.trim()) {
         addMessage(newText, 'transcription', {
@@ -171,36 +199,22 @@ export const useAppStore = defineStore('app', () => {
           source: 'web-speech',
           confidence: 0.9
         })
-        currentTranscriptionId.value = null
+        // Don't clear currentTranscriptionId yet - wait for Whisper to potentially improve it
       }
     })
 
-    // Watch for Whisper results (these come from transcriptionHistory)
+    // Watch for Whisper results - these should replace/improve the Web Speech results
     watch(() => speechTranscription.transcriptionHistory.value, (history: any[]) => {
       const latestWhisperResult = history[history.length - 1]
       if (latestWhisperResult && latestWhisperResult.source === 'whisper') {
-        // Replace any interim message with the final Whisper result
-        if (currentTranscriptionId.value) {
-          const existingIndex = chatMessages.value.findIndex(m => m.id === currentTranscriptionId.value)
-          if (existingIndex !== -1) {
-            chatMessages.value[existingIndex] = {
-              id: currentTranscriptionId.value,
-              text: `✨ ${latestWhisperResult.text}`,
-              sender: 'transcription',
-              timestamp: new Date(),
-              isInterim: false,
-              confidence: latestWhisperResult.confidence,
-              source: 'whisper'
-            }
-          }
-        } else {
-          addMessage(`✨ ${latestWhisperResult.text}`, 'transcription', {
-            isInterim: false,
-            confidence: latestWhisperResult.confidence,
-            source: 'whisper'
-          })
-        }
-        currentTranscriptionId.value = null
+        // Replace current transcription with improved Whisper result
+        addMessage(latestWhisperResult.text, 'transcription', {
+          isInterim: false,
+          confidence: latestWhisperResult.confidence,
+          source: 'whisper'
+        })
+        // Finalize this transcription
+        finalizeTranscription()
       }
     })
   }
@@ -208,6 +222,15 @@ export const useAppStore = defineStore('app', () => {
   const clearTranscription = () => {
     speechTranscription.clearTranscription()
     currentTranscriptionId.value = null
+    addMessage("🧹 Transcription history cleared", "assistant")
+  }
+
+  const clearChat = () => {
+    chatMessages.value = []
+    currentTranscriptionId.value = null
+    // Add a welcome message back
+    addMessage("Welcome to your agentic assistant", "assistant")
+    addMessage("How can I help you today?", "assistant")
   }
 
   const updateWindowPosition = (x: number, y: number) => {
@@ -240,6 +263,8 @@ export const useAppStore = defineStore('app', () => {
     toggleWindowCollapse,
     toggleRecording,
     addMessage,
+    updateMessage,
+    finalizeTranscription,
     updateWindowPosition,
     formatRecordingTime,
     toggleTransparencyControls,
@@ -248,6 +273,7 @@ export const useAppStore = defineStore('app', () => {
     initializeSpeechTranscription,
     startSpeechTranscription,
     stopSpeechTranscription,
-    clearTranscription
+    clearTranscription,
+    clearChat
   }
 }) 
