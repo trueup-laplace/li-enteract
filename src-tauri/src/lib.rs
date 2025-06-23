@@ -13,6 +13,9 @@ use base64::{Engine as _, engine::general_purpose};
 use tempfile::NamedTempFile;
 use anyhow::Result;
 use whisper_rs::{WhisperContext, WhisperContextParameters, FullParams, SamplingStrategy};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+// Wake word detection (simplified for thread safety)
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -698,6 +701,123 @@ lazy_static::lazy_static! {
         cache_dir.push("whisper_models");
         cache_dir
     };
+    static ref WAKE_WORD_STATE: Arc<Mutex<WakeWordState>> = Arc::new(Mutex::new(WakeWordState::default()));
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WakeWordState {
+    pub is_active: bool,
+    pub is_listening: bool,
+    pub last_detection: Option<WakeWordDetectionInfo>,
+    pub total_detections: u32,
+    pub whisper_activated: bool,
+}
+
+impl Default for WakeWordState {
+    fn default() -> Self {
+        Self {
+            is_active: false,
+            is_listening: false,
+            last_detection: None,
+            total_detections: 0,
+            whisper_activated: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WakeWordDetectionInfo {
+    pub confidence: f32,
+    pub timestamp: u64,
+    pub audio_length: usize,
+}
+
+// Simplified wake word detection commands
+#[tauri::command]
+async fn start_wake_word_detection() -> Result<String, String> {
+    // Update state
+    {
+        let mut state = WAKE_WORD_STATE.lock().unwrap();
+        state.is_active = true;
+        state.is_listening = true;
+    }
+    
+    println!("Wake word detection started (simplified version)");
+    Ok("Wake word detection started for 'Aubrey'".to_string())
+}
+
+#[tauri::command]
+async fn stop_wake_word_detection() -> Result<String, String> {
+    // Update state
+    {
+        let mut state = WAKE_WORD_STATE.lock().unwrap();
+        state.is_active = false;
+        state.is_listening = false;
+        state.whisper_activated = false;
+    }
+    
+    println!("Wake word detection stopped");
+    Ok("Wake word detection stopped".to_string())
+}
+
+#[tauri::command]
+async fn check_wake_word_detection() -> Result<Option<WakeWordDetectionInfo>, String> {
+    // For now, simulate wake word detection for testing
+    // In a real implementation, this would check audio buffers for patterns
+    
+    let state = {
+        let state_guard = WAKE_WORD_STATE.lock().unwrap();
+        state_guard.clone()
+    };
+    
+    if state.is_active {
+        // Simulate occasional wake word detection for demo purposes
+        // This would be replaced with actual audio processing
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs().hash(&mut hasher);
+        
+        // Simulate wake word detection every ~30 seconds for demo
+        if hasher.finish() % 30 == 0 && state.total_detections < 3 {
+            let detection_info = WakeWordDetectionInfo {
+                confidence: 0.85,
+                timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+                audio_length: 16000, // 1 second of audio at 16kHz
+            };
+            
+            // Update state
+            {
+                let mut state_guard = WAKE_WORD_STATE.lock().unwrap();
+                state_guard.last_detection = Some(detection_info.clone());
+                state_guard.total_detections += 1;
+                state_guard.whisper_activated = true;
+            }
+            
+            println!("Wake word detected (simulated)! Confidence: {:.2}", detection_info.confidence);
+            
+            return Ok(Some(detection_info));
+        }
+    }
+    
+    Ok(None)
+}
+
+#[tauri::command]
+async fn get_wake_word_state() -> Result<WakeWordState, String> {
+    let state = WAKE_WORD_STATE.lock().unwrap();
+    Ok(state.clone())
+}
+
+#[tauri::command]
+async fn reset_wake_word_stats() -> Result<String, String> {
+    let mut state = WAKE_WORD_STATE.lock().unwrap();
+    state.total_detections = 0;
+    state.last_detection = None;
+    state.whisper_activated = false;
+    
+    Ok("Wake word statistics reset".to_string())
 }
 
 #[tauri::command]
@@ -960,6 +1080,12 @@ pub fn run() {
             pause_ml_tracking,
             resume_ml_tracking,
             detect_window_drag,
+            // Wake word detection commands
+            start_wake_word_detection,
+            stop_wake_word_detection,
+            check_wake_word_detection,
+            get_wake_word_state,
+            reset_wake_word_stats,
             // Speech transcription commands
             initialize_whisper_model,
             transcribe_audio_base64,

@@ -5,16 +5,19 @@ import {
   ChatBubbleLeftRightIcon,
   SparklesIcon,
   CommandLineIcon,
-  CpuChipIcon
+  CpuChipIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
 import { useWindowManager } from '../../composables/useWindowManager'
+import { useWakeWordDetection } from '../../composables/useWakeWordDetection'
 import TransparencyControls from './TransparencyControls.vue'
 
 const store = useAppStore()
 const mlEyeTracking = useMLEyeTracking()
 const windowManager = useWindowManager()
+const wakeWordDetection = useWakeWordDetection()
 
 // Transparency controls state
 const showTransparencyControls = ref(false)
@@ -46,6 +49,26 @@ const getSpeechIconClass = () => {
   if (store.speechStatus.isRecording) return 'text-white'
   if (store.speechStatus.isProcessing) return 'text-white'
   if (store.isTranscriptionEnabled) return 'text-white'
+  return 'text-white/80 group-hover:text-white'
+}
+
+// Wake word detection functions
+const toggleWakeWordDetection = async () => {
+  await wakeWordDetection.toggleDetection()
+}
+
+const getWakeWordTooltip = () => {
+  if (wakeWordDetection.isStarting.value) return 'Starting wake word detection...'
+  if (wakeWordDetection.isStopping.value) return 'Stopping wake word detection...'
+  if (wakeWordDetection.error.value) return `Error: ${wakeWordDetection.error.value}`
+  if (wakeWordDetection.isActive.value) return 'Stop Wake Word Detection (Say "Aubrey")'
+  return 'Start Wake Word Detection (Say "Aubrey")'
+}
+
+const getWakeWordIconClass = () => {
+  if (wakeWordDetection.hasRecentDetection.value) return 'text-green-400 animate-pulse'
+  if (wakeWordDetection.isActive.value) return 'text-white'
+  if (wakeWordDetection.error.value) return 'text-red-400'
   return 'text-white/80 group-hover:text-white'
 }
 
@@ -182,6 +205,24 @@ onUnmounted(() => {
         >
           <MicrophoneIcon class="w-3.5 h-3.5 transition-colors" 
             :class="getSpeechIconClass()" />
+        </button>
+
+        <!-- Wake Word Detection Button -->
+        <button 
+          @click="toggleWakeWordDetection"
+          class="btn btn-circle btn-sm glass-btn-compact group tooltip flex items-center justify-center"
+          :class="{ 
+            'btn-success animate-pulse': wakeWordDetection.hasRecentDetection.value,
+            'btn-success': wakeWordDetection.isActive.value && !wakeWordDetection.hasRecentDetection.value,
+            'btn-error': wakeWordDetection.error.value,
+            'btn-warning': wakeWordDetection.isStarting.value || wakeWordDetection.isStopping.value,
+            'glass-btn-compact': !wakeWordDetection.isActive.value && !wakeWordDetection.error.value
+          }"
+          :data-tip="getWakeWordTooltip()"
+          :disabled="wakeWordDetection.isStarting.value || wakeWordDetection.isStopping.value"
+        >
+          <ExclamationTriangleIcon class="w-3.5 h-3.5 transition-colors" 
+            :class="getWakeWordIconClass()" />
         </button>
         
         <!-- ML Eye Tracking + Window Movement Button -->

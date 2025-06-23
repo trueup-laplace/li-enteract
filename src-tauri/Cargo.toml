@@ -31,6 +31,9 @@ base64 = "0.22"
 tempfile = "3.0"
 reqwest = { version = "0.11", features = ["stream"] }
 
+# Wake word detection dependencies (simplified)
+# Note: For production, consider adding back audio processing libraries
+
 # Platform-specific dependencies for transparency
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.52", features = [
