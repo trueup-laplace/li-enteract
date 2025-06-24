@@ -1,5 +1,6 @@
 import { ref, computed, onUnmounted, readonly } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { KalmanFilter2D, type KalmanConfig } from '../lib/filters/KalmanFilter'
 
 // Types for ML eye tracking
 export interface MLGazeData {
@@ -16,6 +17,10 @@ export interface MLEyeTrackingConfig {
   screen_height: number
   model_path?: string
   smoothing_window: number
+  confidence_threshold: number
+  kalman_process_noise: number
+  kalman_measurement_noise: number
+  adaptive_smoothing: boolean
 }
 
 export interface MLTrackingStats {
@@ -29,39 +34,73 @@ export interface MLTrackingStats {
   }
 }
 
+export interface CalibrationPoint {
+  screenX: number
+  screenY: number
+  gazeX: number
+  gazeY: number
+  confidence: number
+  timestamp: number
+}
+
+export interface SmoothingStats {
+  rawGaze: { x: number, y: number }
+  smoothedGaze: { x: number, y: number }
+  confidence: number
+  smoothingStrength: number
+  outlierDetected: boolean
+  kalmanVelocity: { vx: number, vy: number }
+}
+
 export function useMLEyeTracking() {
   // State
   const isActive = ref(false)
   const currentGaze = ref<MLGazeData | null>(null)
+  const smoothedGaze = ref<MLGazeData | null>(null)
   const isCalibrated = ref(false)
   const trackingStats = ref<MLTrackingStats | null>(null)
   const error = ref<string | null>(null)
   const isLoading = ref(false)
 
-  // Tracking configuration
+  // Enhanced configuration
   const config = ref<MLEyeTrackingConfig>({
     camera_id: 0,
     screen_width: window.screen.width,
     screen_height: window.screen.height,
-    smoothing_window: 5
+    smoothing_window: 8,
+    confidence_threshold: 0.7,
+    kalman_process_noise: 0.1,
+    kalman_measurement_noise: 1.0,
+    adaptive_smoothing: true
   })
 
   // Performance metrics
   const fps = ref(0)
   const accuracy = ref(0)
   const lastUpdateTime = ref(0)
+  const smoothingStats = ref<SmoothingStats | null>(null)
 
   // Tracking loop management
   let trackingInterval: number | null = null
   let fpsInterval: number | null = null
   let frameCount = 0
 
+  // Smoothing components
+  const kalmanFilter = ref<KalmanFilter2D | null>(null)
+  const gazeHistory = ref<Array<MLGazeData>>([])
+  const maxHistorySize = 10
+
+  // Calibration data
+  const calibrationPoints = ref<CalibrationPoint[]>([])
+  const calibrationOffsets = ref({ x: 0, y: 0 })
+  const calibrationScale = ref({ x: 1, y: 1 })
+
   // Computed properties
   const gazeScreenPosition = computed(() => {
-    if (!currentGaze.value) return null
+    if (!smoothedGaze.value) return null
     return {
-      x: Math.max(0, Math.min(currentGaze.value.x, config.value.screen_width)),
-      y: Math.max(0, Math.min(currentGaze.value.y, config.value.screen_height))
+      x: Math.max(0, Math.min(smoothedGaze.value.x, config.value.screen_width)),
+      y: Math.max(0, Math.min(smoothedGaze.value.y, config.value.screen_height))
     }
   })
 
@@ -74,14 +113,300 @@ export function useMLEyeTracking() {
   })
 
   const confidence = computed(() => {
-    return currentGaze.value?.confidence || 0
+    return smoothedGaze.value?.confidence || 0
   })
 
   const isHighConfidence = computed(() => {
-    return confidence.value > 0.7
+    return confidence.value > config.value.confidence_threshold
   })
 
-  // Core functions
+  const smoothingEnabled = computed(() => {
+    return kalmanFilter.value !== null
+  })
+
+  // Initialize smoothing components
+  function initializeSmoothingComponents() {
+    // Initialize Kalman filter
+    const kalmanConfig: KalmanConfig = {
+      processNoise: config.value.kalman_process_noise,
+      measurementNoise: config.value.kalman_measurement_noise,
+      initialError: 100.0
+    }
+    kalmanFilter.value = new KalmanFilter2D(kalmanConfig)
+    
+    // Clear history
+    gazeHistory.value = []
+    calibrationPoints.value = []
+    
+    console.log('🎯 Smoothing components initialized', kalmanConfig)
+  }
+
+  // Core smoothing pipeline
+  function applySmoothingPipeline(rawGaze: MLGazeData): MLGazeData {
+    const startTime = performance.now()
+    
+    // Step 1: Confidence-based filtering
+    if (rawGaze.confidence < config.value.confidence_threshold) {
+      console.log(`🚫 Low confidence gaze rejected: ${rawGaze.confidence.toFixed(2)}`)
+      return rawGaze // Return raw data but don't update smoothed value
+    }
+
+    // Step 2: Outlier detection
+    const isOutlier = detectOutlier(rawGaze)
+    if (isOutlier) {
+      console.log('🚫 Outlier gaze detected and rejected')
+      return rawGaze
+    }
+
+    // Step 3: Apply calibration corrections
+    const calibratedGaze = applyCalibrationCorrections(rawGaze)
+
+    // Step 4: Kalman filtering
+    let kalmanSmoothed = calibratedGaze
+    if (kalmanFilter.value) {
+      const deltaTime = rawGaze.timestamp - lastUpdateTime.value || 16.67 // ~60fps fallback
+      const kalmanResult = kalmanFilter.value.update(
+        calibratedGaze.x, 
+        calibratedGaze.y, 
+        deltaTime / 1000.0 // Convert to seconds
+      )
+      kalmanSmoothed = {
+        ...calibratedGaze,
+        x: kalmanResult.x,
+        y: kalmanResult.y
+      }
+    }
+
+    // Step 5: Moving average smoothing (adaptive)
+    const movingAverageSmoothed = applyMovingAverageSmoothing(kalmanSmoothed)
+
+    // Step 6: Update statistics
+    updateSmoothingStats(rawGaze, movingAverageSmoothed)
+
+    const processingTime = performance.now() - startTime
+    console.log(`⚡ Smoothing pipeline: ${processingTime.toFixed(2)}ms`)
+
+    return movingAverageSmoothed
+  }
+
+  // Outlier detection using distance threshold
+  function detectOutlier(gaze: MLGazeData): boolean {
+    if (gazeHistory.value.length < 3) return false
+
+    const recentGazes = gazeHistory.value.slice(-3)
+    const avgX = recentGazes.reduce((sum, g) => sum + g.x, 0) / recentGazes.length
+    const avgY = recentGazes.reduce((sum, g) => sum + g.y, 0) / recentGazes.length
+    
+    const distance = Math.sqrt(
+      Math.pow(gaze.x - avgX, 2) + Math.pow(gaze.y - avgY, 2)
+    )
+    
+    // Dynamic threshold based on screen size
+    const threshold = Math.min(config.value.screen_width, config.value.screen_height) * 0.3
+    
+    return distance > threshold
+  }
+
+  // Apply calibration corrections
+  function applyCalibrationCorrections(gaze: MLGazeData): MLGazeData {
+    if (!isCalibrated.value) return gaze
+
+    return {
+      ...gaze,
+      x: (gaze.x + calibrationOffsets.value.x) * calibrationScale.value.x,
+      y: (gaze.y + calibrationOffsets.value.y) * calibrationScale.value.y,
+      calibrated: true
+    }
+  }
+
+  // Moving average smoothing with adaptive strength
+  function applyMovingAverageSmoothing(gaze: MLGazeData): MLGazeData {
+    // Add to history
+    gazeHistory.value.push(gaze)
+    if (gazeHistory.value.length > maxHistorySize) {
+      gazeHistory.value.shift()
+    }
+
+    const windowSize = Math.min(config.value.smoothing_window, gazeHistory.value.length)
+    const recentGazes = gazeHistory.value.slice(-windowSize)
+
+    // Calculate adaptive smoothing strength based on movement
+    let smoothingStrength = 0.3 // Default
+    if (config.value.adaptive_smoothing && kalmanFilter.value) {
+      const velocity = kalmanFilter.value.getVelocity()
+      const speed = Math.sqrt(velocity.vx * velocity.vx + velocity.vy * velocity.vy)
+      smoothingStrength = Math.max(0.1, Math.min(0.8, 0.5 - speed * 0.1))
+    }
+
+    // Weighted moving average with higher weight for recent samples
+    let weightedX = 0, weightedY = 0, totalWeight = 0
+    for (let i = 0; i < recentGazes.length; i++) {
+      const weight = Math.pow(smoothingStrength, recentGazes.length - 1 - i)
+      weightedX += recentGazes[i].x * weight
+      weightedY += recentGazes[i].y * weight
+      totalWeight += weight
+    }
+
+    return {
+      ...gaze,
+      x: weightedX / totalWeight,
+      y: weightedY / totalWeight
+    }
+  }
+
+  // Update smoothing statistics
+  function updateSmoothingStats(rawGaze: MLGazeData, smoothedGaze: MLGazeData) {
+    const velocity = kalmanFilter.value?.getVelocity() || { vx: 0, vy: 0 }
+    
+    smoothingStats.value = {
+      rawGaze: { x: rawGaze.x, y: rawGaze.y },
+      smoothedGaze: { x: smoothedGaze.x, y: smoothedGaze.y },
+      confidence: smoothedGaze.confidence,
+      smoothingStrength: 0.3, // Will be dynamic based on movement
+      outlierDetected: detectOutlier(rawGaze),
+      kalmanVelocity: velocity
+    }
+  }
+
+  // Enhanced calibration system with 9-point grid
+  async function performNinePointCalibration(): Promise<boolean> {
+    if (!isActive.value) {
+      error.value = 'Cannot calibrate: tracking not active'
+      return false
+    }
+
+    try {
+      isLoading.value = true
+      calibrationPoints.value = []
+      
+      console.log('🎯 Starting 9-point calibration...')
+      
+      // Define 9 calibration points (3x3 grid)
+      const points = [
+        { x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.9, y: 0.1 },
+        { x: 0.1, y: 0.5 }, { x: 0.5, y: 0.5 }, { x: 0.9, y: 0.5 },
+        { x: 0.1, y: 0.9 }, { x: 0.5, y: 0.9 }, { x: 0.9, y: 0.9 }
+      ]
+
+      // Emit calibration start event for UI
+      const event = new CustomEvent('calibration-started', { 
+        detail: { points: points.length } 
+      })
+      window.dispatchEvent(event)
+
+      for (let i = 0; i < points.length; i++) {
+        const screenX = points[i].x * config.value.screen_width
+        const screenY = points[i].y * config.value.screen_height
+        
+        // Emit calibration point event
+        const pointEvent = new CustomEvent('calibration-point', {
+          detail: { index: i, screenX, screenY, total: points.length }
+        })
+        window.dispatchEvent(pointEvent)
+        
+        // Wait for user to look at point
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        
+        // Collect gaze data for this point
+        await collectCalibrationData(screenX, screenY)
+      }
+      
+      // Calculate calibration corrections
+      calculateCalibrationCorrections()
+      
+      isCalibrated.value = true
+      
+      const successEvent = new CustomEvent('calibration-complete', {
+        detail: { points: calibrationPoints.value.length }
+      })
+      window.dispatchEvent(successEvent)
+      
+      console.log('✅ 9-point calibration completed successfully')
+      return true
+      
+    } catch (err) {
+      console.error('Failed to perform calibration:', err)
+      error.value = err as string
+      return false
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  // Collect calibration data for a specific point
+  async function collectCalibrationData(screenX: number, screenY: number) {
+    const samples: MLGazeData[] = []
+    const sampleCount = 30 // Collect 30 samples over 1 second
+    
+    for (let i = 0; i < sampleCount; i++) {
+      if (currentGaze.value && currentGaze.value.confidence > 0.5) {
+        samples.push({ ...currentGaze.value })
+      }
+      await new Promise(resolve => setTimeout(resolve, 33)) // ~30fps
+    }
+    
+    if (samples.length > 10) {
+      // Calculate average gaze position
+      const avgX = samples.reduce((sum, s) => sum + s.x, 0) / samples.length
+      const avgY = samples.reduce((sum, s) => sum + s.y, 0) / samples.length
+      const avgConfidence = samples.reduce((sum, s) => sum + s.confidence, 0) / samples.length
+      
+      calibrationPoints.value.push({
+        screenX,
+        screenY,
+        gazeX: avgX,
+        gazeY: avgY,
+        confidence: avgConfidence,
+        timestamp: Date.now()
+      })
+      
+      console.log(`📍 Calibration point collected: screen(${screenX.toFixed(0)}, ${screenY.toFixed(0)}) -> gaze(${avgX.toFixed(0)}, ${avgY.toFixed(0)})`)
+    }
+  }
+
+  // Calculate calibration corrections using least squares
+  function calculateCalibrationCorrections() {
+    if (calibrationPoints.value.length < 5) {
+      console.warn('Insufficient calibration points for correction calculation')
+      return
+    }
+    
+    // Simple linear correction calculation
+    let sumScreenX = 0, sumScreenY = 0, sumGazeX = 0, sumGazeY = 0
+    let sumScreenXGazeX = 0, sumScreenYGazeY = 0
+    let sumScreenX2 = 0, sumScreenY2 = 0
+    
+    calibrationPoints.value.forEach(point => {
+      sumScreenX += point.screenX
+      sumScreenY += point.screenY
+      sumGazeX += point.gazeX
+      sumGazeY += point.gazeY
+      sumScreenXGazeX += point.screenX * point.gazeX
+      sumScreenYGazeY += point.screenY * point.gazeY
+      sumScreenX2 += point.screenX * point.screenX
+      sumScreenY2 += point.screenY * point.screenY
+    })
+    
+    const n = calibrationPoints.value.length
+    
+    // Calculate scale factors
+    const scaleX = (n * sumScreenXGazeX - sumScreenX * sumGazeX) / (n * sumScreenX2 - sumScreenX * sumScreenX)
+    const scaleY = (n * sumScreenYGazeY - sumScreenY * sumGazeY) / (n * sumScreenY2 - sumScreenY * sumScreenY)
+    
+    // Calculate offsets
+    const offsetX = (sumGazeX - scaleX * sumScreenX) / n
+    const offsetY = (sumGazeY - scaleY * sumScreenY) / n
+    
+    calibrationScale.value = { x: 1/scaleX, y: 1/scaleY }
+    calibrationOffsets.value = { x: -offsetX, y: -offsetY }
+    
+    console.log('🎯 Calibration corrections calculated:', {
+      scale: calibrationScale.value,
+      offset: calibrationOffsets.value
+    })
+  }
+
+  // Core functions with enhanced smoothing
   async function startTracking(userConfig?: Partial<MLEyeTrackingConfig>) {
     if (isActive.value) {
       console.warn('ML Eye tracking already active')
@@ -96,6 +421,9 @@ export function useMLEyeTracking() {
       if (userConfig) {
         config.value = { ...config.value, ...userConfig }
       }
+
+      // Initialize smoothing components
+      initializeSmoothingComponents()
 
       // Start the ML eye tracking process
       const result = await invoke<string>('start_ml_eye_tracking', { 
@@ -116,8 +444,7 @@ export function useMLEyeTracking() {
       // Get initial stats
       await updateStats()
       
-      console.log('🚀 ML Eye tracking fully initialized!')
-      console.log('📈 Watch for real-time data below...')
+      console.log('🚀 ML Eye tracking with smoothing fully initialized!')
 
     } catch (err) {
       console.error('Failed to start ML eye tracking:', err)
@@ -125,6 +452,44 @@ export function useMLEyeTracking() {
     } finally {
       isLoading.value = false
     }
+  }
+
+  // Enhanced data polling with smoothing
+  function startDataPolling() {
+    if (trackingInterval) return
+
+    console.log('🔄 Starting ML data polling with smoothing at 30 FPS...')
+    
+    trackingInterval = window.setInterval(async () => {
+      try {
+        const gazeData = await invoke<MLGazeData | null>('get_ml_gaze_data')
+        
+        if (gazeData) {
+          currentGaze.value = gazeData
+          lastUpdateTime.value = Date.now()
+          frameCount++
+          
+          // Apply smoothing pipeline
+          const smooth = applySmoothingPipeline(gazeData)
+          smoothedGaze.value = smooth
+          
+          // Update accuracy based on confidence
+          accuracy.value = smooth.confidence
+          
+          // Log detailed data periodically
+          if (frameCount % 30 === 0) { // Every 30 frames (~1 second)
+            console.log('👁️ Gaze Data:', {
+              raw: `(${gazeData.x.toFixed(0)}, ${gazeData.y.toFixed(0)})`,
+              smoothed: `(${smooth.x.toFixed(0)}, ${smooth.y.toFixed(0)})`,
+              confidence: `${(smooth.confidence * 100).toFixed(1)}%`,
+              calibrated: smooth.calibrated
+            })
+          }
+        }
+      } catch (err) {
+        console.error('Failed to get ML gaze data:', err)
+      }
+    }, 33) // ~30 FPS
   }
 
   async function stopTracking() {
@@ -177,48 +542,6 @@ export function useMLEyeTracking() {
     } finally {
       isLoading.value = false
     }
-  }
-
-  // Data polling
-  function startDataPolling() {
-    if (trackingInterval) return
-
-    console.log('🔄 Starting ML data polling at 30 FPS...')
-    
-    trackingInterval = window.setInterval(async () => {
-      try {
-        const gazeData = await invoke<MLGazeData | null>('get_ml_gaze_data')
-        
-        if (gazeData) {
-          currentGaze.value = gazeData
-          isCalibrated.value = gazeData.calibrated
-          lastUpdateTime.value = Date.now()
-          frameCount++
-          
-          // Update accuracy based on confidence
-          accuracy.value = gazeData.confidence
-          
-          // Add to history for analytics
-          addToHistory(gazeData)
-          
-          // Log every 30 frames (once per second)
-          if (frameCount % 30 === 0) {
-            console.log(`📊 ML Tracking: x=${gazeData.x.toFixed(1)}, y=${gazeData.y.toFixed(1)}, conf=${(gazeData.confidence * 100).toFixed(1)}%, FPS=${fps.value}`)
-          }
-        } else {
-          console.warn('⚠️ No ML gaze data received')
-        }
-        
-        // Clear error if we're getting data
-        if (gazeData && error.value) {
-          error.value = null
-        }
-        
-      } catch (err) {
-        console.error('❌ Error getting ML gaze data:', err)
-        error.value = err as string
-      }
-    }, 33) // ~30 FPS polling
   }
 
   function stopDataPolling() {
@@ -282,21 +605,15 @@ export function useMLEyeTracking() {
       camera_id: 0,
       screen_width: window.screen.width,
       screen_height: window.screen.height,
-      smoothing_window: 5
+      smoothing_window: 8,
+      confidence_threshold: 0.7,
+      kalman_process_noise: 0.1,
+      kalman_measurement_noise: 1.0,
+      adaptive_smoothing: true
     }
   }
 
   // Performance optimization
-  const gazeHistory = ref<MLGazeData[]>([])
-  const maxHistorySize = 30
-
-  function addToHistory(gaze: MLGazeData) {
-    gazeHistory.value.push(gaze)
-    if (gazeHistory.value.length > maxHistorySize) {
-      gazeHistory.value.shift()
-    }
-  }
-
   const averageConfidence = computed(() => {
     if (gazeHistory.value.length === 0) return 0
     const sum = gazeHistory.value.reduce((acc, gaze) => acc + gaze.confidence, 0)
@@ -330,6 +647,7 @@ export function useMLEyeTracking() {
     // State
     isActive: readonly(isActive),
     currentGaze: readonly(currentGaze),
+    smoothedGaze: readonly(smoothedGaze),
     isCalibrated: readonly(isCalibrated),
     trackingStats: readonly(trackingStats),
     error: readonly(error),
@@ -343,6 +661,7 @@ export function useMLEyeTracking() {
     hasSignificantMovement,
     isStable,
     averageConfidence,
+    smoothingEnabled,
     
     // Metrics
     fps: readonly(fps),
@@ -360,7 +679,10 @@ export function useMLEyeTracking() {
     updateStats,
     updatePreviousGaze,
     
+    // Smoothing
+    smoothingStats,
+    performNinePointCalibration,
+    
     // Utilities
-    addToHistory
   }
 } 

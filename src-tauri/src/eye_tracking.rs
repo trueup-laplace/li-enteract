@@ -2,10 +2,8 @@ use tauri::Window;
 use std::process::{Command, Stdio, Child};
 use std::io::{BufRead, BufReader};
 use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc;
 use serde_json;
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::path::PathBuf;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MLGazeData {
@@ -44,6 +42,27 @@ pub struct CalibrationPoint {
     pub timestamp: u64,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MLEyeTrackingConfig {
+    pub camera_id: i32,
+    pub screen_width: u32,
+    pub screen_height: u32,
+    pub smoothing_window: u32,
+    pub confidence_threshold: f32,
+    pub kalman_process_noise: f32,
+    pub kalman_measurement_noise: f32,
+    pub adaptive_smoothing: bool,
+}
+
+// Global eye tracker instance
+lazy_static::lazy_static! {
+    static ref EYE_TRACKER: Arc<Mutex<MLEyeTracker>> = Arc::new(Mutex::new(MLEyeTracker::new()));
+}
+
+fn get_eye_tracker() -> &'static Arc<Mutex<MLEyeTracker>> {
+    &EYE_TRACKER
+}
+
 pub struct MLEyeTracker {
     process: Option<Child>,
     is_tracking: bool,
@@ -51,6 +70,7 @@ pub struct MLEyeTracker {
     stats: MLTrackingStats,
     calibration_points: Vec<CalibrationPoint>,
     last_gaze_data: Option<MLGazeData>,
+    config: Option<MLEyeTrackingConfig>,
 }
 
 impl MLEyeTracker {
@@ -68,13 +88,16 @@ impl MLEyeTracker {
             },
             calibration_points: Vec::new(),
             last_gaze_data: None,
+            config: None,
         }
     }
 
-    pub fn start(&mut self) -> Result<(), String> {
+    pub fn start(&mut self, config: MLEyeTrackingConfig) -> Result<(), String> {
         if self.is_tracking {
             return Err("ML eye tracking is already running".to_string());
         }
+
+        self.config = Some(config);
 
         // Get the project root directory (parent of src-tauri)
         let mut script_path = std::env::current_dir()
@@ -114,9 +137,12 @@ impl MLEyeTracker {
             }
         };
 
-        // Start Python ML eye tracking process
+        // Start Python ML eye tracking process with config
         let mut cmd = Command::new(python_cmd);
-        cmd.arg(&script_path);
+        cmd.arg(&script_path)
+           .arg("--camera-id").arg(self.config.as_ref().unwrap().camera_id.to_string())
+           .arg("--screen-width").arg(self.config.as_ref().unwrap().screen_width.to_string())
+           .arg("--screen-height").arg(self.config.as_ref().unwrap().screen_height.to_string());
 
         let mut child = cmd
             .stdout(Stdio::piped())
@@ -125,6 +151,10 @@ impl MLEyeTracker {
             .map_err(|e| format!("Failed to start ML eye tracking process: {}", e))?;
 
         println!("👁️  Started ML eye tracking using script at: {:?}", script_path);
+
+        // Store the gaze data using Arc<Mutex<>> for thread safety
+        let gaze_data_store = Arc::new(Mutex::new(None::<MLGazeData>));
+        let gaze_store_clone = Arc::clone(&gaze_data_store);
 
         // Spawn stdout reader thread for gaze data
         if let Some(stdout) = child.stdout.take() {
@@ -140,7 +170,11 @@ impl MLEyeTracker {
                         // Parse different types of ML output
                         if trimmed.starts_with("GAZE:") {
                             if let Ok(gaze_data) = serde_json::from_str::<MLGazeData>(&trimmed[5..]) {
-                                // Store the latest gaze data (in a real implementation, you'd use a channel)
+                                // Store the latest gaze data safely
+                                if let Ok(mut store) = gaze_store_clone.lock() {
+                                    *store = Some(gaze_data.clone());
+                                }
+                                
                                 println!("Gaze: ({:.2}, {:.2}) confidence: {:.2}", 
                                     gaze_data.x, gaze_data.y, gaze_data.confidence);
                             }
@@ -182,6 +216,7 @@ impl MLEyeTracker {
         
         self.is_tracking = false;
         self.is_calibrating = false;
+        self.last_gaze_data = None;
         
         println!("👁️  Stopped ML eye tracking");
         Ok(())
@@ -207,53 +242,55 @@ impl MLEyeTracker {
 
     pub fn start_calibration(&mut self) -> Result<(), String> {
         if !self.is_tracking {
-            return Err("Eye tracking must be started before calibration".to_string());
+            return Err("Cannot start calibration: tracking not active".to_string());
         }
         
         self.is_calibrating = true;
         self.calibration_points.clear();
         
-        // In a real implementation, you'd send a calibration start command to the Python process
-        println!("👁️  Started ML calibration");
+        println!("🎯 Started calibration");
         Ok(())
     }
 
     pub fn add_calibration_point(&mut self, screen_x: f64, screen_y: f64) -> Result<(), String> {
         if !self.is_calibrating {
-            return Err("Calibration not in progress".to_string());
+            return Err("Calibration not active".to_string());
         }
 
-        // In a real implementation, you'd get actual gaze data from the ML model
-        let mock_point = CalibrationPoint {
-            screen_x,
-            screen_y,
-            gaze_x: screen_x + (rand::random::<f64>() - 0.5) * 100.0, // Mock gaze with some offset
-            gaze_y: screen_y + (rand::random::<f64>() - 0.5) * 100.0,
-            confidence: 0.85,
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u64,
-        };
+        // Get current gaze data for calibration
+        if let Some(gaze_data) = &self.last_gaze_data {
+            let cal_point = CalibrationPoint {
+                screen_x,
+                screen_y,
+                gaze_x: gaze_data.x,
+                gaze_y: gaze_data.y,
+                confidence: gaze_data.confidence,
+                timestamp: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64,
+            };
+            
+            self.calibration_points.push(cal_point);
+            println!("📍 Added calibration point: ({:.1}, {:.1})", screen_x, screen_y);
+        } else {
+            return Err("No gaze data available for calibration".to_string());
+        }
 
-        self.calibration_points.push(mock_point);
-        println!("👁️  Added calibration point: ({:.2}, {:.2})", screen_x, screen_y);
-        
         Ok(())
     }
 
     pub fn finish_calibration(&mut self) -> Result<String, String> {
         if !self.is_calibrating {
-            return Err("Calibration not in progress".to_string());
+            return Err("Calibration not active".to_string());
         }
-
+        
         self.is_calibrating = false;
-        let num_points = self.calibration_points.len();
         
-        // In a real implementation, you'd process the calibration data and update the ML model
-        println!("👁️  Finished ML calibration with {} points", num_points);
+        let point_count = self.calibration_points.len();
+        println!("✅ Calibration completed with {} points", point_count);
         
-        Ok(format!("ML calibration completed with {} points", num_points))
+        Ok(format!("Calibration completed with {} points", point_count))
     }
 
     pub fn get_stats(&self) -> &MLTrackingStats {
@@ -264,98 +301,105 @@ impl MLEyeTracker {
         self.last_gaze_data.as_ref()
     }
 
+    pub fn update_gaze_data(&mut self, gaze_data: MLGazeData) {
+        self.last_gaze_data = Some(gaze_data);
+        self.stats.total_frames_processed += 1;
+        self.stats.last_update = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+    }
+
     pub fn detect_window_drag(&self) -> bool {
-        // In a real implementation, you'd analyze gaze patterns to detect window dragging
-        // For now, return false as this is complex ML logic
+        // Placeholder for window drag detection logic
+        // In real implementation, this would analyze gaze patterns
         false
     }
 }
 
-// Global ML eye tracker instance
-lazy_static::lazy_static! {
-    static ref ML_EYE_TRACKER: Arc<Mutex<MLEyeTracker>> = Arc::new(Mutex::new(MLEyeTracker::new()));
-}
-
-// Tauri commands
+// Tauri command implementations with proper error handling
 #[tauri::command]
-pub async fn start_ml_eye_tracking() -> Result<String, String> {
-    let mut tracker = ML_EYE_TRACKER.lock().unwrap();
-    tracker.start()?;
-    Ok("ML eye tracking started successfully".to_string())
+pub async fn start_ml_eye_tracking(config: MLEyeTrackingConfig) -> Result<String, String> {
+    match get_eye_tracker().lock() {
+        Ok(mut tracker) => {
+            tracker.start(config)?;
+            Ok("ML Eye tracking started successfully".to_string())
+        }
+        Err(_) => Err("Failed to access eye tracker".to_string())
+    }
 }
 
 #[tauri::command]
 pub async fn stop_ml_eye_tracking() -> Result<String, String> {
-    let mut tracker = ML_EYE_TRACKER.lock().unwrap();
-    tracker.stop()?;
-    Ok("ML eye tracking stopped successfully".to_string())
+    match get_eye_tracker().lock() {
+        Ok(mut tracker) => {
+            tracker.stop()?;
+            Ok("ML Eye tracking stopped successfully".to_string())
+        }
+        Err(_) => Err("Failed to access eye tracker".to_string())
+    }
 }
 
 #[tauri::command]
 pub async fn get_ml_gaze_data() -> Result<Option<MLGazeData>, String> {
-    let tracker = ML_EYE_TRACKER.lock().unwrap();
-    
-    if !tracker.is_tracking() {
-        return Err("ML eye tracking is not running".to_string());
+    match get_eye_tracker().lock() {
+        Ok(tracker) => {
+            if let Some(gaze_data) = tracker.get_latest_gaze_data() {
+                Ok(Some(gaze_data.clone()))
+            } else {
+                Ok(None)
+            }
+        }
+        Err(_) => Err("Failed to access eye tracker".to_string())
     }
-
-    // Return mock gaze data for now
-    // In a real implementation, this would return actual ML-computed gaze data
-    let mock_data = MLGazeData {
-        x: 500.0 + (rand::random::<f64>() - 0.5) * 200.0,
-        y: 300.0 + (rand::random::<f64>() - 0.5) * 200.0,
-        confidence: 0.75 + rand::random::<f32>() * 0.25,
-        left_eye_landmarks: vec![(100.0, 100.0), (110.0, 105.0)], // Mock landmarks
-        right_eye_landmarks: vec![(200.0, 100.0), (210.0, 105.0)],
-        head_pose: HeadPose {
-            yaw: (rand::random::<f32>() - 0.5) * 30.0,
-            pitch: (rand::random::<f32>() - 0.5) * 20.0,
-            roll: (rand::random::<f32>() - 0.5) * 15.0,
-        },
-        timestamp: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64,
-    };
-    
-    Ok(Some(mock_data))
 }
 
 #[tauri::command]
-pub async fn calibrate_ml_eye_tracking(points: Vec<(f64, f64)>) -> Result<String, String> {
-    let mut tracker = ML_EYE_TRACKER.lock().unwrap();
-    
-    tracker.start_calibration()?;
-    
-    for (x, y) in points {
-        tracker.add_calibration_point(x, y)?;
+pub async fn calibrate_ml_eye_tracking() -> Result<String, String> {
+    match get_eye_tracker().lock() {
+        Ok(mut tracker) => {
+            tracker.start_calibration()?;
+            // Auto-calibration with predefined points would go here
+            tracker.finish_calibration()
+        }
+        Err(_) => Err("Failed to access eye tracker".to_string())
     }
-    
-    tracker.finish_calibration()
 }
 
 #[tauri::command]
 pub async fn get_ml_tracking_stats() -> Result<MLTrackingStats, String> {
-    let tracker = ML_EYE_TRACKER.lock().unwrap();
-    Ok(tracker.get_stats().clone())
+    match get_eye_tracker().lock() {
+        Ok(tracker) => Ok(tracker.get_stats().clone()),
+        Err(_) => Err("Failed to access eye tracker".to_string())
+    }
 }
 
 #[tauri::command]
 pub async fn pause_ml_tracking() -> Result<String, String> {
-    let mut tracker = ML_EYE_TRACKER.lock().unwrap();
-    tracker.pause();
-    Ok("ML eye tracking paused".to_string())
+    match get_eye_tracker().lock() {
+        Ok(mut tracker) => {
+            tracker.pause();
+            Ok("ML tracking paused".to_string())
+        }
+        Err(_) => Err("Failed to access eye tracker".to_string())
+    }
 }
 
 #[tauri::command]
 pub async fn resume_ml_tracking() -> Result<String, String> {
-    let mut tracker = ML_EYE_TRACKER.lock().unwrap();
-    tracker.resume();
-    Ok("ML eye tracking resumed".to_string())
+    match get_eye_tracker().lock() {
+        Ok(mut tracker) => {
+            tracker.resume();
+            Ok("ML tracking resumed".to_string())
+        }
+        Err(_) => Err("Failed to access eye tracker".to_string())
+    }
 }
 
 #[tauri::command]
 pub async fn detect_window_drag() -> Result<bool, String> {
-    let tracker = ML_EYE_TRACKER.lock().unwrap();
-    Ok(tracker.detect_window_drag())
+    match get_eye_tracker().lock() {
+        Ok(tracker) => Ok(tracker.detect_window_drag()),
+        Err(_) => Err("Failed to access eye tracker".to_string())
+    }
 }

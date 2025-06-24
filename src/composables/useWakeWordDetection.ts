@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, readonly } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 
 // Extend the SpeechRecognition interface
@@ -42,6 +42,11 @@ export function useWakeWordDetection() {
   // Polling for detections
   let pollInterval: number | null = null
 
+  // Debouncing for wake word detection
+  let lastWakeWordTime = 0
+  const debounceTime = 3000 // 3 seconds
+  let transcriptionPausedUntil = 0
+
   // Computed
   const status = computed(() => ({
     isActive: isActive.value,
@@ -61,6 +66,10 @@ export function useWakeWordDetection() {
     const now = Date.now()
     const detectionTime = lastDetection.value.timestamp
     return (now - detectionTime) < 5000 // Within last 5 seconds
+  })
+
+  const isTranscriptionPaused = computed(() => {
+    return Date.now() < transcriptionPausedUntil
   })
 
   // Start wake word detection
@@ -197,15 +206,109 @@ export function useWakeWordDetection() {
           audioLength: detection.audio_length
         })
         
+        // Trigger transcription with debouncing
+        await handleWakeWordDetected(detection)
+        
         // Emit custom event for other components to listen to
-        const event = new CustomEvent('wakeWordDetected', {
-          detail: detection
+        const event = new CustomEvent('wake-word-detected', { 
+          detail: detection 
         })
         window.dispatchEvent(event)
       }
+      
+      await updateState()
     } catch (err) {
       console.error('Failed to check for wake word detection:', err)
     }
+  }
+
+  // Handle wake word detection with debouncing and transcription triggering
+  async function handleWakeWordDetected(detection: WakeWordDetectionInfo) {
+    const now = Date.now()
+    
+    // Check debouncing
+    if (now - lastWakeWordTime < debounceTime) {
+      console.log('Wake word detected but debouncing - ignoring')
+      return
+    }
+    
+    // Check if we're in transcription pause period
+    if (isTranscriptionPaused.value) {
+      console.log('Wake word detected but transcription is paused - ignoring')
+      return
+    }
+    
+    lastWakeWordTime = now
+    
+    try {
+      console.log('🎤 Wake word "Aubrey" detected - starting transcription!')
+      
+      // Provide visual/audio feedback
+      await provideFeedback()
+      
+      // Temporarily pause wake word detection during transcription
+      pauseWakeWordDetection(15000) // 15 seconds
+      
+      // Trigger transcription by emitting event for the speech transcription module
+      const transcriptionEvent = new CustomEvent('start-transcription-from-wake-word', {
+        detail: {
+          confidence: detection.confidence,
+          timestamp: detection.timestamp,
+          audioLength: detection.audio_length
+        }
+      })
+      window.dispatchEvent(transcriptionEvent)
+      
+      // Also emit chat drawer show event
+      const chatEvent = new CustomEvent('show-chat-drawer', {
+        detail: { source: 'wake-word', detection }
+      })
+      window.dispatchEvent(chatEvent)
+      
+    } catch (err) {
+      console.error('Failed to handle wake word detection:', err)
+    }
+  }
+
+  // Provide feedback when wake word is detected
+  async function provideFeedback() {
+    try {
+      // Visual feedback - emit event for UI components
+      const feedbackEvent = new CustomEvent('wake-word-feedback', {
+        detail: { type: 'visual', message: 'Wake word detected!' }
+      })
+      window.dispatchEvent(feedbackEvent)
+      
+      // Audio feedback (optional)
+      if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance('Listening')
+        utterance.volume = 0.3
+        utterance.rate = 1.2
+        utterance.pitch = 1.1
+        speechSynthesis.speak(utterance)
+      }
+    } catch (err) {
+      console.warn('Failed to provide wake word feedback:', err)
+    }
+  }
+
+  // Pause wake word detection temporarily during transcription
+  function pauseWakeWordDetection(duration: number) {
+    transcriptionPausedUntil = Date.now() + duration
+    console.log(`⏸️ Wake word detection paused for ${duration/1000} seconds`)
+    
+    // Auto-resume after duration
+    setTimeout(() => {
+      if (Date.now() >= transcriptionPausedUntil) {
+        console.log('🔄 Wake word detection resumed')
+      }
+    }, duration)
+  }
+
+  // Resume wake word detection immediately
+  function resumeWakeWordDetection() {
+    transcriptionPausedUntil = 0
+    console.log('🔄 Wake word detection resumed manually')
   }
 
   // Reset statistics
@@ -253,82 +356,84 @@ export function useWakeWordDetection() {
 
   // Setup Web Speech Recognition for wake word detection
   function setupSpeechRecognition(): SpeechRecognition | null {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!hasWebSpeechSupport.value) return null
     
-    if (!SpeechRecognition) {
-      console.error('Speech Recognition not supported in this browser')
+    try {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+      const recognition = new SpeechRecognition()
+      
+      recognition.continuous = true
+      recognition.interimResults = false
+      recognition.lang = 'en-US'
+      recognition.maxAlternatives = 1
+      
+      recognition.onstart = () => {
+        console.log('Wake word detection: Speech recognition started')
+        isListening.value = true
+        error.value = null
+      }
+      
+      recognition.onresult = (event) => {
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i]
+          if (result.isFinal) {
+            const transcript = result[0].transcript.toLowerCase().trim()
+            console.log('Wake word detection: Heard:', transcript)
+            
+            // Check for wake word "aubrey" with variations
+            if (transcript.includes('aubrey') || 
+                transcript.includes('aubri') || 
+                transcript.includes('obrey') ||
+                transcript.includes('awbrey')) {
+              
+              const detection: WakeWordDetectionInfo = {
+                confidence: result[0].confidence || 0.8,
+                timestamp: Date.now(),
+                audio_length: transcript.length
+              }
+              
+              // Handle the detection
+              handleWakeWordDetected(detection)
+              
+              // Update state
+              lastDetection.value = detection
+              totalDetections.value += 1
+              whisperActivated.value = true
+            }
+          }
+        }
+      }
+      
+      recognition.onerror = (event) => {
+        console.error('Wake word detection error:', event.error)
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
+          error.value = `Wake word detection error: ${event.error}`
+        }
+      }
+      
+      recognition.onend = () => {
+        console.log('Wake word detection: Speech recognition ended')
+        isListening.value = false
+        
+        // Auto-restart if still active and not paused
+        if (isActive.value && !isTranscriptionPaused.value) {
+          setTimeout(() => {
+            if (speechRecognition && isActive.value) {
+              try {
+                speechRecognition.start()
+              } catch (err) {
+                console.warn('Failed to restart wake word detection:', err)
+              }
+            }
+          }, 1000)
+        }
+      }
+      
+      return recognition
+    } catch (err) {
+      console.error('Failed to setup wake word speech recognition:', err)
       return null
     }
-    
-    const recognition = new SpeechRecognition()
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.lang = 'en-US'
-    recognition.maxAlternatives = 1
-    
-    recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map(result => result[0].transcript)
-        .join('')
-        .toLowerCase()
-      
-      // Check for wake word "aubrey"
-      if (transcript.includes('aubrey')) {
-        const confidence = event.results[event.resultIndex]?.[0]?.confidence || 0.8
-        triggerWakeWord(confidence)
-      }
-    }
-    
-    recognition.onerror = (event) => {
-      console.error('Speech recognition error:', event.error)
-      error.value = `Speech recognition error: ${event.error}`
-      
-      // Handle specific errors
-      if (event.error === 'not-allowed') {
-        error.value = 'Microphone permission denied for wake word detection'
-      } else if (event.error === 'network') {
-        error.value = 'Network error during wake word detection'
-      }
-      
-      // Implement retry logic
-      if (isActive.value && event.error !== 'aborted') {
-        setTimeout(() => {
-          if (isActive.value) {
-            try {
-              recognition.start()
-            } catch (retryError) {
-              console.warn('Failed to restart wake word detection:', retryError)
-            }
-          }
-        }, 2000) // 2 second delay before retry
-      }
-    }
-    
-    recognition.onstart = () => {
-      console.log('Wake word detection started')
-      isListening.value = true
-      error.value = null
-    }
-    
-    recognition.onend = () => {
-      console.log('Wake word detection ended')
-      isListening.value = false
-      
-      // Restart if still active
-      if (isActive.value) {
-        setTimeout(() => {
-          if (isActive.value && recognition) {
-            try {
-              recognition.start()
-            } catch (err) {
-              console.warn('Failed to restart wake word detection:', err)
-            }
-          }
-        }, 1000)
-      }
-    }
-    
-    return recognition
   }
 
   // Request microphone permission for wake word detection
@@ -391,15 +496,16 @@ export function useWakeWordDetection() {
 
   return {
     // State
-    isActive,
-    isListening,
-    lastDetection,
-    totalDetections,
-    whisperActivated,
-    error,
-    isStarting,
-    isStopping,
-    hasWebSpeechSupport,
+    isActive: readonly(isActive),
+    isListening: readonly(isListening),
+    lastDetection: readonly(lastDetection),
+    totalDetections: readonly(totalDetections),
+    whisperActivated: readonly(whisperActivated),
+    error: readonly(error),
+    isStarting: readonly(isStarting),
+    isStopping: readonly(isStopping),
+    hasWebSpeechSupport: readonly(hasWebSpeechSupport),
+    isTranscriptionPaused: readonly(isTranscriptionPaused),
     
     // Computed
     status,
@@ -410,11 +516,10 @@ export function useWakeWordDetection() {
     stopDetection,
     toggleDetection,
     updateState,
-    checkForDetection,
     resetStats,
     clearError,
-    setupSpeechRecognition,
-    requestMicrophonePermission,
-    triggerWakeWord
+    triggerWakeWord,
+    pauseWakeWordDetection,
+    resumeWakeWordDetection
   }
 } 

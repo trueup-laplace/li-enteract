@@ -24,6 +24,7 @@ export interface TranscriptionSession {
   id: string;
   isActive: boolean;
   startTime: number;
+  endTime?: number;
   language: string;
   config: WhisperConfig;
 }

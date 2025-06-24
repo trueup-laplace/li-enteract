@@ -22,11 +22,14 @@ export function useSpeechTranscription() {
   const isInitialized = ref(false)
   const isRecording = ref(false)
   const isProcessing = ref(false)
+  const isListening = ref(false)
+  const isTranscribing = ref(false)
   const hasWebSpeechSupport = ref(false)
   const hasWhisperModel = ref(false)
   const currentText = ref('')
   const interimText = ref('')
   const finalText = ref('')
+  const currentTranscript = ref('')
   const transcriptionHistory = ref<TranscriptionResult[]>([])
   const currentSession = ref<TranscriptionSession | null>(null)
   const error = ref<string | null>(null)
@@ -36,6 +39,14 @@ export function useSpeechTranscription() {
   let audioChunks: Blob[] = []
   let recognition: SpeechRecognition | null = null
   let audioStream: MediaStream | null = null
+
+  // Silence detection
+  let silenceTimer: number | null = null
+  let audioContext: AudioContext | null = null
+  let analyser: AnalyserNode | null = null
+  let silenceThreshold = 0.01
+  let silenceDuration = 2500 // 2.5 seconds
+  let lastAudioTime = 0
 
   // Configuration
   const defaultWhisperConfig: WhisperConfig = {
@@ -155,7 +166,9 @@ export function useSpeechTranscription() {
 
     recognition.onstart = () => {
       console.log('Speech recognition started')
+      isListening.value = true
       error.value = null
+      emitTranscriptionEvent('transcription-started')
     }
 
     recognition.onresult = (event) => {
@@ -176,6 +189,7 @@ export function useSpeechTranscription() {
       if (final) {
         finalText.value += (finalText.value ? ' ' : '') + final
         interimText.value = ''
+        currentTranscript.value = finalText.value
         
         // Add to history
         const transcriptionResult: TranscriptionResult = {
@@ -187,8 +201,31 @@ export function useSpeechTranscription() {
         }
         
         transcriptionHistory.value.push(transcriptionResult)
+        
+        // Emit final transcription event
+        emitTranscriptionEvent('transcription-final', {
+          text: final,
+          confidence: transcriptionResult.confidence,
+          timestamp: transcriptionResult.timestamp
+        })
+        
+        // Reset silence timer on speech activity
+        resetSilenceTimer()
+        lastAudioTime = Date.now()
       } else {
         interimText.value = interim
+        currentTranscript.value = finalText.value + (finalText.value ? ' ' : '') + interim
+        
+        // Emit interim transcription event
+        emitTranscriptionEvent('transcription-interim', {
+          text: currentTranscript.value,
+          confidence: 0.5,
+          timestamp: Date.now()
+        })
+        
+        // Reset silence timer on interim results
+        resetSilenceTimer()
+        lastAudioTime = Date.now()
       }
     }
 
@@ -200,7 +237,8 @@ export function useSpeechTranscription() {
       if (event.error === 'not-allowed') {
         error.value = 'Microphone permission denied. Please allow microphone access and try again.'
       } else if (event.error === 'no-speech') {
-        error.value = 'No speech detected. Please speak clearly into the microphone.'
+        // Don't show error for no speech, just continue listening
+        error.value = null
       } else if (event.error === 'network') {
         error.value = 'Network error. Check your internet connection.'
       } else if (event.error === 'aborted') {
@@ -209,10 +247,14 @@ export function useSpeechTranscription() {
           error.value = null
         }
       }
+      
+      emitTranscriptionEvent('transcription-error', { error: error.value })
     }
 
     recognition.onend = () => {
       console.log('Speech recognition ended')
+      isListening.value = false
+      
       if (isRecording.value && hasWebSpeechSupport.value) {
         // Implement retry logic with backoff
         setTimeout(() => {
@@ -225,7 +267,102 @@ export function useSpeechTranscription() {
             }
           }
         }, 1000) // 1 second delay before retry
+      } else {
+        emitTranscriptionEvent('transcription-stopped')
       }
+    }
+  }
+
+  // Event emitter for transcription updates
+  function emitTranscriptionEvent(eventType: string, data?: any) {
+    const event = new CustomEvent(eventType, { 
+      detail: { 
+        ...data,
+        isRecording: isRecording.value,
+        isTranscribing: isTranscribing.value,
+        currentTranscript: currentTranscript.value,
+        finalText: finalText.value,
+        interimText: interimText.value
+      } 
+    })
+    window.dispatchEvent(event)
+    
+    // Also emit specific chat drawer event
+    if (['transcription-interim', 'transcription-final'].includes(eventType)) {
+      const chatEvent = new CustomEvent('show-chat-drawer', { detail: data })
+      window.dispatchEvent(chatEvent)
+    }
+  }
+
+  // Silence detection setup
+  function setupSilenceDetection(stream: MediaStream) {
+    try {
+      audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const source = audioContext.createMediaStreamSource(stream)
+      analyser = audioContext.createAnalyser()
+      
+      analyser.fftSize = 512
+      analyser.minDecibels = -90
+      analyser.maxDecibels = -10
+      analyser.smoothingTimeConstant = 0.85
+      
+      source.connect(analyser)
+      
+      monitorAudioLevel()
+    } catch (err) {
+      console.warn('Failed to setup silence detection:', err)
+    }
+  }
+
+  // Monitor audio levels for silence detection
+  function monitorAudioLevel() {
+    if (!analyser || !isRecording.value) return
+    
+    const bufferLength = analyser.frequencyBinCount
+    const dataArray = new Uint8Array(bufferLength)
+    analyser.getByteFrequencyData(dataArray)
+    
+    // Calculate RMS (Root Mean Square) for audio level
+    let sum = 0
+    for (let i = 0; i < bufferLength; i++) {
+      sum += dataArray[i] * dataArray[i]
+    }
+    const rms = Math.sqrt(sum / bufferLength) / 255
+    
+    if (rms > silenceThreshold) {
+      // Audio detected, reset silence timer
+      resetSilenceTimer()
+      lastAudioTime = Date.now()
+    } else {
+      // Silence detected, start/continue timer
+      if (!silenceTimer && isRecording.value) {
+        startSilenceTimer()
+      }
+    }
+    
+    // Continue monitoring
+    requestAnimationFrame(monitorAudioLevel)
+  }
+
+  // Start silence timer
+  function startSilenceTimer() {
+    if (silenceTimer) return
+    
+    silenceTimer = window.setTimeout(() => {
+      const timeSinceLastAudio = Date.now() - lastAudioTime
+      if (timeSinceLastAudio >= silenceDuration && isRecording.value) {
+        console.log('Auto-stopping transcription due to silence')
+        stopRecording()
+        emitTranscriptionEvent('transcription-auto-stopped', { reason: 'silence' })
+      }
+    }, silenceDuration)
+  }
+
+  // Reset silence timer
+  function resetSilenceTimer() {
+    if (silenceTimer) {
+      clearTimeout(silenceTimer)
+      silenceTimer = null
     }
   }
 
@@ -241,7 +378,7 @@ export function useSpeechTranscription() {
     }
   }
 
-  // Start recording
+  // Start recording with enhanced features
   async function startRecording() {
     if (!isInitialized.value) {
       throw new Error('Transcription system not initialized')
@@ -257,11 +394,14 @@ export function useSpeechTranscription() {
       }
       
       isRecording.value = true
+      isTranscribing.value = true
 
       // Clear previous results
       interimText.value = ''
       finalText.value = ''
+      currentTranscript.value = ''
       audioChunks = []
+      lastAudioTime = Date.now()
 
       // Create session
       currentSession.value = {
@@ -271,6 +411,19 @@ export function useSpeechTranscription() {
         language: defaultWhisperConfig.language || 'en',
         config: defaultWhisperConfig
       }
+
+      // Get audio stream
+      audioStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: defaultAudioConfig.sampleRate,
+          channelCount: defaultAudioConfig.channels,
+          echoCancellation: true,
+          noiseSuppression: true
+        }
+      })
+
+      // Setup silence detection
+      setupSilenceDetection(audioStream)
 
       // Start Web Speech API for interim results
       if (recognition && hasWebSpeechSupport.value) {
@@ -283,16 +436,7 @@ export function useSpeechTranscription() {
       }
 
       // Start audio recording for Whisper processing (if available)
-      if (hasWhisperModel.value) {
-        audioStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            sampleRate: defaultAudioConfig.sampleRate,
-            channelCount: defaultAudioConfig.channels,
-            echoCancellation: true,
-            noiseSuppression: true
-          }
-        })
-
+      if (hasWhisperModel.value && audioStream) {
         mediaRecorder = new MediaRecorder(audioStream, {
           mimeType: defaultAudioConfig.mimeType
         })
@@ -313,45 +457,88 @@ export function useSpeechTranscription() {
         mediaRecorder.start(1000) // 1 second chunks
       }
 
-      console.log('Recording started', {
+      console.log('Recording started with silence detection', {
         webSpeech: hasWebSpeechSupport.value && !!recognition,
-        whisper: hasWhisperModel.value
+        whisper: hasWhisperModel.value,
+        silenceThreshold: silenceThreshold,
+        silenceDuration: silenceDuration
       })
+
     } catch (err) {
+      isRecording.value = false
+      isTranscribing.value = false
       const message = err instanceof Error ? err.message : String(err)
       error.value = `Failed to start recording: ${message}`
-      isRecording.value = false
       throw err
     }
   }
 
-  // Stop recording
+  // Enhanced stop recording with cleanup
   const stopRecording = async () => {
     if (!isRecording.value) return
 
     try {
       isRecording.value = false
-      
+      isProcessing.value = true
+
+      // Clean up silence detection
+      resetSilenceTimer()
+      if (audioContext && audioContext.state !== 'closed') {
+        await audioContext.close()
+        audioContext = null
+        analyser = null
+      }
+
       // Stop Web Speech API
       if (recognition) {
         recognition.stop()
+        isListening.value = false
       }
 
-      // Stop MediaRecorder and process with Whisper
-      if (mediaRecorder && mediaRecorder.state === 'recording') {
+      // Stop MediaRecorder
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop()
-        isProcessing.value = true
-        
-        // Wait for the recorded data to be processed
-        // The Whisper processing will happen in the dataavailable event
       }
 
-      // Clear interim text when stopping
-      interimText.value = ''
+      // Stop audio stream
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop())
+        audioStream = null
+      }
+
+      // End session
+      if (currentSession.value) {
+        currentSession.value.isActive = false
+        currentSession.value.endTime = Date.now()
+      }
+
+      console.log('Recording stopped')
       
+      // Emit final state
+      emitTranscriptionEvent('transcription-complete', {
+        finalText: finalText.value,
+        totalDuration: currentSession.value ? 
+          (Date.now() - currentSession.value.startTime) / 1000 : 0
+      })
+
     } catch (err) {
       console.error('Error stopping recording:', err)
-      error.value = err instanceof Error ? err.message : 'Failed to stop recording'
+      error.value = `Error stopping recording: ${err}`
+    } finally {
+      isProcessing.value = false
+      isTranscribing.value = false
+    }
+  }
+
+  // Auto-start transcription (called by wake word detection)
+  async function startTranscription() {
+    console.log('🎤 Starting transcription triggered by wake word')
+    try {
+      await startRecording()
+      emitTranscriptionEvent('wake-word-triggered')
+    } catch (err) {
+      console.error('Failed to start transcription from wake word:', err)
+      error.value = `Failed to start transcription: ${err}`
     }
   }
 
@@ -460,11 +647,14 @@ export function useSpeechTranscription() {
     isInitialized,
     isRecording,
     isProcessing,
+    isListening,
+    isTranscribing,
     hasWebSpeechSupport,
     hasWhisperModel,
     currentText: combinedText,
     interimText,
     finalText,
+    currentTranscript,
     transcriptionHistory,
     currentSession,
     error,
@@ -475,6 +665,7 @@ export function useSpeechTranscription() {
     startRecording,
     stopRecording,
     clearTranscription,
-    getAvailableModels
+    getAvailableModels,
+    startTranscription
   }
 } 

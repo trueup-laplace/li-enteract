@@ -2,7 +2,7 @@ use std::process::{Command, Stdio, Child};
 use std::io::{BufRead, BufReader};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
-use std::time::{SystemTime, UNIX_EPOCH};
+// Note: SystemTime and UNIX_EPOCH are used in calibration timestamps
 use serde_json;
 
 // Whisper-rs imports for wake word detection
@@ -139,6 +139,10 @@ impl SpeechManager {
     }
 
     pub fn start(&mut self) -> Result<(), String> {
+        if self.is_running() {
+            return Err("Speech recognition is already running".to_string());
+        }
+
         // Create Python script
         let script_content = self.create_python_script();
         let script_path = std::env::temp_dir().join("aubrey_speech_detector.py");
@@ -207,21 +211,7 @@ impl SpeechManager {
                                     break;
                                 }
                             }
-                        } else {
-                            println!("Audio Debug: {}", trimmed);
                         }
-                    }
-                }
-            });
-        }
-
-        // Spawn stderr reader thread
-        if let Some(stderr) = child.stderr.take() {
-            std::thread::spawn(move || {
-                let reader = BufReader::new(stderr);
-                for line in reader.lines() {
-                    if let Ok(line) = line {
-                        println!("Audio Error: {}", line);
                     }
                 }
             });
@@ -231,26 +221,26 @@ impl SpeechManager {
         self.wake_word_receiver = Some(wake_rx);
         self.transcription_receiver = Some(trans_rx);
         self.state.is_listening = true;
-
+        
         Ok(())
     }
 
     pub fn stop(&mut self) -> Result<(), String> {
         if let Some(mut process) = self.process.take() {
-            process.kill().map_err(|e| format!("Failed to kill audio process: {}", e))?;
-            process.wait().map_err(|e| format!("Failed to wait for audio process: {}", e))?;
+            process.kill().map_err(|e| format!("Failed to kill speech process: {}", e))?;
+            process.wait().map_err(|e| format!("Failed to wait for speech process: {}", e))?;
         }
         
         self.wake_word_receiver = None;
         self.transcription_receiver = None;
         self.state = SpeechState::default();
         
-        println!("🎤 Stopped audio monitoring");
+        println!("🎤 Stopped speech recognition");
         Ok(())
     }
 
     pub fn is_running(&self) -> bool {
-        self.process.is_some()
+        self.process.is_some() && self.state.is_listening
     }
 
     pub fn get_state(&self) -> &SpeechState {
@@ -261,10 +251,8 @@ impl SpeechManager {
         if let Some(receiver) = &mut self.wake_word_receiver {
             if let Ok(detection) = receiver.try_recv() {
                 self.state.wake_word_detected = true;
-                self.state.is_recording = true;
-                self.state.total_detections += 1;
                 self.state.last_detection = Some(detection.clone());
-                println!("🎤 Wake word 'Aubrey' detected! Starting recording...");
+                self.state.total_detections += 1;
                 return Some(detection);
             }
         }
@@ -274,10 +262,7 @@ impl SpeechManager {
     pub fn check_transcription(&mut self) -> Option<SpeechTranscription> {
         if let Some(receiver) = &mut self.transcription_receiver {
             if let Ok(transcription) = receiver.try_recv() {
-                self.state.is_recording = false;
-                self.state.wake_word_detected = false;
                 self.state.last_transcription = Some(transcription.clone());
-                println!("🎤 Transcription complete: '{}'", transcription.text);
                 return Some(transcription);
             }
         }
@@ -285,193 +270,154 @@ impl SpeechManager {
     }
 
     fn create_python_script(&self) -> String {
-        r#"#!/usr/bin/env python3
+        format!(r#"
+#!/usr/bin/env python3
+"""
+Enhanced Aubrey Wake Word Detection with Transcription
+Listens for "Aubrey" wake word and provides speech transcription
+"""
+
 import pyaudio
+import wave
 import numpy as np
-import argparse
+import speech_recognition as sr
+import io
 import sys
 import json
 import time
+import threading
+import argparse
 from collections import deque
 
 class AubreyDetector:
-    def __init__(self, sample_rate, silence_threshold, silence_duration, max_duration):
+    def __init__(self, sample_rate=16000, silence_threshold=0.01, silence_duration=2.0, max_duration=30.0):
         self.sample_rate = sample_rate
         self.silence_threshold = silence_threshold
         self.silence_duration = silence_duration
         self.max_duration = max_duration
-        
-        # Audio setup
         self.chunk_size = 1024
-        self.format = pyaudio.paFloat32
-        self.channels = 1
         
-        # State
-        self.is_recording = False
-        self.audio_buffer = deque(maxlen=int(sample_rate * 3))
-        self.recording_buffer = []
-        self.silence_start = None
-        
-        # Initialize PyAudio
         self.audio = pyaudio.PyAudio()
+        self.recognizer = sr.Recognizer()
+        self.microphone = sr.Microphone(sample_rate=sample_rate)
         
-        # Open microphone stream
-        self.stream = self.audio.open(
-            format=self.format,
-            channels=self.channels,
-            rate=self.sample_rate,
-            input=True,
-            frames_per_buffer=self.chunk_size,
-            stream_callback=self.audio_callback
-        )
+        # Adjust for ambient noise
+        with self.microphone as source:
+            self.recognizer.adjust_for_ambient_noise(source, duration=1)
         
-    def audio_callback(self, in_data, frame_count, time_info, status):
-        audio_data = np.frombuffer(in_data, dtype=np.float32)
+        print(f"🎤 Aubrey detector initialized (SR threshold: {{self.recognizer.energy_threshold}})", file=sys.stderr)
         
-        # Add to circular buffer for wake word detection
-        self.audio_buffer.extend(audio_data)
+        self.is_running = False
+        self.wake_word_detected = False
         
-        # Check for wake word in buffer
-        if not self.is_recording and len(self.audio_buffer) >= self.sample_rate:
-            self.check_wake_word()
-            
-        # If recording, add to recording buffer
-        if self.is_recording:
-            self.recording_buffer.extend(audio_data)
-            self.check_silence(audio_data)
-            
-            # Check max duration
-            if len(self.recording_buffer) > self.sample_rate * self.max_duration:
-                self.finish_recording()
+    def listen_for_wake_word(self):
+        """Continuously listen for the wake word 'Aubrey'"""
+        self.is_running = True
+        
+        while self.is_running:
+            try:
+                with self.microphone as source:
+                    # Listen for audio with timeout
+                    audio = self.recognizer.listen(source, timeout=1, phrase_time_limit=5)
                 
-        return (None, pyaudio.paContinue)
+                try:
+                    # Use Google Speech Recognition for wake word detection
+                    text = self.recognizer.recognize_google(audio).lower()
+                    
+                    if "aubrey" in text or "aubry" in text or "awbrey" in text:
+                        detection = {{
+                            "confidence": 0.85,
+                            "timestamp": int(time.time() * 1000),
+                            "audio_snippet": []  # Would contain audio data in real implementation
+                        }}
+                        
+                        print(f"WAKE_WORD:{{json.dumps(detection)}}")
+                        sys.stdout.flush()
+                        
+                        # Start transcription mode
+                        self.start_transcription()
+                        
+                except sr.UnknownValueError:
+                    # No speech detected, continue listening
+                    pass
+                except sr.RequestError as e:
+                    print(f"Speech recognition error: {{e}}", file=sys.stderr)
+                    time.sleep(1)
+                    
+            except sr.WaitTimeoutError:
+                # Timeout, continue listening
+                pass
+            except Exception as e:
+                print(f"Wake word detection error: {{e}}", file=sys.stderr)
+                time.sleep(1)
     
-    def check_wake_word(self):
-        """Basic wake word detection using audio features"""
-        audio_chunk = np.array(list(self.audio_buffer)[-self.sample_rate:])
+    def start_transcription(self):
+        """Start transcription after wake word detection"""
+        print("🎤 Starting transcription...", file=sys.stderr)
         
-        # Simple energy-based detection
-        energy = np.mean(np.abs(audio_chunk))
-        
-        # Basic voice activity detection
-        if energy > 0.02:
-            spectral_centroid = self.calculate_spectral_centroid(audio_chunk)
-            
-            # Voice frequency range check
-            if 800 < spectral_centroid < 2000:
-                confidence = min(energy * 10, 1.0)
-                
-                detection = {
-                    "confidence": confidence,
-                    "timestamp": int(time.time() * 1000),
-                    "audio_snippet": audio_chunk[-1600:].tolist()
-                }
-                
-                print(f"WAKE_WORD:{json.dumps(detection)}")
-                sys.stdout.flush()
-                
-                self.start_recording()
-    
-    def calculate_spectral_centroid(self, audio_data):
-        """Calculate spectral centroid for voice detection"""
-        fft = np.fft.fft(audio_data)
-        magnitude = np.abs(fft)
-        length = len(magnitude)
-        freqs = np.fft.fftfreq(length, 1/self.sample_rate)
-        
-        magnitude = magnitude[:length//2]
-        freqs = freqs[:length//2]
-        
-        if np.sum(magnitude) == 0:
-            return 0
-            
-        return np.sum(freqs * magnitude) / np.sum(magnitude)
-    
-    def start_recording(self):
-        """Start recording after wake word detection"""
-        self.is_recording = True
-        self.recording_buffer = []
-        self.silence_start = None
-        print("Started recording after wake word", file=sys.stderr)
-    
-    def check_silence(self, audio_data):
-        """Check for silence to end recording"""
-        energy = np.mean(np.abs(audio_data))
-        
-        if energy < self.silence_threshold:
-            if self.silence_start is None:
-                self.silence_start = time.time()
-            elif time.time() - self.silence_start > self.silence_duration:
-                self.finish_recording()
-        else:
-            self.silence_start = None
-    
-    def finish_recording(self):
-        """Process and transcribe the recorded audio"""
-        if not self.recording_buffer:
-            return
-            
-        print("Finishing recording, transcribing...", file=sys.stderr)
-        
-        # For now, return a mock transcription
-        # In a real implementation, you'd use Whisper or another ASR
-        transcription = {
-            "text": "Mock transcription - implement Whisper here",
-            "confidence": 0.8,
-            "duration": len(self.recording_buffer) / self.sample_rate,
-            "timestamp": int(time.time() * 1000)
-        }
-        
-        print(f"TRANSCRIPTION:{json.dumps(transcription)}")
-        sys.stdout.flush()
-        
-        # Reset state
-        self.is_recording = False
-        self.recording_buffer = []
-        self.silence_start = None
-    
-    def run(self):
-        """Main loop"""
-        print("🎤 Listening for 'Aubrey'...", file=sys.stderr)
-        self.stream.start_stream()
+        silence_counter = 0
+        max_silence = int(self.silence_duration * (self.sample_rate / self.chunk_size))
         
         try:
-            while True:
-                time.sleep(0.1)
-        except KeyboardInterrupt:
-            print("Stopping audio monitoring", file=sys.stderr)
-        finally:
-            self.cleanup()
+            with self.microphone as source:
+                audio = self.recognizer.listen(source, timeout=1, phrase_time_limit=self.max_duration)
+            
+            try:
+                text = self.recognizer.recognize_google(audio)
+                transcription = {{
+                    "text": text,
+                    "confidence": 0.9,
+                    "duration": 2.0,  # Estimated duration
+                    "timestamp": int(time.time() * 1000)
+                }}
+                
+                print(f"TRANSCRIPTION:{{json.dumps(transcription)}}")
+                sys.stdout.flush()
+                
+            except sr.UnknownValueError:
+                print("Could not understand audio", file=sys.stderr)
+            except sr.RequestError as e:
+                print(f"Transcription error: {{e}}", file=sys.stderr)
+                
+        except Exception as e:
+            print(f"Transcription error: {{e}}", file=sys.stderr)
     
-    def cleanup(self):
-        """Clean up resources"""
-        if hasattr(self, 'stream'):
-            self.stream.stop_stream()
-            self.stream.close()
-        if hasattr(self, 'audio'):
-            self.audio.terminate()
+    def stop(self):
+        """Stop the detector"""
+        self.is_running = False
+        self.audio.terminate()
 
 def main():
-    parser = argparse.ArgumentParser(description='Always-on Aubrey wake word detection')
-    parser.add_argument('--sample-rate', type=int, default=16000)
-    parser.add_argument('--silence-threshold', type=float, default=0.01)
-    parser.add_argument('--silence-duration', type=float, default=2.0)
-    parser.add_argument('--max-duration', type=float, default=30.0)
+    parser = argparse.ArgumentParser(description='Aubrey Wake Word Detector')
+    parser.add_argument('--sample-rate', type=int, default={sample_rate}, help='Sample rate')
+    parser.add_argument('--silence-threshold', type=float, default={silence_threshold}, help='Silence threshold')
+    parser.add_argument('--silence-duration', type=float, default={silence_duration}, help='Silence duration')
+    parser.add_argument('--max-duration', type=float, default={max_duration}, help='Max recording duration')
     
     args = parser.parse_args()
     
     detector = AubreyDetector(
-        args.sample_rate,
-        args.silence_threshold,
-        args.silence_duration,
-        args.max_duration
+        sample_rate=args.sample_rate,
+        silence_threshold=args.silence_threshold,
+        silence_duration=args.silence_duration,
+        max_duration=args.max_duration
     )
     
-    detector.run()
+    try:
+        detector.listen_for_wake_word()
+    except KeyboardInterrupt:
+        print("🛑 Stopping Aubrey detector...", file=sys.stderr)
+    finally:
+        detector.stop()
 
 if __name__ == "__main__":
     main()
-"#.to_string()
+"#,
+            sample_rate = self.config.sample_rate,
+            silence_threshold = self.config.silence_threshold,
+            silence_duration = self.config.silence_duration,
+            max_duration = self.config.max_recording_duration
+        )
     }
 }
 
@@ -491,64 +437,70 @@ lazy_static::lazy_static! {
 // Always-on speech commands
 #[tauri::command]
 pub async fn start_always_on_speech() -> Result<String, String> {
-    let mut manager = SPEECH_MANAGER.lock().unwrap();
-    
-    if let Some(existing) = manager.as_mut() {
-        existing.stop()?;
+    match SPEECH_MANAGER.lock() {
+        Ok(mut manager_opt) => {
+            let mut manager = SpeechManager::new(AudioConfig::default());
+            manager.start()?;
+            *manager_opt = Some(manager);
+            Ok("Always-on speech recognition started".to_string())
+        }
+        Err(_) => Err("Failed to access speech manager".to_string())
     }
-    
-    let config = AudioConfig::default();
-    let mut new_manager = SpeechManager::new(config);
-    new_manager.start()?;
-    
-    *manager = Some(new_manager);
-    
-    Ok("Always-on speech detection started - listening for 'Aubrey'".to_string())
 }
 
 #[tauri::command]
 pub async fn stop_always_on_speech() -> Result<String, String> {
-    let mut manager = SPEECH_MANAGER.lock().unwrap();
-    
-    if let Some(existing) = manager.as_mut() {
-        existing.stop()?;
-        *manager = None;
-        Ok("Always-on speech detection stopped".to_string())
-    } else {
-        Err("Speech detection not running".to_string())
+    match SPEECH_MANAGER.lock() {
+        Ok(mut manager_opt) => {
+            if let Some(manager) = manager_opt.as_mut() {
+                manager.stop()?;
+            }
+            *manager_opt = None;
+            Ok("Always-on speech recognition stopped".to_string())
+        }
+        Err(_) => Err("Failed to access speech manager".to_string())
     }
 }
 
 #[tauri::command]
 pub async fn get_speech_state() -> Result<SpeechState, String> {
-    let manager = SPEECH_MANAGER.lock().unwrap();
-    
-    if let Some(ref manager_instance) = *manager {
-        Ok(manager_instance.get_state().clone())
-    } else {
-        Ok(SpeechState::default())
+    match SPEECH_MANAGER.lock() {
+        Ok(manager_opt) => {
+            if let Some(manager) = manager_opt.as_ref() {
+                Ok(manager.get_state().clone())
+            } else {
+                Ok(SpeechState::default())
+            }
+        }
+        Err(_) => Err("Failed to access speech manager".to_string())
     }
 }
 
 #[tauri::command]
 pub async fn check_for_wake_word() -> Result<Option<WakeWordDetection>, String> {
-    let mut manager = SPEECH_MANAGER.lock().unwrap();
-    
-    if let Some(ref mut manager_instance) = manager.as_mut() {
-        Ok(manager_instance.check_wake_word())
-    } else {
-        Err("Speech detection not running".to_string())
+    match SPEECH_MANAGER.lock() {
+        Ok(mut manager_opt) => {
+            if let Some(manager) = manager_opt.as_mut() {
+                Ok(manager.check_wake_word())
+            } else {
+                Ok(None)
+            }
+        }
+        Err(_) => Err("Failed to access speech manager".to_string())
     }
 }
 
 #[tauri::command]
 pub async fn check_for_transcription() -> Result<Option<SpeechTranscription>, String> {
-    let mut manager = SPEECH_MANAGER.lock().unwrap();
-    
-    if let Some(ref mut manager_instance) = manager.as_mut() {
-        Ok(manager_instance.check_transcription())
-    } else {
-        Err("Speech detection not running".to_string())
+    match SPEECH_MANAGER.lock() {
+        Ok(mut manager_opt) => {
+            if let Some(manager) = manager_opt.as_mut() {
+                Ok(manager.check_transcription())
+            } else {
+                Ok(None)
+            }
+        }
+        Err(_) => Err("Failed to access speech manager".to_string())
     }
 }
 
@@ -692,23 +644,12 @@ pub async fn list_available_models() -> Result<Vec<String>, String> {
 // Wake word detection commands for compatibility
 #[tauri::command]
 pub async fn start_wake_word_detection() -> Result<String, String> {
-    let mut state = WAKE_WORD_STATE.lock().unwrap();
-    state.is_active = true;
-    state.is_listening = true;
-    
-    println!("Wake word detection started (compatibility mode)");
-    Ok("Wake word detection started for 'Aubrey'".to_string())
+    start_always_on_speech().await
 }
 
 #[tauri::command]
 pub async fn stop_wake_word_detection() -> Result<String, String> {
-    let mut state = WAKE_WORD_STATE.lock().unwrap();
-    state.is_active = false;
-    state.is_listening = false;
-    state.whisper_activated = false;
-    
-    println!("Wake word detection stopped");
-    Ok("Wake word detection stopped".to_string())
+    stop_always_on_speech().await
 }
 
 #[tauri::command]

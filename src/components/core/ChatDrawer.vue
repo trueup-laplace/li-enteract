@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, nextTick, onMounted, watch } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { 
   PaperAirplaneIcon,
   XMarkIcon,
-  MicrophoneIcon
+  MicrophoneIcon,
+  SpeakerWaveIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 import type { ChatMessage } from '../../types'
@@ -18,9 +20,182 @@ const editingMessageId = ref<number | null>(null)
 const editText = ref('')
 const editInput = ref<HTMLInputElement>()
 
+// Speech transcription state
+const isTranscribing = ref(false)
+const currentTranscript = ref('')
+const transcriptionStatus = ref<'idle' | 'listening' | 'processing' | 'error'>('idle')
+const transcriptionError = ref<string | null>(null)
+const showWakeWordFeedback = ref(false)
+
 onMounted(() => {
   appStore.initializeSpeechTranscription()
+  setupEventListeners()
 })
+
+onUnmounted(() => {
+  removeEventListeners()
+})
+
+// Setup event listeners for speech transcription
+function setupEventListeners() {
+  // Wake word detection events
+  window.addEventListener('wake-word-detected', handleWakeWordDetected as EventListener)
+  window.addEventListener('wake-word-feedback', handleWakeWordFeedback as EventListener)
+  window.addEventListener('show-chat-drawer', handleShowChatDrawer as EventListener)
+  
+  // Speech transcription events
+  window.addEventListener('transcription-started', handleTranscriptionStarted as EventListener)
+  window.addEventListener('transcription-interim', handleTranscriptionInterim as EventListener)
+  window.addEventListener('transcription-final', handleTranscriptionFinal as EventListener)
+  window.addEventListener('transcription-error', handleTranscriptionError as EventListener)
+  window.addEventListener('transcription-stopped', handleTranscriptionStopped as EventListener)
+  window.addEventListener('transcription-complete', handleTranscriptionComplete as EventListener)
+  window.addEventListener('transcription-auto-stopped', handleTranscriptionAutoStopped as EventListener)
+  window.addEventListener('start-transcription-from-wake-word', handleStartTranscriptionFromWakeWord as EventListener)
+}
+
+function removeEventListeners() {
+  window.removeEventListener('wake-word-detected', handleWakeWordDetected)
+  window.removeEventListener('wake-word-feedback', handleWakeWordFeedback)
+  window.removeEventListener('show-chat-drawer', handleShowChatDrawer)
+  window.removeEventListener('transcription-started', handleTranscriptionStarted)
+  window.removeEventListener('transcription-interim', handleTranscriptionInterim)
+  window.removeEventListener('transcription-final', handleTranscriptionFinal)
+  window.removeEventListener('transcription-error', handleTranscriptionError)
+  window.removeEventListener('transcription-stopped', handleTranscriptionStopped)
+  window.removeEventListener('transcription-complete', handleTranscriptionComplete)
+  window.removeEventListener('transcription-auto-stopped', handleTranscriptionAutoStopped)
+  window.removeEventListener('start-transcription-from-wake-word', handleStartTranscriptionFromWakeWord)
+}
+
+// Event handlers
+function handleWakeWordDetected(event: CustomEvent) {
+  console.log('ChatDrawer: Wake word detected!', event.detail)
+  showWakeWordFeedback.value = true
+  setTimeout(() => {
+    showWakeWordFeedback.value = false
+  }, 3000)
+  
+  // Auto-open chat drawer
+  if (!appStore.chatOpen) {
+    appStore.toggleChat()
+  }
+}
+
+function handleWakeWordFeedback(event: CustomEvent) {
+  console.log('ChatDrawer: Wake word feedback', event.detail)
+  showWakeWordFeedback.value = true
+  setTimeout(() => {
+    showWakeWordFeedback.value = false
+  }, 2000)
+}
+
+function handleShowChatDrawer(event: CustomEvent) {
+  console.log('ChatDrawer: Show chat drawer requested', event.detail)
+  if (!appStore.chatOpen) {
+    appStore.toggleChat()
+  }
+}
+
+function handleStartTranscriptionFromWakeWord(event: CustomEvent) {
+  console.log('ChatDrawer: Starting transcription from wake word', event.detail)
+  transcriptionStatus.value = 'listening'
+  isTranscribing.value = true
+  currentTranscript.value = ''
+  transcriptionError.value = null
+  
+  // Auto-open drawer and scroll to bottom
+  if (!appStore.chatOpen) {
+    appStore.toggleChat()
+  }
+  scrollToBottom()
+  
+  // Start transcription via app store
+  appStore.startSpeechTranscription()
+}
+
+function handleTranscriptionStarted(event: CustomEvent) {
+  console.log('ChatDrawer: Transcription started', event.detail)
+  transcriptionStatus.value = 'listening'
+  isTranscribing.value = true
+  currentTranscript.value = ''
+  transcriptionError.value = null
+  scrollToBottom()
+}
+
+function handleTranscriptionInterim(event: CustomEvent) {
+  console.log('ChatDrawer: Interim transcription', event.detail)
+  transcriptionStatus.value = 'processing'
+  currentTranscript.value = event.detail.text || ''
+  
+  // Add interim message to chat if not already present
+  const lastMessage = appStore.chatMessages[appStore.chatMessages.length - 1]
+  if (!lastMessage || !lastMessage.isInterim) {
+    appStore.addMessage(currentTranscript.value, 'transcription', { 
+      source: 'speech',
+      isInterim: true,
+      confidence: event.detail.confidence 
+    })
+  } else {
+    // Update existing interim message
+    appStore.updateMessage(lastMessage.id, currentTranscript.value)
+  }
+  
+  scrollToBottom()
+}
+
+function handleTranscriptionFinal(event: CustomEvent) {
+  console.log('ChatDrawer: Final transcription', event.detail)
+  transcriptionStatus.value = 'idle'
+  
+  // Replace interim message with final one or add new final message
+  const lastMessage = appStore.chatMessages[appStore.chatMessages.length - 1]
+  if (lastMessage && lastMessage.isInterim) {
+    // Update interim message to final
+    appStore.updateMessage(lastMessage.id, event.detail.text, { isInterim: false })
+  } else {
+    // Add new final message
+    appStore.addMessage(event.detail.text, 'transcription', { 
+      source: 'speech',
+      isInterim: false,
+      confidence: event.detail.confidence 
+    })
+  }
+  
+  scrollToBottom()
+}
+
+function handleTranscriptionError(event: CustomEvent) {
+  console.log('ChatDrawer: Transcription error', event.detail)
+  transcriptionStatus.value = 'error'
+  transcriptionError.value = event.detail.error
+  isTranscribing.value = false
+}
+
+function handleTranscriptionStopped(event: CustomEvent) {
+  console.log('ChatDrawer: Transcription stopped', event.detail)
+  transcriptionStatus.value = 'idle'
+  isTranscribing.value = false
+}
+
+function handleTranscriptionComplete(event: CustomEvent) {
+  console.log('ChatDrawer: Transcription complete', event.detail)
+  transcriptionStatus.value = 'idle'
+  isTranscribing.value = false
+  currentTranscript.value = ''
+}
+
+function handleTranscriptionAutoStopped(event: CustomEvent) {
+  console.log('ChatDrawer: Transcription auto-stopped', event.detail)
+  transcriptionStatus.value = 'idle'
+  isTranscribing.value = false
+  
+  // Add system message about auto-stop
+  appStore.addMessage(`Transcription stopped automatically (${event.detail.reason})`, 'system', { 
+    source: 'auto-stop' 
+  })
+  scrollToBottom()
+}
 
 const sendMessage = () => {
   if (newMessage.value.trim()) {
