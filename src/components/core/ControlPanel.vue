@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { 
   MicrophoneIcon, 
   ChatBubbleLeftRightIcon,
@@ -12,6 +12,7 @@ import { useAppStore } from '../../stores/app'
 import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
 import { useWindowManager } from '../../composables/useWindowManager'
 import { useWakeWordDetection } from '../../composables/useWakeWordDetection'
+import { getCompatibilityReport } from '../../utils/browserCompat'
 import TransparencyControls from './TransparencyControls.vue'
 
 const store = useAppStore()
@@ -19,21 +20,110 @@ const mlEyeTracking = useMLEyeTracking()
 const windowManager = useWindowManager()
 const wakeWordDetection = useWakeWordDetection()
 
+// Error handling state
+const speechError = ref<string | null>(null)
+const wakeWordError = ref<string | null>(null)
+const generalError = ref<string | null>(null)
+const isRetrying = ref(false)
+
+// Browser compatibility
+const compatibilityReport = ref(getCompatibilityReport())
+const showCompatibilityWarning = computed(() => 
+  !compatibilityReport.value.ready && compatibilityReport.value.issues.length > 0
+)
+const filteredIssues = computed(() => 
+  compatibilityReport.value.issues.filter((issue): issue is string => Boolean(issue))
+)
+
 // Transparency controls state
 const showTransparencyControls = ref(false)
 
 // ML Eye tracking with window movement state
 const isGazeControlActive = ref(false)
 
-// Speech transcription functions
-const toggleSpeechTranscription = async () => {
-  if (store.speechStatus.isRecording) {
-    await store.stopSpeechTranscription()
-  } else {
-    if (!store.speechStatus.isInitialized) {
-      await store.initializeSpeechTranscription('base')
+// Retry and error handling functions
+const retrySpeechSetup = async () => {
+  if (isRetrying.value) return
+  
+  try {
+    isRetrying.value = true
+    speechError.value = null
+    generalError.value = null
+    
+    console.log('🔄 Retrying speech transcription setup...')
+    
+    // Reinitialize speech transcription
+    await store.initializeSpeechTranscription('base')
+    
+    console.log('✅ Speech transcription retry successful')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    speechError.value = message
+    console.error('❌ Speech transcription retry failed:', error)
+  } finally {
+    isRetrying.value = false
+  }
+}
+
+const retryWakeWordSetup = async () => {
+  if (isRetrying.value) return
+  
+  try {
+    isRetrying.value = true
+    wakeWordError.value = null
+    generalError.value = null
+    
+    console.log('🔄 Retrying wake word detection setup...')
+    
+    // Clear any existing error
+    wakeWordDetection.clearError()
+    
+    // Restart wake word detection
+    if (wakeWordDetection.isActive.value) {
+      await wakeWordDetection.stopDetection()
     }
-    await store.startSpeechTranscription()
+    await wakeWordDetection.startDetection()
+    
+    console.log('✅ Wake word detection retry successful')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    wakeWordError.value = message
+    console.error('❌ Wake word detection retry failed:', error)
+  } finally {
+    isRetrying.value = false
+  }
+}
+
+const clearAllErrors = () => {
+  speechError.value = null
+  wakeWordError.value = null
+  generalError.value = null
+  wakeWordDetection.clearError()
+}
+
+// Enhanced speech transcription with error handling
+const toggleSpeechTranscription = async () => {
+  try {
+    speechError.value = null
+    
+    // Check browser compatibility first
+    if (!compatibilityReport.value.ready) {
+      speechError.value = 'Browser not compatible with speech features. ' + compatibilityReport.value.issues.join(', ')
+      return
+    }
+    
+    if (store.speechStatus.isRecording) {
+      await store.stopSpeechTranscription()
+    } else {
+      if (!store.speechStatus.isInitialized) {
+        await store.initializeSpeechTranscription('base')
+      }
+      await store.startSpeechTranscription()
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    speechError.value = message
+    console.error('Speech transcription error:', error)
   }
 }
 
@@ -52,9 +142,23 @@ const getSpeechIconClass = () => {
   return 'text-white/80 group-hover:text-white'
 }
 
-// Wake word detection functions
+// Enhanced wake word detection with error handling
 const toggleWakeWordDetection = async () => {
-  await wakeWordDetection.toggleDetection()
+  try {
+    wakeWordError.value = null
+    
+    // Check browser compatibility first
+    if (!compatibilityReport.value.ready) {
+      wakeWordError.value = 'Browser not compatible with speech features. ' + compatibilityReport.value.issues.join(', ')
+      return
+    }
+    
+    await wakeWordDetection.toggleDetection()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    wakeWordError.value = message
+    console.error('Wake word detection error:', error)
+  }
 }
 
 const getWakeWordTooltip = () => {
@@ -269,6 +373,104 @@ onUnmounted(() => {
     
     <!-- Status Indicators -->
     <div class="mt-2 text-center space-y-1">
+      <!-- Browser Compatibility Warning -->
+      <div v-if="showCompatibilityWarning" class="glass-panel-compact px-3 py-2 bg-red-500/20 border border-red-500/30">
+        <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2">
+            <ExclamationTriangleIcon class="w-4 h-4 text-red-400" />
+            <span class="text-red-300">Browser Compatibility Issues</span>
+          </div>
+          <button @click="compatibilityReport = getCompatibilityReport()" 
+                  class="text-red-300 hover:text-red-200 underline">
+            Recheck
+          </button>
+        </div>
+        <div class="mt-1">
+                                <div v-for="issue in filteredIssues" :key="issue" class="text-xs text-red-200">
+             • {{ issue }}
+           </div>
+          <div class="text-xs text-red-200 mt-1">
+            Browser: {{ compatibilityReport.browser.name }} {{ compatibilityReport.browser.version }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Speech Error Display -->
+      <div v-if="speechError || store.speechStatus.error" class="glass-panel-compact px-3 py-2 bg-red-500/20 border border-red-500/30">
+        <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2">
+            <ExclamationTriangleIcon class="w-4 h-4 text-red-400" />
+            <span class="text-red-300">Speech Error</span>
+          </div>
+          <div class="flex gap-2">
+            <button @click="retrySpeechSetup" 
+                    :disabled="isRetrying"
+                    class="text-blue-300 hover:text-blue-200 underline disabled:opacity-50">
+              {{ isRetrying ? 'Retrying...' : 'Retry' }}
+            </button>
+            <button @click="speechError = null" class="text-gray-300 hover:text-gray-200">✕</button>
+          </div>
+        </div>
+        <div class="text-xs text-red-200 mt-1">
+          {{ speechError || store.speechStatus.error }}
+        </div>
+      </div>
+
+      <!-- Wake Word Error Display -->
+      <div v-if="wakeWordError || wakeWordDetection.error.value" class="glass-panel-compact px-3 py-2 bg-red-500/20 border border-red-500/30">
+        <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2">
+            <ExclamationTriangleIcon class="w-4 h-4 text-red-400" />
+            <span class="text-red-300">Wake Word Error</span>
+          </div>
+          <div class="flex gap-2">
+            <button @click="retryWakeWordSetup" 
+                    :disabled="isRetrying"
+                    class="text-blue-300 hover:text-blue-200 underline disabled:opacity-50">
+              {{ isRetrying ? 'Retrying...' : 'Retry' }}
+            </button>
+            <button @click="wakeWordError = null; wakeWordDetection.clearError()" class="text-gray-300 hover:text-gray-200">✕</button>
+          </div>
+        </div>
+        <div class="text-xs text-red-200 mt-1">
+          {{ wakeWordError || wakeWordDetection.error.value }}
+        </div>
+      </div>
+
+      <!-- General Error Display -->
+      <div v-if="generalError" class="glass-panel-compact px-3 py-2 bg-red-500/20 border border-red-500/30">
+        <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2">
+            <ExclamationTriangleIcon class="w-4 h-4 text-red-400" />
+            <span class="text-red-300">System Error</span>
+          </div>
+          <button @click="clearAllErrors" class="text-gray-300 hover:text-gray-200">✕</button>
+        </div>
+        <div class="text-xs text-red-200 mt-1">
+          {{ generalError }}
+        </div>
+      </div>
+
+      <!-- Speech Status Indicator -->
+      <div v-if="store.speechStatus.isInitialized || wakeWordDetection.isActive.value" class="glass-panel-compact px-3 py-1 inline-block">
+        <span class="text-xs text-white/80">
+          Speech Status: 
+          <span :class="{
+            'text-green-400': store.speechStatus.isRecording || wakeWordDetection.isListening.value,
+            'text-blue-400': store.speechStatus.isProcessing,
+            'text-yellow-400': store.speechStatus.isInitialized && !store.speechStatus.isRecording
+          }">
+            {{ store.speechStatus.isRecording ? 'Recording' :
+               store.speechStatus.isProcessing ? 'Processing' :
+               wakeWordDetection.isListening.value ? 'Listening for "Aubrey"' :
+               store.speechStatus.isInitialized ? 'Ready' : 'Inactive' }}
+          </span>
+          <span v-if="wakeWordDetection.totalDetections.value > 0" class="text-green-400">
+            • Detections: {{ wakeWordDetection.totalDetections.value }}
+          </span>
+        </span>
+      </div>
+
       <!-- ML Eye Tracking Status -->
       <div v-if="mlEyeTracking.isActive.value" class="glass-panel-compact px-3 py-1 inline-block">
         <span class="text-xs text-white/80">
@@ -283,24 +485,6 @@ onUnmounted(() => {
           </span>
           • FPS: {{ mlEyeTracking.fps.value }}
           • Conf: {{ Math.round(mlEyeTracking.confidence.value * 100) }}%
-        </span>
-      </div>
-
-      <!-- Speech Transcription Status -->
-      <div v-if="store.speechStatus.isRecording || store.speechStatus.isProcessing || store.speechStatus.error" class="glass-panel-compact px-3 py-1 inline-block">
-        <span class="text-xs text-white/80">
-          Speech: 
-          <span :class="{
-            'text-red-400 animate-pulse': store.speechStatus.isRecording,
-            'text-yellow-400': store.speechStatus.isProcessing,
-            'text-red-300': store.speechStatus.error
-          }">
-            {{ store.speechStatus.isRecording ? 'Recording...' : 
-               store.speechStatus.isProcessing ? 'Processing...' : 
-               store.speechStatus.error ? 'Error' : 'Ready' }}
-          </span>
-          <span v-if="store.speechStatus.hasWebSpeechSupport" class="ml-1 text-green-400">• WebAPI</span>
-          <span v-if="store.speechStatus.hasWhisperModel" class="ml-1 text-purple-400">• Whisper</span>
         </span>
       </div>
     </div>

@@ -85,6 +85,10 @@ export function useSpeechTranscription() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
       hasWebSpeechSupport.value = !!SpeechRecognition
 
+      if (!hasWebSpeechSupport.value) {
+        console.warn('Web Speech API not supported in this browser. Falling back to Whisper only.')
+      }
+
       if (hasWebSpeechSupport.value) {
         recognition = new SpeechRecognition()
         setupSpeechRecognition()
@@ -93,37 +97,50 @@ export function useSpeechTranscription() {
       // Initialize Whisper model
       const config = { ...defaultWhisperConfig, ...whisperConfig }
       
-      // Check if model exists
-      const modelExists = await invoke<boolean>('check_whisper_model_availability', {
-        modelSize: config.modelSize
-      })
-
-      if (!modelExists) {
-        console.log(`Downloading Whisper model: ${config.modelSize}`)
-        await invoke<string>('download_whisper_model', {
-          modelSize: config.modelSize
+      // Check if model exists with proper error handling
+      try {
+        const modelExists = await invoke<boolean>('check_whisper_model_availability', {
+          model_size: config.modelSize
         })
-      }
 
-      // Initialize the model
-      await invoke<string>('initialize_whisper_model', {
-        config: {
+        if (!modelExists) {
+          console.log(`Downloading Whisper model: ${config.modelSize}`)
+          await invoke<string>('download_whisper_model', {
+            model_size: config.modelSize
+          })
+        }
+
+        // Initialize the model
+        await invoke<string>('initialize_whisper_model', {
           model_size: config.modelSize,
           language: config.language,
           enable_vad: config.enableVAD,
           silence_threshold: config.silenceThreshold,
           max_segment_length: config.maxSegmentLength
-        }
-      })
+        })
 
-      hasWhisperModel.value = true
+        hasWhisperModel.value = true
+      } catch (whisperError) {
+        console.warn('Whisper initialization failed:', whisperError)
+        hasWhisperModel.value = false
+        
+        // Continue without Whisper if Web Speech API is available
+        if (!hasWebSpeechSupport.value) {
+          throw new Error(`Both Web Speech API and Whisper failed. Whisper error: ${whisperError}`)
+        }
+      }
+
       isInitialized.value = true
       
-      console.log('Speech transcription system initialized successfully')
+      console.log('Speech transcription system initialized successfully', {
+        webSpeech: hasWebSpeechSupport.value,
+        whisper: hasWhisperModel.value
+      })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       error.value = `Failed to initialize: ${message}`
       console.error('Initialization error:', err)
+      throw err
     }
   }
 
@@ -138,6 +155,7 @@ export function useSpeechTranscription() {
 
     recognition.onstart = () => {
       console.log('Speech recognition started')
+      error.value = null
     }
 
     recognition.onresult = (event) => {
@@ -177,18 +195,49 @@ export function useSpeechTranscription() {
     recognition.onerror = (event) => {
       console.error('Speech recognition error:', event.error)
       error.value = `Speech recognition error: ${event.error}`
+      
+      // Handle specific errors
+      if (event.error === 'not-allowed') {
+        error.value = 'Microphone permission denied. Please allow microphone access and try again.'
+      } else if (event.error === 'no-speech') {
+        error.value = 'No speech detected. Please speak clearly into the microphone.'
+      } else if (event.error === 'network') {
+        error.value = 'Network error. Check your internet connection.'
+      } else if (event.error === 'aborted') {
+        // Don't show error for intentional stops
+        if (isRecording.value) {
+          error.value = null
+        }
+      }
     }
 
     recognition.onend = () => {
       console.log('Speech recognition ended')
-      if (isRecording.value) {
-        // Restart if we're still supposed to be recording
-        try {
-          recognition?.start()
-        } catch (err) {
-          console.warn('Failed to restart speech recognition:', err)
-        }
+      if (isRecording.value && hasWebSpeechSupport.value) {
+        // Implement retry logic with backoff
+        setTimeout(() => {
+          if (isRecording.value && recognition) {
+            try {
+              recognition.start()
+            } catch (err) {
+              console.warn('Failed to restart speech recognition:', err)
+              error.value = 'Failed to restart speech recognition. Please try again.'
+            }
+          }
+        }, 1000) // 1 second delay before retry
       }
+    }
+  }
+
+  // Request microphone permission
+  async function requestMicrophonePermission(): Promise<boolean> {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream.getTracks().forEach(track => track.stop())
+      return true
+    } catch (error) {
+      console.error('Microphone permission denied:', error)
+      return false
     }
   }
 
@@ -200,6 +249,13 @@ export function useSpeechTranscription() {
 
     try {
       error.value = null
+      
+      // Check microphone permission first
+      const hasPermission = await requestMicrophonePermission()
+      if (!hasPermission) {
+        throw new Error('Microphone permission required for speech transcription')
+      }
+      
       isRecording.value = true
 
       // Clear previous results
@@ -218,39 +274,49 @@ export function useSpeechTranscription() {
 
       // Start Web Speech API for interim results
       if (recognition && hasWebSpeechSupport.value) {
-        recognition.start()
+        try {
+          recognition.start()
+        } catch (speechError) {
+          console.warn('Web Speech API failed to start:', speechError)
+          // Continue with audio recording only
+        }
       }
 
-      // Start audio recording for Whisper processing
-      audioStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          sampleRate: defaultAudioConfig.sampleRate,
-          channelCount: defaultAudioConfig.channels,
-          echoCancellation: true,
-          noiseSuppression: true
+      // Start audio recording for Whisper processing (if available)
+      if (hasWhisperModel.value) {
+        audioStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            sampleRate: defaultAudioConfig.sampleRate,
+            channelCount: defaultAudioConfig.channels,
+            echoCancellation: true,
+            noiseSuppression: true
+          }
+        })
+
+        mediaRecorder = new MediaRecorder(audioStream, {
+          mimeType: defaultAudioConfig.mimeType
+        })
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunks.push(event.data)
+          }
         }
+
+        mediaRecorder.onstop = async () => {
+          if (audioChunks.length > 0) {
+            await processAudioWithWhisper()
+          }
+        }
+
+        // Record in chunks for real-time processing
+        mediaRecorder.start(1000) // 1 second chunks
+      }
+
+      console.log('Recording started', {
+        webSpeech: hasWebSpeechSupport.value && !!recognition,
+        whisper: hasWhisperModel.value
       })
-
-      mediaRecorder = new MediaRecorder(audioStream, {
-        mimeType: defaultAudioConfig.mimeType
-      })
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunks.push(event.data)
-        }
-      }
-
-      mediaRecorder.onstop = async () => {
-        if (audioChunks.length > 0) {
-          await processAudioWithWhisper()
-        }
-      }
-
-      // Record in chunks for real-time processing
-      mediaRecorder.start(1000) // 1 second chunks
-
-      console.log('Recording started')
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       error.value = `Failed to start recording: ${message}`
