@@ -1,0 +1,49 @@
+{
+  "calibration": {
+    "x_scale": 2.464887640449429,
+    "y_scale": -7.275864507460615,
+    "x_offset": 6.299157303370792,
+    "y_offset": 582.9864931758698,
+    "virtual_desktop": {
+      "width": 3840,
+      "height": 1744,
+      "min_x": -1920,
+      "min_y": 0,
+      "max_x": 1920,
+      "max_y": 1744
+    },
+    "calibration_accuracy": 1134.765273388222
+  },
+  "virtual_desktop": {
+    "width": 3840,
+    "height": 1744,
+    "min_x": -1920,
+    "min_y": 0,
+    "max_x": 1920,
+    "max_y": 1744
+  },
+  "screens": [
+    {
+      "id": 0,
+      "x": 0,
+      "y": 0,
+      "width": 1920,
+      "height": 1080,
+      "name": "\\\\.\\DISPLAY5",
+      "is_primary": true,
+      "right_edge": 1920,
+      "bottom_edge": 1080
+    },
+    {
+      "id": 1,
+      "x": -1920,
+      "y": 664,
+      "width": 1920,
+      "height": 1080,
+      "name": "\\\\.\\DISPLAY1",
+      "is_primary": false,
+      "right_edge": 0,
+      "bottom_edge": 1744
+    }
+  ]
+}
