@@ -62,17 +62,20 @@ export function useMLEyeTracking() {
   const error = ref<string | null>(null)
   const isLoading = ref(false)
 
-  // Enhanced configuration
+  // Enhanced configuration (will be updated with virtual desktop dimensions)
   const config = ref<MLEyeTrackingConfig>({
     camera_id: 0,
-    screen_width: window.screen.width,
-    screen_height: window.screen.height,
+    screen_width: 0,  // Will be set by resetConfig()
+    screen_height: 0, // Will be set by resetConfig()
     smoothing_window: 8,
     confidence_threshold: 0.7,
     kalman_process_noise: 0.1,
     kalman_measurement_noise: 1.0,
     adaptive_smoothing: true
   })
+
+  // Initialize config with virtual desktop dimensions
+  resetConfig()
 
   // Performance metrics
   const fps = ref(0)
@@ -126,19 +129,15 @@ export function useMLEyeTracking() {
 
   // Initialize smoothing components
   function initializeSmoothingComponents() {
-    // Initialize Kalman filter
-    const kalmanConfig: KalmanConfig = {
-      processNoise: config.value.kalman_process_noise,
-      measurementNoise: config.value.kalman_measurement_noise,
-      initialError: 100.0
-    }
-    kalmanFilter.value = new KalmanFilter2D(kalmanConfig)
+    // Kalman filter disabled to match original gaze-tracker.py motion characteristics
+    // Only using simple moving average smoothing now
+    kalmanFilter.value = null
     
     // Clear history
     gazeHistory.value = []
     calibrationPoints.value = []
     
-    console.log('🎯 Smoothing components initialized', kalmanConfig)
+    console.log('🎯 Simple smoothing initialized (no Kalman filter)')
   }
 
   // Core smoothing pipeline
@@ -161,21 +160,9 @@ export function useMLEyeTracking() {
     // Step 3: Apply calibration corrections
     const calibratedGaze = applyCalibrationCorrections(rawGaze)
 
-    // Step 4: Kalman filtering
+    // Step 4: Skip Kalman filtering (use original simple smoothing)
+    // Kalman filter disabled to match original gaze-tracker.py motion characteristics
     let kalmanSmoothed = calibratedGaze
-    if (kalmanFilter.value) {
-      const deltaTime = rawGaze.timestamp - lastUpdateTime.value || 16.67 // ~60fps fallback
-      const kalmanResult = kalmanFilter.value.update(
-        calibratedGaze.x, 
-        calibratedGaze.y, 
-        deltaTime / 1000.0 // Convert to seconds
-      )
-      kalmanSmoothed = {
-        ...calibratedGaze,
-        x: kalmanResult.x,
-        y: kalmanResult.y
-      }
-    }
 
     // Step 5: Moving average smoothing (adaptive)
     const movingAverageSmoothed = applyMovingAverageSmoothing(kalmanSmoothed)
@@ -219,39 +206,27 @@ export function useMLEyeTracking() {
     }
   }
 
-  // Moving average smoothing with adaptive strength
+  // Simple moving average smoothing (matching original gaze-tracker.py)
   function applyMovingAverageSmoothing(gaze: MLGazeData): MLGazeData {
-    // Add to history
+    // Add to history (limit to 5 samples like original)
     gazeHistory.value.push(gaze)
-    if (gazeHistory.value.length > maxHistorySize) {
+    if (gazeHistory.value.length > 5) {
       gazeHistory.value.shift()
     }
 
-    const windowSize = Math.min(config.value.smoothing_window, gazeHistory.value.length)
-    const recentGazes = gazeHistory.value.slice(-windowSize)
+    // Apply simple moving average if we have at least 2 samples (like original)
+    if (gazeHistory.value.length >= 2) {
+      const avgX = gazeHistory.value.reduce((sum, g) => sum + g.x, 0) / gazeHistory.value.length
+      const avgY = gazeHistory.value.reduce((sum, g) => sum + g.y, 0) / gazeHistory.value.length
 
-    // Calculate adaptive smoothing strength based on movement
-    let smoothingStrength = 0.3 // Default
-    if (config.value.adaptive_smoothing && kalmanFilter.value) {
-      const velocity = kalmanFilter.value.getVelocity()
-      const speed = Math.sqrt(velocity.vx * velocity.vx + velocity.vy * velocity.vy)
-      smoothingStrength = Math.max(0.1, Math.min(0.8, 0.5 - speed * 0.1))
+      return {
+        ...gaze,
+        x: avgX,
+        y: avgY
+      }
     }
 
-    // Weighted moving average with higher weight for recent samples
-    let weightedX = 0, weightedY = 0, totalWeight = 0
-    for (let i = 0; i < recentGazes.length; i++) {
-      const weight = Math.pow(smoothingStrength, recentGazes.length - 1 - i)
-      weightedX += recentGazes[i].x * weight
-      weightedY += recentGazes[i].y * weight
-      totalWeight += weight
-    }
-
-    return {
-      ...gaze,
-      x: weightedX / totalWeight,
-      y: weightedY / totalWeight
-    }
+    return gaze
   }
 
   // Update smoothing statistics
@@ -417,6 +392,11 @@ export function useMLEyeTracking() {
       isLoading.value = true
       error.value = null
 
+      // Ensure config has correct virtual desktop dimensions
+      if (!config.value.screen_width || !config.value.screen_height) {
+        await resetConfig()
+      }
+
       // Update configuration
       if (userConfig) {
         config.value = { ...config.value, ...userConfig }
@@ -489,7 +469,7 @@ export function useMLEyeTracking() {
       } catch (err) {
         console.error('Failed to get ML gaze data:', err)
       }
-    }, 33) // ~30 FPS
+    }, 50) // ~20 FPS (matching original gaze-tracker.py)
   }
 
   async function stopTracking() {
@@ -600,16 +580,33 @@ export function useMLEyeTracking() {
     config.value = { ...config.value, ...newConfig }
   }
 
-  function resetConfig() {
-    config.value = {
-      camera_id: 0,
-      screen_width: window.screen.width,
-      screen_height: window.screen.height,
-      smoothing_window: 8,
-      confidence_threshold: 0.7,
-      kalman_process_noise: 0.1,
-      kalman_measurement_noise: 1.0,
-      adaptive_smoothing: true
+  async function resetConfig() {
+    try {
+      // Get virtual desktop size for multi-monitor support
+      const [virtualWidth, virtualHeight] = await invoke<[number, number]>('get_virtual_desktop_size')
+      
+      config.value = {
+        camera_id: 0,
+        screen_width: virtualWidth,
+        screen_height: virtualHeight,
+        smoothing_window: 8,
+        confidence_threshold: 0.7,
+        kalman_process_noise: 0.1,
+        kalman_measurement_noise: 1.0,
+        adaptive_smoothing: true
+      }
+    } catch (error) {
+      console.warn('Failed to get virtual desktop size, using window screen dimensions', error)
+      config.value = {
+        camera_id: 0,
+        screen_width: window.screen.width,
+        screen_height: window.screen.height,
+        smoothing_window: 8,
+        confidence_threshold: 0.7,
+        kalman_process_noise: 0.1,
+        kalman_measurement_noise: 1.0,
+        adaptive_smoothing: true
+      }
     }
   }
 

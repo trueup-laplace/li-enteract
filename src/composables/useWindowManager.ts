@@ -190,18 +190,18 @@ export function useWindowManager() {
   // Initialize window state
   const initializeWindowState = async (): Promise<void> => {
     try {
-      // Get current window position and size
+      // Get current window position and size, and virtual desktop size for multi-monitor support
       const [position, size, screenSize] = await Promise.all([
         invoke<[number, number]>('get_window_position'),
         invoke<[number, number]>('get_window_size'),
-        invoke<[number, number]>('get_screen_size')
+        invoke<[number, number]>('get_virtual_desktop_size')  // Use virtual desktop for multi-monitor
       ])
 
       state.value.position = { x: position[0], y: position[1] }
       state.value.size = { width: size[0], height: size[1] }
       state.value.screenSize = { width: screenSize[0], height: screenSize[1] }
 
-      console.log('Window initialized:', state.value)
+      console.log('Window initialized (multi-monitor aware):', state.value)
     } catch (error) {
       console.error('Failed to initialize window state:', error)
     }

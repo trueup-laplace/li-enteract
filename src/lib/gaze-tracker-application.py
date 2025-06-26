@@ -276,8 +276,8 @@ class GazeTrackerApplication:
         self.LEFT_EYE = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246]
         self.RIGHT_EYE = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398]
         
-        # Gaze smoothing
-        self.gaze_history = deque(maxlen=8)
+        # Gaze smoothing (same as original gaze-tracker.py)
+        self.gaze_history = deque(maxlen=5)
         
         # Calibration data
         self.calibration_points = []
@@ -463,17 +463,14 @@ class GazeTrackerApplication:
             if gaze_result:
                 gaze_x, gaze_y, confidence = gaze_result
                 
-                # Apply smoothing
+                # Apply smoothing (same as original gaze-tracker.py)
                 self.gaze_history.append((gaze_x, gaze_y, confidence))
                 
-                if len(self.gaze_history) >= 3:
-                    # Weighted moving average
-                    weights = np.array([0.1, 0.3, 0.6])  # More weight to recent samples
-                    recent_gazes = list(self.gaze_history)[-3:]
-                    
-                    avg_x = sum(g[0] * w for g, w in zip(recent_gazes, weights)) / sum(weights)
-                    avg_y = sum(g[1] * w for g, w in zip(recent_gazes, weights)) / sum(weights)
-                    avg_conf = sum(g[2] * w for g, w in zip(recent_gazes, weights)) / sum(weights)
+                if len(self.gaze_history) >= 2:
+                    # Simple moving average (matching original implementation)
+                    avg_x = sum(g[0] for g in self.gaze_history) / len(self.gaze_history)
+                    avg_y = sum(g[1] for g in self.gaze_history) / len(self.gaze_history)
+                    avg_conf = sum(g[2] for g in self.gaze_history) / len(self.gaze_history)
                 else:
                     avg_x, avg_y, avg_conf = gaze_x, gaze_y, confidence
                 
@@ -565,8 +562,8 @@ class GazeTrackerApplication:
                     print(f"GAZE:{gaze_json}")
                     sys.stdout.flush()
                 
-                # Control frame rate
-                time.sleep(1.0 / 30.0)  # 30 FPS
+                # Control frame rate (matching original 20 FPS)
+                time.sleep(1.0 / 20.0)  # 20 FPS
                 
             except KeyboardInterrupt:
                 break

@@ -217,10 +217,17 @@ function startMLGazeWindowMovement() {
     
     const gazeData = mlEyeTracking.currentGaze.value
     if (gazeData && mlEyeTracking.isHighConfidence.value) {
-      // Convert gaze screen coordinates to normalized coordinates (0-1)
+      // Convert gaze screen coordinates to normalized coordinates (-1 to 1)
+      // Python backend sends absolute screen coordinates using virtual desktop, normalize to (-1, 1)
+      
+      // Get virtual desktop size from window manager (matches Python backend)
+      const virtualDesktopSize = windowManager.state.value.screenSize
+      const screenCenterX = virtualDesktopSize.width / 2
+      const screenCenterY = virtualDesktopSize.height / 2
+      
       const normalizedGaze = {
-        x: gazeData.x / mlEyeTracking.config.value.screen_width,
-        y: gazeData.y / mlEyeTracking.config.value.screen_height
+        x: (gazeData.x - screenCenterX) / screenCenterX,  // Convert to -1 to 1 range
+        y: (gazeData.y - screenCenterY) / screenCenterY   // Convert to -1 to 1 range
       }
       
       // Process gaze input through the window manager
