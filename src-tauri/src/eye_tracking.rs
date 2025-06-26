@@ -111,10 +111,10 @@ impl MLEyeTracker {
         // Navigate to the src/lib directory from the project root
         script_path.push("src");
         script_path.push("lib");
-        script_path.push("gaze-ml-improved.py");
+        script_path.push("gaze-tracker-application.py");
 
         if !script_path.exists() {
-            return Err(format!("Python script not found at: {:?}. Current dir: {:?}. Please ensure the gaze-ml-improved.py script exists in src/lib/", 
+            return Err(format!("Python script not found at: {:?}. Current dir: {:?}. Please ensure the gaze-tracker-application.py script exists in src/lib/", 
                 script_path, std::env::current_dir().unwrap_or_default()));
         }
 

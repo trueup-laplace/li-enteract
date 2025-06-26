@@ -1,5 +1,6 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useEyeTracking } from './useEyeTracking'
+import { useAdvancedGazeTracking } from './useAdvancedGazeTracking'
 import { useWindowManager } from './useWindowManager'
 
 interface GazeControlConfig {
@@ -23,6 +24,7 @@ interface GazeControlState {
 export function useGazeWindowControl() {
   // Composables
   const eyeTracking = useEyeTracking()
+  const advancedGazeTracking = useAdvancedGazeTracking()
   const windowManager = useWindowManager()
 
   // Configuration
@@ -99,9 +101,23 @@ export function useGazeWindowControl() {
   // Process gaze data and trigger window movement
   const processGazeForMovement = async (gazeData: any): Promise<void> => {
     if (!state.value.isActive || !config.value.enabled) return
-    if (!gazeData || !gazeData.success) return
 
-    const { gaze, confidence } = gazeData
+    let gaze, confidence
+
+    // Handle different gaze data formats
+    if (advancedGazeTracking.isActive.value && advancedGazeTracking.currentGaze.value) {
+      // Use advanced gaze tracking data
+      const advancedGaze = advancedGazeTracking.currentGaze.value
+      gaze = { x: advancedGaze.x, y: advancedGaze.y }
+      confidence = advancedGaze.confidence
+    } else if (gazeData && gazeData.success) {
+      // Use basic eye tracking data
+      gaze = gazeData.gaze
+      confidence = gazeData.confidence
+    } else {
+      return
+    }
+
     if (!gaze) return
 
     state.value.lastGazeTime = Date.now()
@@ -134,9 +150,45 @@ export function useGazeWindowControl() {
   }
 
   // Start gaze-controlled window movement
-  const startGazeControl = async (): Promise<boolean> => {
+  const startGazeControl = async (useAdvanced: boolean = true): Promise<boolean> => {
     try {
       console.log('Starting gaze-controlled window movement...')
+
+      if (useAdvanced && advancedGazeTracking) {
+        // Use the new advanced gaze tracking system
+        if (!advancedGazeTracking.isActive.value) {
+          const trackingStarted = await advancedGazeTracking.startTracking()
+          if (!trackingStarted) {
+            console.error('Failed to start advanced gaze tracking')
+            // Fallback to basic eye tracking
+            return startBasicGazeControl()
+          }
+        }
+      } else {
+        return startBasicGazeControl()
+      }
+
+      // Enable window movement
+      await windowManager.enableGazeControl()
+
+      // Update state
+      state.value.isActive = true
+      stats.value.sessionStartTime = Date.now()
+      config.value.enabled = true
+
+      console.log('Advanced gaze-controlled window movement started successfully')
+      return true
+
+    } catch (error) {
+      console.error('Failed to start gaze control:', error)
+      return false
+    }
+  }
+
+  // Start basic gaze control as fallback
+  const startBasicGazeControl = async (): Promise<boolean> => {
+    try {
+      console.log('Starting basic gaze-controlled window movement...')
 
       // Start eye tracking if not already active
       if (!eyeTracking.isActive.value) {
@@ -155,11 +207,11 @@ export function useGazeWindowControl() {
       stats.value.sessionStartTime = Date.now()
       config.value.enabled = true
 
-      console.log('Gaze-controlled window movement started successfully')
+      console.log('Basic gaze-controlled window movement started successfully')
       return true
 
     } catch (error) {
-      console.error('Failed to start gaze control:', error)
+      console.error('Failed to start basic gaze control:', error)
       return false
     }
   }
@@ -276,6 +328,7 @@ export function useGazeWindowControl() {
 
     // Control methods
     startGazeControl,
+    startBasicGazeControl,
     stopGazeControl,
     toggleGazeControl,
     updateConfig,
@@ -287,6 +340,7 @@ export function useGazeWindowControl() {
 
     // Sub-composable access
     eyeTracking,
+    advancedGazeTracking,
     windowManager
   }
 } 
