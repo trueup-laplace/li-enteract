@@ -53,6 +53,72 @@ pub async fn get_screen_size() -> Result<(u32, u32), String> {
     }
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MonitorInfo {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub is_primary: bool,
+    pub name: String,
+}
+
+#[tauri::command]
+pub async fn get_monitor_layout() -> Result<Vec<MonitorInfo>, String> {
+    let mut monitors = Vec::new();
+    
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN, SM_CXVIRTUALSCREEN};
+        
+        unsafe {
+            // For now, just return the primary monitor info
+            // EnumDisplayMonitors has complex callback requirements that need more setup
+            let width = GetSystemMetrics(SM_CXSCREEN) as u32;
+            let height = GetSystemMetrics(SM_CYSCREEN) as u32;
+            
+            monitors.push(MonitorInfo {
+                x: 0,
+                y: 0,
+                width,
+                height,
+                is_primary: true,
+                name: "Primary".to_string(),
+            });
+            
+            // If there's a secondary monitor, add a basic detection
+            // This is a simplified approach - in production you'd use proper enumeration
+            let virtual_width = GetSystemMetrics(SM_CXVIRTUALSCREEN) as u32;
+            if virtual_width > width {
+                monitors.push(MonitorInfo {
+                    x: width as i32,
+                    y: 0,
+                    width: virtual_width - width,
+                    height,
+                    is_primary: false,
+                    name: "Secondary".to_string(),
+                });
+            }
+        }
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Fallback for other platforms
+        let (width, height) = get_screen_size().await?;
+        monitors.push(MonitorInfo {
+            x: 0,
+            y: 0,
+            width,
+            height,
+            is_primary: true,
+            name: "Primary".to_string(),
+        });
+    }
+    
+    Ok(monitors)
+}
+
 #[tauri::command]
 pub async fn get_virtual_desktop_size() -> Result<(u32, u32), String> {
     // Get full virtual desktop size (all monitors combined)

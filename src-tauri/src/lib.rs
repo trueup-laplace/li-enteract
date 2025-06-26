@@ -8,7 +8,7 @@ mod speech;
 
 // Re-export the commands from modules
 pub use transparency::{set_window_transparency, emergency_restore_window, toggle_transparency};
-pub use window_manager::{move_window_to_position, get_window_position, get_window_size, get_screen_size, get_virtual_desktop_size, set_window_bounds};
+pub use window_manager::{move_window_to_position, get_window_position, get_window_size, get_screen_size, get_virtual_desktop_size, get_monitor_layout, set_window_bounds};
 pub use eye_tracking::{start_ml_eye_tracking, stop_ml_eye_tracking, get_ml_gaze_data, calibrate_ml_eye_tracking, get_ml_tracking_stats, pause_ml_tracking, resume_ml_tracking, detect_window_drag};
 pub use speech::{
     // Always-on speech commands
@@ -58,6 +58,7 @@ pub fn run() {
             get_window_size,
             get_screen_size,
             get_virtual_desktop_size,
+            get_monitor_layout,
             set_window_bounds,
             
             // Eye tracking commands
