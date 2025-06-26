@@ -253,43 +253,50 @@ export function useAdvancedGazeTracking() {
   // Stop gaze tracking
   const stopTracking = async (): Promise<void> => {
     try {
+      if (!isActive.value) return
+      
       console.log('⏹️ Stopping gaze tracking...')
       
       // Stop polling
       stopDataPolling()
       stopStatsMonitoring()
-      
-      // Stop the backend
+
+      // Stop the backend process
       await invoke('stop_ml_eye_tracking')
       
-      // Reset state
       isActive.value = false
+      isInitialized.value = false
       currentGaze.value = null
-      gazeScreenPosition.value = null
       
-      console.log('✅ Gaze tracking stopped')
+      console.log('🛑 Gaze tracking stopped')
 
     } catch (err) {
-      error.value = `Error stopping tracking: ${(err as Error).message}`
-      console.error('❌ Error stopping gaze tracking:', err)
+      error.value = `Failed to stop tracking: ${(err as Error).message}`
+      console.error('❌ Failed to stop gaze tracking:', err)
     }
   }
 
   // Start data polling loop
   const startDataPolling = (): void => {
+    if (trackingInterval) return // Already polling
+
+    console.log('📊 Starting data polling...')
+    
     trackingInterval = window.setInterval(async () => {
       try {
-        const gazeData = await invoke('get_ml_gaze_data') as AdvancedGazeData | null
+        if (!isActive.value) return
+
+        const gazeData = await invoke<AdvancedGazeData | null>('get_ml_gaze_data')
         
         if (gazeData) {
           currentGaze.value = gazeData
           updateGazeMetrics(gazeData)
           updateCurrentMonitor(gazeData)
-          stats.value.total_frames_processed++
-          stats.value.last_update = Date.now()
         }
       } catch (err) {
-        console.error('Data polling error:', err)
+        console.error('❌ Error polling for gaze data:', err)
+        error.value = `Gaze polling error: ${(err as Error).message}`
+        // Consider stopping polling on repeated errors
       }
     }, 33) // ~30 FPS
   }
@@ -299,11 +306,16 @@ export function useAdvancedGazeTracking() {
     if (trackingInterval) {
       clearInterval(trackingInterval)
       trackingInterval = null
+      console.log('📊 Stopped data polling')
     }
   }
 
   // Start statistics monitoring
   const startStatsMonitoring = (): void => {
+    if (statsInterval) return
+
+    console.log('📊 Starting statistics monitoring...')
+    
     statsInterval = window.setInterval(async () => {
       try {
         const trackingStats = await invoke('get_ml_tracking_stats') as any
@@ -321,6 +333,7 @@ export function useAdvancedGazeTracking() {
     if (statsInterval) {
       clearInterval(statsInterval)
       statsInterval = null
+      console.log('📊 Stopped statistics monitoring')
     }
   }
 

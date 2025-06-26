@@ -120,21 +120,13 @@ impl MLEyeTracker {
 
         // Find Python executable
         let python_cmd = if cfg!(target_os = "windows") {
-            if Command::new("python").arg("--version").output().is_ok() {
-                "python"
-            } else if Command::new("python3").arg("--version").output().is_ok() {
-                "python3"
-            } else {
-                return Err("Python not found. Please install Python 3.8+ and add it to PATH".to_string());
-            }
+            if Command::new("python").arg("--version").output().is_ok() { "python" } 
+            else if Command::new("python3").arg("--version").output().is_ok() { "python3" } 
+            else { return Err("Python not found. Please install Python 3.8+ and add it to PATH".to_string()); }
         } else {
-            if Command::new("python3").arg("--version").output().is_ok() {
-                "python3"
-            } else if Command::new("python").arg("--version").output().is_ok() {
-                "python"
-            } else {
-                return Err("Python not found. Please install Python 3.8+ and add it to PATH".to_string());
-            }
+            if Command::new("python3").arg("--version").output().is_ok() { "python3" }
+            else if Command::new("python").arg("--version").output().is_ok() { "python" }
+            else { return Err("Python not found. Please install Python 3.8+ and add it to PATH".to_string()); }
         };
 
         // Start Python ML eye tracking process with config
@@ -152,9 +144,8 @@ impl MLEyeTracker {
 
         println!("👁️  Started ML eye tracking using script at: {:?}", script_path);
 
-        // Store the gaze data using Arc<Mutex<>> for thread safety
-        let gaze_data_store = Arc::new(Mutex::new(None::<MLGazeData>));
-        let gaze_store_clone = Arc::clone(&gaze_data_store);
+        // Clone the main eye tracker instance for thread-safe access
+        let eye_tracker_clone = Arc::clone(&EYE_TRACKER);
 
         // Spawn stdout reader thread for gaze data
         if let Some(stdout) = child.stdout.take() {
@@ -163,20 +154,13 @@ impl MLEyeTracker {
                 for line in reader.lines() {
                     if let Ok(line) = line {
                         let trimmed = line.trim();
-                        if trimmed.is_empty() {
-                            continue;
-                        }
+                        if trimmed.is_empty() { continue; }
                         
-                        // Parse different types of ML output
                         if trimmed.starts_with("GAZE:") {
                             if let Ok(gaze_data) = serde_json::from_str::<MLGazeData>(&trimmed[5..]) {
-                                // Store the latest gaze data safely
-                                if let Ok(mut store) = gaze_store_clone.lock() {
-                                    *store = Some(gaze_data.clone());
+                                if let Ok(mut tracker) = eye_tracker_clone.lock() {
+                                    tracker.update_gaze_data(gaze_data);
                                 }
-                                
-                                println!("Gaze: ({:.2}, {:.2}) confidence: {:.2}", 
-                                    gaze_data.x, gaze_data.y, gaze_data.confidence);
                             }
                         } else if trimmed.starts_with("CALIBRATION:") {
                             if let Ok(cal_point) = serde_json::from_str::<CalibrationPoint>(&trimmed[12..]) {

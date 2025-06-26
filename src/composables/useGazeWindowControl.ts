@@ -247,9 +247,20 @@ export function useGazeWindowControl() {
     }
   }
 
+  // Watch for advanced gaze data and process it
+  watch(
+    () => advancedGazeTracking.currentGaze.value,
+    (newGazeData) => {
+      if (newGazeData && state.value.isActive) {
+        processGazeForMovement(newGazeData)
+      }
+    },
+    { deep: true }
+  )
+
   // Update configuration
   const updateConfig = (newConfig: Partial<GazeControlConfig>): void => {
-    config.value = { ...config.value, ...newConfig }
+    Object.assign(config.value, newConfig)
     
     // Update window manager config if needed
     if (newConfig.movementThreshold !== undefined) {
