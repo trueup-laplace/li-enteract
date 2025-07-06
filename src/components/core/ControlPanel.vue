@@ -296,10 +296,10 @@ const toggleChatWindow = async (event: Event) => {
   }
 }
 
-// Screenshot and Vision Analysis
+// Screen Analysis and Vision
 const takeScreenshotAndAnalyze = async () => {
   try {
-    console.log('📸 Taking screenshot for vision analysis...')
+    console.log('🔍 Analyzing screen for vision analysis...')
     
     // Take screenshot
     const screenshot = await invoke<{image_base64: string, width: number, height: number}>('capture_screenshot')
@@ -312,11 +312,11 @@ const takeScreenshotAndAnalyze = async () => {
       }, 150)
     }
     
-    // Add screenshot preview to chat
+    // Add screen analysis message to chat
     const screenshotMessageIndex = chatHistory.value.length
     chatHistory.value.push({
       type: 'user',
-      message: `📸 Screenshot captured (${screenshot.width}×${screenshot.height})`,
+      message: `🔍 Screen captured for analysis (${screenshot.width}×${screenshot.height})`,
       timestamp: new Date()
     })
     
@@ -390,10 +390,10 @@ const takeScreenshotAndAnalyze = async () => {
     })
     
   } catch (error) {
-    console.error('Failed to capture screenshot or analyze:', error)
+    console.error('Failed to analyze screen:', error)
     chatHistory.value.push({
       type: 'assistant',
-      message: `❌ Failed to capture screenshot: ${error}`,
+      message: `❌ Failed to analyze screen: ${error}`,
       timestamp: new Date()
     })
   }
@@ -1326,23 +1326,23 @@ const renderMarkdown = (text: string): string => {
                 <h4 class="text-white/80 text-sm font-medium mb-2">Pull New Model</h4>
                 <div class="popular-models">
                   <button 
-                    v-for="modelName in ['gemma3:1b-it-qat', 'qwen2.5vl', 'deepseek-r1', 'llama3.2']" 
+                    v-for="modelName in ['gemma3:1b-it-qat', 'qwen2.5vl:3b', 'deepseek-r1:1.5b', 'llama3.2']" 
                     :key="modelName"
                     @click="pullModel(modelName)"
                     :disabled="pullingModel === modelName"
                     class="model-pull-btn"
                     :class="{ 
                       'recommended': modelName === 'gemma3:1b-it-qat',
-                      'vision-model': modelName === 'qwen2.5vl',
-                      'research-model': modelName === 'deepseek-r1'
+                      'vision-model': modelName === 'qwen2.5vl:3b',
+                      'research-model': modelName === 'deepseek-r1:1.5b'
                     }"
                   >
                     <ArrowDownTrayIcon v-if="pullingModel !== modelName" class="w-3 h-3" />
                     <div v-else class="w-3 h-3 animate-spin">⟳</div>
                     <span>{{ modelName }}</span>
                     <span v-if="modelName === 'gemma3:1b-it-qat'" class="recommended-badge">Enteract Agent</span>
-                    <span v-if="modelName === 'qwen2.5vl'" class="vision-badge">Vision</span>
-                    <span v-if="modelName === 'deepseek-r1'" class="research-badge">Research</span>
+                    <span v-if="modelName === 'qwen2.5vl:3b'" class="vision-badge">Vision</span>
+                    <span v-if="modelName === 'deepseek-r1:1.5b'" class="research-badge">Research</span>
                   </button>
                 </div>
               </div>
@@ -1432,9 +1432,9 @@ const renderMarkdown = (text: string): string => {
           
           <!-- Agent Action Buttons -->
           <div class="agent-actions">
-            <button @click="takeScreenshotAndAnalyze" class="agent-btn vision-btn" title="Take Screenshot & Analyze">
+            <button @click="takeScreenshotAndAnalyze" class="agent-btn vision-btn" title="Analyze Screen">
               <CameraIcon class="w-4 h-4" />
-              <span>Vision</span>
+              <span>Analyze Screen</span>
             </button>
             
             <button @click="startDeepResearch" class="agent-btn research-btn" title="Deep Research Mode">

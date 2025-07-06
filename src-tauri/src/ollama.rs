@@ -383,7 +383,7 @@ pub async fn generate_vision_analysis(
     image_base64: String,
     session_id: String,
 ) -> Result<(), String> {
-    let model = "qwen2.5vl".to_string();
+    let model = "qwen2.5vl:3b".to_string();
     let full_prompt = format!("Screenshot Analysis Request:\n\n{}", prompt);
     
     generate_agent_response_stream_with_image(
@@ -402,7 +402,7 @@ pub async fn generate_deep_research(
     prompt: String,
     session_id: String,
 ) -> Result<(), String> {
-    let model = "deepseek-r1".to_string();
+    let model = "deepseek-r1:1.5b".to_string();
     let full_prompt = format!("Deep Research Query:\n\n{}", prompt);
     
     generate_agent_response_stream(app_handle, model, full_prompt, DEEP_RESEARCH_PROMPT.to_string(), session_id).await
