@@ -40,7 +40,7 @@ const dragStartTime = ref(0)
 // Chat window state
 const showChatWindow = ref(false)
 const chatMessage = ref('')
-const chatHistory = ref<Array<{type: 'user' | 'assistant', message: string, timestamp: Date}>>([])
+const chatHistory = ref<Array<{type: 'user' | 'assistant' | 'transcription', message: string, timestamp: Date, isInterim?: boolean, confidence?: number}>>([])
 
 // Transparency controls state
 const showTransparencyControls = ref(false)
@@ -457,6 +457,12 @@ onMounted(async () => {
     document.addEventListener('mouseup', handleDragEnd)
   }
   
+  // Setup speech transcription event listeners
+  setupSpeechTranscriptionListeners()
+  
+  // Initialize speech transcription system
+  await store.initializeSpeechTranscription('base')
+  
   // Initialize window size
   await resizeWindow(false, false)
   
@@ -477,7 +483,153 @@ onUnmounted(() => {
   document.removeEventListener('mouseup', handleDragEnd)
   document.removeEventListener('mousemove', handleResize)
   document.removeEventListener('mouseup', stopResize)
+  
+  // Remove speech transcription event listeners
+  removeSpeechTranscriptionListeners()
 })
+
+// Setup speech transcription event listeners
+const setupSpeechTranscriptionListeners = () => {
+  window.addEventListener('transcription-started', handleTranscriptionStarted)
+  window.addEventListener('transcription-interim', handleTranscriptionInterim)
+  window.addEventListener('transcription-final', handleTranscriptionFinal)
+  window.addEventListener('transcription-error', handleTranscriptionError)
+  window.addEventListener('transcription-stopped', handleTranscriptionStopped)
+  window.addEventListener('transcription-complete', handleTranscriptionComplete)
+  window.addEventListener('transcription-auto-stopped', handleTranscriptionAutoStopped)
+}
+
+const removeSpeechTranscriptionListeners = () => {
+  window.removeEventListener('transcription-started', handleTranscriptionStarted)
+  window.removeEventListener('transcription-interim', handleTranscriptionInterim)
+  window.removeEventListener('transcription-final', handleTranscriptionFinal)
+  window.removeEventListener('transcription-error', handleTranscriptionError)
+  window.removeEventListener('transcription-stopped', handleTranscriptionStopped)
+  window.removeEventListener('transcription-complete', handleTranscriptionComplete)
+  window.removeEventListener('transcription-auto-stopped', handleTranscriptionAutoStopped)
+}
+
+// Speech transcription event handlers
+const handleTranscriptionStarted = (event: Event) => {
+  const customEvent = event as CustomEvent
+  console.log('🎤 Transcription started', customEvent.detail)
+  
+  // Auto-open chat window when transcription starts
+  if (!showChatWindow.value) {
+    showChatWindow.value = true
+    setTimeout(() => {
+      scrollChatToBottom()
+    }, 150)
+  }
+}
+
+const handleTranscriptionInterim = (event: Event) => {
+  const customEvent = event as CustomEvent
+  console.log('🎤 Interim transcription', customEvent.detail)
+  
+  const interimText = customEvent.detail.text || ''
+  if (interimText.trim()) {
+    // Add or update interim message
+    const lastMessage = chatHistory.value[chatHistory.value.length - 1]
+    if (lastMessage && lastMessage.type === 'transcription' && lastMessage.isInterim) {
+      // Update existing interim message
+      lastMessage.message = interimText
+    } else {
+      // Add new interim message
+      chatHistory.value.push({
+        type: 'transcription',
+        message: interimText,
+        timestamp: new Date(),
+        isInterim: true,
+        confidence: customEvent.detail.confidence || 0.5
+      })
+    }
+    
+    setTimeout(() => {
+      scrollChatToBottom()
+    }, 50)
+  }
+}
+
+const handleTranscriptionFinal = (event: Event) => {
+  const customEvent = event as CustomEvent
+  console.log('🎤 Final transcription', customEvent.detail)
+  
+  const finalText = customEvent.detail.text || ''
+  if (finalText.trim()) {
+    // Replace interim message with final one or add new final message
+    const lastMessage = chatHistory.value[chatHistory.value.length - 1]
+    if (lastMessage && lastMessage.type === 'transcription' && lastMessage.isInterim) {
+      // Update interim message to final
+      lastMessage.message = finalText
+      lastMessage.isInterim = false
+      lastMessage.confidence = customEvent.detail.confidence || 0.9
+    } else {
+      // Add new final message
+      chatHistory.value.push({
+        type: 'transcription',
+        message: finalText,
+        timestamp: new Date(),
+        isInterim: false,
+        confidence: customEvent.detail.confidence || 0.9
+      })
+    }
+    
+    setTimeout(() => {
+      scrollChatToBottom()
+    }, 50)
+  }
+}
+
+const handleTranscriptionError = (event: Event) => {
+  const customEvent = event as CustomEvent
+  console.log('❌ Transcription error', customEvent.detail)
+  
+  // Add error message to chat
+  chatHistory.value.push({
+    type: 'assistant',
+    message: `❌ Transcription error: ${customEvent.detail.error}`,
+    timestamp: new Date()
+  })
+  
+  setTimeout(() => {
+    scrollChatToBottom()
+  }, 50)
+}
+
+const handleTranscriptionStopped = (event: Event) => {
+  const customEvent = event as CustomEvent
+  console.log('⏹️ Transcription stopped', customEvent.detail)
+}
+
+const handleTranscriptionComplete = (event: Event) => {
+  const customEvent = event as CustomEvent
+  console.log('✅ Transcription complete', customEvent.detail)
+}
+
+const handleTranscriptionAutoStopped = (event: Event) => {
+  const customEvent = event as CustomEvent
+  console.log('🔄 Transcription auto-stopped', customEvent.detail)
+  
+  // Add system message about auto-stop
+  chatHistory.value.push({
+    type: 'assistant',
+    message: `🔄 Transcription stopped automatically (${customEvent.detail.reason})`,
+    timestamp: new Date()
+  })
+  
+  setTimeout(() => {
+    scrollChatToBottom()
+  }, 50)
+}
+
+// Helper function to scroll chat to bottom
+const scrollChatToBottom = () => {
+  const chatMessages = document.querySelector('.chat-messages')
+  if (chatMessages) {
+    chatMessages.scrollTop = chatMessages.scrollHeight
+  }
+}
 </script>
 
 <template>
@@ -636,9 +788,35 @@ onUnmounted(() => {
             </div>
             
             <div v-for="(message, index) in chatHistory" :key="index" class="chat-message"
-                 :class="{ 'user': message.type === 'user', 'assistant': message.type === 'assistant' }">
+                 :class="{ 
+                   'user': message.type === 'user', 
+                   'assistant': message.type === 'assistant',
+                   'transcription': message.type === 'transcription'
+                 }">
               <div class="message-bubble">
-                <p class="message-text">{{ message.message }}</p>
+                <!-- Transcription messages -->
+                <div v-if="message.type === 'transcription'" class="transcription-message">
+                  <!-- Interim transcription (thought stream) -->
+                  <div v-if="message.isInterim" class="interim-transcription">
+                    <span class="interim-icon">💭</span>
+                    <span class="interim-text">{{ message.message }}</span>
+                    <span class="interim-dots">...</span>
+                  </div>
+                  <!-- Final transcription -->
+                  <div v-else class="final-transcription">
+                    <div class="transcription-content">
+                      <span class="transcription-icon">🎤</span>
+                      <span class="transcription-text">{{ message.message }}</span>
+                    </div>
+                    <div v-if="message.confidence" class="confidence-indicator">
+                      {{ Math.round(message.confidence * 100) }}%
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Regular user/assistant messages -->
+                <p v-else class="message-text">{{ message.message }}</p>
+                
                 <span class="message-time">{{ message.timestamp.toLocaleTimeString() }}</span>
               </div>
             </div>
@@ -984,6 +1162,10 @@ onUnmounted(() => {
   @apply flex justify-start;
 }
 
+.chat-message.transcription {
+  @apply flex justify-start;
+}
+
 .message-bubble {
   @apply max-w-xs px-3 py-2 rounded-2xl;
 }
@@ -994,6 +1176,50 @@ onUnmounted(() => {
 
 .chat-message.assistant .message-bubble {
   @apply bg-white/15 text-white/90;
+}
+
+.chat-message.transcription .message-bubble {
+  @apply bg-purple-500/20 text-white/90 border border-purple-400/30;
+}
+
+.transcription-message {
+  @apply w-full;
+}
+
+.interim-transcription {
+  @apply flex items-center gap-2;
+}
+
+.interim-icon {
+  @apply text-orange-300 text-sm;
+}
+
+.interim-text {
+  @apply italic text-orange-200;
+}
+
+.interim-dots {
+  @apply text-orange-400 animate-pulse font-bold;
+}
+
+.final-transcription {
+  @apply flex flex-col gap-1;
+}
+
+.transcription-content {
+  @apply flex items-center gap-2;
+}
+
+.transcription-icon {
+  @apply text-green-400 text-sm;
+}
+
+.transcription-text {
+  @apply text-white/90;
+}
+
+.confidence-indicator {
+  @apply text-xs text-white/60 mt-1;
 }
 
 .message-text {
