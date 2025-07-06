@@ -7,6 +7,7 @@ export const useAppStore = defineStore('app', () => {
   // State
   const micEnabled = ref(false)
   const windowCollapsed = ref(false)
+  const viewCollapsed = ref(true) // Start collapsed due to compact initial window size
   const isRecording = ref(false)
   const recordingTime = ref(0)
   
@@ -46,6 +47,10 @@ export const useAppStore = defineStore('app', () => {
 
   const toggleWindowCollapse = () => {
     windowCollapsed.value = !windowCollapsed.value
+  }
+
+  const toggleViewCollapse = () => {
+    viewCollapsed.value = !viewCollapsed.value
   }
 
   const toggleRecording = () => {
@@ -244,6 +249,7 @@ export const useAppStore = defineStore('app', () => {
     // State
     micEnabled,
     windowCollapsed,
+    viewCollapsed,
     isRecording,
     recordingTime,
     chatMessages,
@@ -256,6 +262,7 @@ export const useAppStore = defineStore('app', () => {
     // Actions
     toggleMic,
     toggleWindowCollapse,
+    toggleViewCollapse,
     toggleRecording,
     addMessage,
     updateMessage,

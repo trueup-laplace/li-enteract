@@ -35,18 +35,18 @@ onUnmounted(() => {
 // Setup event listeners for speech transcription
 function setupEventListeners() {
   // Wake word detection events
-  window.addEventListener('wake-word-detected', handleWakeWordDetected as EventListener)
-  window.addEventListener('wake-word-feedback', handleWakeWordFeedback as EventListener)
+  window.addEventListener('wake-word-detected', handleWakeWordDetected)
+  window.addEventListener('wake-word-feedback', handleWakeWordFeedback)
   
   // Speech transcription events
-  window.addEventListener('transcription-started', handleTranscriptionStarted as EventListener)
-  window.addEventListener('transcription-interim', handleTranscriptionInterim as EventListener)
-  window.addEventListener('transcription-final', handleTranscriptionFinal as EventListener)
-  window.addEventListener('transcription-error', handleTranscriptionError as EventListener)
-  window.addEventListener('transcription-stopped', handleTranscriptionStopped as EventListener)
-  window.addEventListener('transcription-complete', handleTranscriptionComplete as EventListener)
-  window.addEventListener('transcription-auto-stopped', handleTranscriptionAutoStopped as EventListener)
-  window.addEventListener('start-transcription-from-wake-word', handleStartTranscriptionFromWakeWord as EventListener)
+  window.addEventListener('transcription-started', handleTranscriptionStarted)
+  window.addEventListener('transcription-interim', handleTranscriptionInterim)
+  window.addEventListener('transcription-final', handleTranscriptionFinal)
+  window.addEventListener('transcription-error', handleTranscriptionError)
+  window.addEventListener('transcription-stopped', handleTranscriptionStopped)
+  window.addEventListener('transcription-complete', handleTranscriptionComplete)
+  window.addEventListener('transcription-auto-stopped', handleTranscriptionAutoStopped)
+  window.addEventListener('start-transcription-from-wake-word', handleStartTranscriptionFromWakeWord)
 }
 
 function removeEventListeners() {
@@ -63,24 +63,27 @@ function removeEventListeners() {
 }
 
 // Event handlers
-function handleWakeWordDetected(event: CustomEvent) {
-  console.log('HomeScreen: Wake word detected!', event.detail)
+function handleWakeWordDetected(event: Event) {
+  const customEvent = event as CustomEvent
+  console.log('HomeScreen: Wake word detected!', customEvent.detail)
   showWakeWordFeedback.value = true
   setTimeout(() => {
     showWakeWordFeedback.value = false
   }, 3000)
 }
 
-function handleWakeWordFeedback(event: CustomEvent) {
-  console.log('HomeScreen: Wake word feedback', event.detail)
+function handleWakeWordFeedback(event: Event) {
+  const customEvent = event as CustomEvent
+  console.log('HomeScreen: Wake word feedback', customEvent.detail)
   showWakeWordFeedback.value = true
   setTimeout(() => {
     showWakeWordFeedback.value = false
   }, 2000)
 }
 
-function handleStartTranscriptionFromWakeWord(event: CustomEvent) {
-  console.log('HomeScreen: Starting transcription from wake word', event.detail)
+function handleStartTranscriptionFromWakeWord(event: Event) {
+  const customEvent = event as CustomEvent
+  console.log('HomeScreen: Starting transcription from wake word', customEvent.detail)
   transcriptionStatus.value = 'listening'
   isTranscribing.value = true
   currentTranscript.value = ''
@@ -92,8 +95,9 @@ function handleStartTranscriptionFromWakeWord(event: CustomEvent) {
   appStore.startSpeechTranscription()
 }
 
-function handleTranscriptionStarted(event: CustomEvent) {
-  console.log('HomeScreen: Transcription started', event.detail)
+function handleTranscriptionStarted(event: Event) {
+  const customEvent = event as CustomEvent
+  console.log('HomeScreen: Transcription started', customEvent.detail)
   transcriptionStatus.value = 'listening'
   isTranscribing.value = true
   currentTranscript.value = ''
@@ -101,18 +105,19 @@ function handleTranscriptionStarted(event: CustomEvent) {
   scrollToBottom()
 }
 
-function handleTranscriptionInterim(event: CustomEvent) {
-  console.log('HomeScreen: Interim transcription', event.detail)
+function handleTranscriptionInterim(event: Event) {
+  const customEvent = event as CustomEvent
+  console.log('HomeScreen: Interim transcription', customEvent.detail)
   transcriptionStatus.value = 'processing'
-  currentTranscript.value = event.detail.text || ''
+  currentTranscript.value = customEvent.detail.text || ''
   
   // Add interim message to chat if not already present
   const lastMessage = appStore.chatMessages[appStore.chatMessages.length - 1]
   if (!lastMessage || !lastMessage.isInterim) {
     appStore.addMessage(currentTranscript.value, 'transcription', { 
-      source: 'speech',
+      source: 'web-speech',
       isInterim: true,
-      confidence: event.detail.confidence 
+      confidence: customEvent.detail.confidence 
     })
   } else {
     // Update existing interim message
@@ -122,55 +127,60 @@ function handleTranscriptionInterim(event: CustomEvent) {
   scrollToBottom()
 }
 
-function handleTranscriptionFinal(event: CustomEvent) {
-  console.log('HomeScreen: Final transcription', event.detail)
+function handleTranscriptionFinal(event: Event) {
+  const customEvent = event as CustomEvent
+  console.log('HomeScreen: Final transcription', customEvent.detail)
   transcriptionStatus.value = 'idle'
   
   // Replace interim message with final one or add new final message
   const lastMessage = appStore.chatMessages[appStore.chatMessages.length - 1]
   if (lastMessage && lastMessage.isInterim) {
     // Update interim message to final
-    appStore.updateMessage(lastMessage.id, event.detail.text, { isInterim: false })
+    appStore.updateMessage(lastMessage.id, customEvent.detail.text)
   } else {
     // Add new final message
-    appStore.addMessage(event.detail.text, 'transcription', { 
-      source: 'speech',
+    appStore.addMessage(customEvent.detail.text, 'transcription', { 
+      source: 'web-speech',
       isInterim: false,
-      confidence: event.detail.confidence 
+      confidence: customEvent.detail.confidence 
     })
   }
   
   scrollToBottom()
 }
 
-function handleTranscriptionError(event: CustomEvent) {
-  console.log('HomeScreen: Transcription error', event.detail)
+function handleTranscriptionError(event: Event) {
+  const customEvent = event as CustomEvent
+  console.log('HomeScreen: Transcription error', customEvent.detail)
   transcriptionStatus.value = 'error'
-  transcriptionError.value = event.detail.error
+  transcriptionError.value = customEvent.detail.error
   isTranscribing.value = false
 }
 
-function handleTranscriptionStopped(event: CustomEvent) {
-  console.log('HomeScreen: Transcription stopped', event.detail)
+function handleTranscriptionStopped(event: Event) {
+  const customEvent = event as CustomEvent
+  console.log('HomeScreen: Transcription stopped', customEvent.detail)
   transcriptionStatus.value = 'idle'
   isTranscribing.value = false
 }
 
-function handleTranscriptionComplete(event: CustomEvent) {
-  console.log('HomeScreen: Transcription complete', event.detail)
+function handleTranscriptionComplete(event: Event) {
+  const customEvent = event as CustomEvent
+  console.log('HomeScreen: Transcription complete', customEvent.detail)
   transcriptionStatus.value = 'idle'
   isTranscribing.value = false
   currentTranscript.value = ''
 }
 
-function handleTranscriptionAutoStopped(event: CustomEvent) {
-  console.log('HomeScreen: Transcription auto-stopped', event.detail)
+function handleTranscriptionAutoStopped(event: Event) {
+  const customEvent = event as CustomEvent
+  console.log('HomeScreen: Transcription auto-stopped', customEvent.detail)
   transcriptionStatus.value = 'idle'
   isTranscribing.value = false
   
   // Add system message about auto-stop
-  appStore.addMessage(`Transcription stopped automatically (${event.detail.reason})`, 'system', { 
-    source: 'auto-stop' 
+  appStore.addMessage(`Transcription stopped automatically (${customEvent.detail.reason})`, 'assistant', { 
+    source: 'typed' 
   })
   scrollToBottom()
 }
@@ -262,7 +272,7 @@ watch(() => appStore.chatMessages.length, scrollToBottom)
           <div 
             v-if="message.sender === 'transcription'"
             @click="startEditing(message)"
-            class="message-transcription-content"
+            class="message-transcription-content group"
           >
             <div v-if="editingMessageId === message.id" class="edit-form">
               <input
@@ -404,7 +414,7 @@ watch(() => appStore.chatMessages.length, scrollToBottom)
 }
 
 .message-transcription {
-  @apply mr-auto cursor-pointer group relative;
+  @apply mr-auto cursor-pointer relative;
 }
 
 .message-interim {
