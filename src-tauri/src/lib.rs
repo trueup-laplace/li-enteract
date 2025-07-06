@@ -6,6 +6,7 @@ mod window_manager;
 mod eye_tracking;
 mod speech;
 mod ollama;
+mod screenshot;
 
 // Re-export the commands from modules
 use transparency::{set_window_transparency, emergency_restore_window, toggle_transparency};
@@ -25,8 +26,10 @@ use speech::{
 };
 use ollama::{
     get_ollama_models, get_ollama_status, pull_ollama_model, delete_ollama_model,
-    generate_ollama_response, generate_ollama_response_stream, get_ollama_model_info
+    generate_ollama_response, generate_ollama_response_stream, get_ollama_model_info,
+    generate_enteract_agent_response, generate_vision_analysis, generate_deep_research
 };
+use screenshot::{capture_screenshot, capture_screenshot_area};
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -108,7 +111,16 @@ pub fn run() {
             delete_ollama_model,
             generate_ollama_response,
             generate_ollama_response_stream,
-            get_ollama_model_info
+            get_ollama_model_info,
+            
+            // Agent commands
+            generate_enteract_agent_response,
+            generate_vision_analysis,
+            generate_deep_research,
+            
+            // Screenshot commands
+            capture_screenshot,
+            capture_screenshot_area
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

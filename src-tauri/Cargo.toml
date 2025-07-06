@@ -33,6 +33,8 @@ base64 = "0.22"
 tempfile = "3.0"
 reqwest = { version = "0.11", features = ["stream", "json"] }
 futures-util = "0.3"
+screenshots = "0.4"
+image = { version = "0.24", features = ["png"] }
 
 # Platform-specific dependencies for transparency
 [target.'cfg(windows)'.dependencies]

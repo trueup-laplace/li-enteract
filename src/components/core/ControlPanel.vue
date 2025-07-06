@@ -12,7 +12,10 @@ import {
   AdjustmentsHorizontalIcon,
   RocketLaunchIcon,
   TrashIcon,
-  ArrowDownTrayIcon
+  ArrowDownTrayIcon,
+  CameraIcon,
+  MagnifyingGlassIcon,
+  ShieldCheckIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
@@ -293,12 +296,130 @@ const toggleChatWindow = async (event: Event) => {
   }
 }
 
+// Screenshot and Vision Analysis
+const takeScreenshotAndAnalyze = async () => {
+  try {
+    console.log('📸 Taking screenshot for vision analysis...')
+    
+    // Take screenshot
+    const screenshot = await invoke<{image_base64: string, width: number, height: number}>('capture_screenshot')
+    
+    // Auto-open chat window if not open
+    if (!showChatWindow.value) {
+      showChatWindow.value = true
+      setTimeout(() => {
+        scrollChatToBottom()
+      }, 150)
+    }
+    
+    // Add screenshot preview to chat
+    const screenshotMessageIndex = chatHistory.value.length
+    chatHistory.value.push({
+      type: 'user',
+      message: `📸 Screenshot captured (${screenshot.width}×${screenshot.height})`,
+      timestamp: new Date()
+    })
+    
+    // Generate unique session ID
+    const sessionId = `vision-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    
+    // Add streaming message placeholder
+    const streamingMessageIndex = chatHistory.value.length
+    chatHistory.value.push({
+      type: 'assistant',
+      message: '🔍 Analyzing screenshot▋',
+      timestamp: new Date()
+    })
+    
+    setTimeout(() => {
+      scrollChatToBottom()
+    }, 50)
+    
+    let fullResponse = ''
+    let isTyping = true
+    
+    // Set up event listener for vision analysis
+    const unlisten = await listen(`ollama-stream-${sessionId}`, (event: any) => {
+      const data = event.payload
+      
+      switch (data.type) {
+        case 'start':
+          console.log(`👁️ Started vision analysis with ${data.model}`)
+          break
+          
+        case 'chunk':
+          if (data.text) {
+            fullResponse += data.text
+            if (chatHistory.value[streamingMessageIndex]) {
+              chatHistory.value[streamingMessageIndex].message = fullResponse + (isTyping ? '▋' : '')
+            }
+            
+            setTimeout(() => {
+              scrollChatToBottom()
+            }, 10)
+          }
+          
+          if (data.done) {
+            isTyping = false
+            if (chatHistory.value[streamingMessageIndex]) {
+              chatHistory.value[streamingMessageIndex].message = fullResponse
+            }
+          }
+          break
+          
+        case 'error':
+          isTyping = false
+          console.error('Vision analysis error:', data.error)
+          if (chatHistory.value[streamingMessageIndex]) {
+            chatHistory.value[streamingMessageIndex].message = `❌ Vision analysis error: ${data.error}`
+          }
+          break
+          
+        case 'complete':
+          isTyping = false
+          unlisten()
+          break
+      }
+    })
+    
+    // Start vision analysis
+    await invoke('generate_vision_analysis', {
+      prompt: 'Please analyze this screenshot in detail.',
+      imageBase64: screenshot.image_base64,
+      sessionId: sessionId
+    })
+    
+  } catch (error) {
+    console.error('Failed to capture screenshot or analyze:', error)
+    chatHistory.value.push({
+      type: 'assistant',
+      message: `❌ Failed to capture screenshot: ${error}`,
+      timestamp: new Date()
+    })
+  }
+}
+
+// Deep Research Mode
+const startDeepResearch = async () => {
+  if (!chatMessage.value.trim()) {
+    chatMessage.value = 'Conduct a deep research analysis on: '
+    const input = document.querySelector('.chat-input') as HTMLInputElement
+    if (input) {
+      input.focus()
+      input.setSelectionRange(input.value.length, input.value.length)
+    }
+    return
+  }
+  
+  await sendMessage('deep_research')
+}
+
 const closeChatWindow = async () => {
   showChatWindow.value = false
   console.log('💬 Chat window closed')
 }
 
-const sendMessage = async () => {
+const sendMessage = async (agentType: string = 'enteract') => {
   if (!chatMessage.value.trim()) return
   
   const userMessage = chatMessage.value
@@ -325,11 +446,12 @@ const sendMessage = async () => {
     // Generate unique session ID for this conversation
     const sessionId = `chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     
-    // Add streaming message placeholder
+    // Add streaming message placeholder with agent indicator
     const streamingMessageIndex = chatHistory.value.length
+    const agentEmoji = agentType === 'deep_research' ? '🧠' : agentType === 'vision' ? '👁️' : '🛡️'
     chatHistory.value.push({
       type: 'assistant',
-      message: '▋',
+      message: `${agentEmoji}▋`,
       timestamp: new Date()
     })
     
@@ -346,11 +468,7 @@ const sendMessage = async () => {
       
       switch (data.type) {
         case 'start':
-          console.log(`🚀 Started streaming from ${data.model}`)
-          // Update message to show typing cursor
-          if (chatHistory.value[streamingMessageIndex]) {
-            chatHistory.value[streamingMessageIndex].message = '▋'
-          }
+          console.log(`🚀 Started ${agentType} streaming from ${data.model}`)
           break
           
         case 'chunk':
@@ -373,13 +491,13 @@ const sendMessage = async () => {
             if (chatHistory.value[streamingMessageIndex]) {
               chatHistory.value[streamingMessageIndex].message = fullResponse
             }
-            console.log(`✅ Streaming completed. Full response: ${fullResponse}`)
+            console.log(`✅ ${agentType} streaming completed. Full response: ${fullResponse}`)
           }
           break
           
         case 'error':
           isTyping = false
-          console.error('Streaming error:', data.error)
+          console.error(`${agentType} streaming error:`, data.error)
           // Update message to show error
           if (chatHistory.value[streamingMessageIndex]) {
             chatHistory.value[streamingMessageIndex].message = `❌ Error: ${data.error}`
@@ -388,19 +506,26 @@ const sendMessage = async () => {
           
         case 'complete':
           isTyping = false
-          console.log('🎉 Streaming session completed')
+          console.log(`🎉 ${agentType} streaming session completed`)
           // Clean up listener
           unlisten()
           break
       }
     })
     
-    // Start streaming generation
-    await invoke('generate_ollama_response_stream', {
-      model: modelToUse,
-      prompt: userMessage,
-      sessionId: sessionId
-    })
+    // Route to appropriate agent based on type
+    if (agentType === 'deep_research') {
+      await invoke('generate_deep_research', {
+        prompt: userMessage,
+        sessionId: sessionId
+      })
+    } else {
+      // Default to Enteract agent (gemma with security focus)
+      await invoke('generate_enteract_agent_response', {
+        prompt: userMessage,
+        sessionId: sessionId
+      })
+    }
     
     console.log(`🤖 Started streaming AI response from ${modelToUse}`)
     
@@ -772,13 +897,13 @@ const handleTranscriptionFinal = async (event: Event) => {
     
     // Auto-send transcribed text to AI if confidence is high enough
     if ((customEvent.detail.confidence || 0.9) > 0.7) {
-      console.log('🎤 Auto-sending transcription to AI:', finalText)
+      console.log('🎤 Auto-sending transcription to Enteract Agent:', finalText)
       
       // Set the transcribed text as the chat message and send it
       setTimeout(async () => {
         // Temporarily set the message to trigger sendMessage
         chatMessage.value = finalText
-        await sendMessage()
+        await sendMessage('enteract') // Use Enteract agent for transcriptions
         // Clear it again since sendMessage already clears it
       }, 1000) // Small delay to show the transcription first
     }
@@ -931,6 +1056,38 @@ const formatModelSize = (size: number): string => {
 
 const getModelDisplayName = (model: OllamaModel): string => {
   return model.name.split(':')[0] || model.name
+}
+
+// Simple markdown renderer for basic formatting
+const renderMarkdown = (text: string): string => {
+  if (!text) return ''
+  
+  return text
+    // Headers
+    .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold text-white/90 mt-4 mb-2">$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2 class="text-xl font-semibold text-white/95 mt-4 mb-2">$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold text-white mt-4 mb-3">$1</h1>')
+    
+    // Bold and italic
+    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em class="italic text-white/90">$1</em>')
+    
+    // Code blocks
+    .replace(/```([\s\S]*?)```/g, '<div class="bg-black/30 border border-white/20 rounded-lg p-3 my-2 font-mono text-sm text-green-300 overflow-x-auto">$1</div>')
+    .replace(/`(.*?)`/g, '<code class="bg-black/40 px-1.5 py-0.5 rounded text-sm font-mono text-cyan-300">$1</code>')
+    
+    // Lists
+    .replace(/^\* (.*$)/gim, '<li class="ml-4 text-white/85">• $1</li>')
+    .replace(/^- (.*$)/gim, '<li class="ml-4 text-white/85">• $1</li>')
+    .replace(/^\+ (.*$)/gim, '<li class="ml-4 text-white/85">• $1</li>')
+    .replace(/^\d+\. (.*$)/gim, '<li class="ml-4 text-white/85">$1</li>')
+    
+    // Links
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-blue-400 hover:text-blue-300 underline" target="_blank" rel="noopener noreferrer">$1</a>')
+    
+    // Line breaks
+    .replace(/\n\n/g, '<br/><br/>')
+    .replace(/\n/g, '<br/>')
 }
 </script>
 
@@ -1169,17 +1326,23 @@ const getModelDisplayName = (model: OllamaModel): string => {
                 <h4 class="text-white/80 text-sm font-medium mb-2">Pull New Model</h4>
                 <div class="popular-models">
                   <button 
-                    v-for="modelName in ['gemma3:1b-it-qat', 'llama3.2', 'codellama', 'mistral']" 
+                    v-for="modelName in ['gemma3:1b-it-qat', 'qwen2.5vl', 'deepseek-r1', 'llama3.2']" 
                     :key="modelName"
                     @click="pullModel(modelName)"
                     :disabled="pullingModel === modelName"
                     class="model-pull-btn"
-                    :class="{ 'recommended': modelName === 'gemma3:1b-it-qat' }"
+                    :class="{ 
+                      'recommended': modelName === 'gemma3:1b-it-qat',
+                      'vision-model': modelName === 'qwen2.5vl',
+                      'research-model': modelName === 'deepseek-r1'
+                    }"
                   >
                     <ArrowDownTrayIcon v-if="pullingModel !== modelName" class="w-3 h-3" />
                     <div v-else class="w-3 h-3 animate-spin">⟳</div>
                     <span>{{ modelName }}</span>
-                    <span v-if="modelName === 'gemma3:1b-it-qat'" class="recommended-badge">Recommended</span>
+                    <span v-if="modelName === 'gemma3:1b-it-qat'" class="recommended-badge">Enteract Agent</span>
+                    <span v-if="modelName === 'qwen2.5vl'" class="vision-badge">Vision</span>
+                    <span v-if="modelName === 'deepseek-r1'" class="research-badge">Research</span>
                   </button>
                 </div>
               </div>
@@ -1256,10 +1419,10 @@ const getModelDisplayName = (model: OllamaModel): string => {
                 <div v-else class="message-text">
                   <!-- Streaming text with cursor -->
                   <template v-if="message.message.endsWith('▋')">
-                    <span>{{ message.message.slice(0, -1) }}</span><span class="streaming-cursor">▋</span>
+                    <div v-html="renderMarkdown(message.message.slice(0, -1))"></div><span class="streaming-cursor">▋</span>
                   </template>
-                  <!-- Regular completed text -->
-                  <span v-else>{{ message.message }}</span>
+                  <!-- Regular completed text with markdown -->
+                  <div v-else v-html="renderMarkdown(message.message)"></div>
                 </div>
                 
                 <span class="message-time">{{ message.timestamp.toLocaleTimeString() }}</span>
@@ -1267,16 +1430,29 @@ const getModelDisplayName = (model: OllamaModel): string => {
             </div>
           </div>
           
+          <!-- Agent Action Buttons -->
+          <div class="agent-actions">
+            <button @click="takeScreenshotAndAnalyze" class="agent-btn vision-btn" title="Take Screenshot & Analyze">
+              <CameraIcon class="w-4 h-4" />
+              <span>Vision</span>
+            </button>
+            
+            <button @click="startDeepResearch" class="agent-btn research-btn" title="Deep Research Mode">
+              <MagnifyingGlassIcon class="w-4 h-4" />
+              <span>Research</span>
+            </button>
+          </div>
+          
           <div class="chat-input-container">
             <input 
               v-model="chatMessage"
               @keydown="handleChatKeydown"
               class="chat-input"
-              placeholder="Type your message..."
+              placeholder="Ask the Enteract Agent..."
               type="text"
             />
-            <button @click="sendMessage" class="chat-send-btn" :disabled="!chatMessage.trim()">
-              <PaperAirplaneIcon class="w-4 h-4" />
+            <button @click="() => sendMessage()" class="chat-send-btn" :disabled="!chatMessage.trim()">
+              <ShieldCheckIcon class="w-4 h-4" />
             </button>
           </div>
 
@@ -1679,6 +1855,27 @@ const getModelDisplayName = (model: OllamaModel): string => {
   @apply text-xs opacity-70 mt-1 block;
 }
 
+.agent-actions {
+  @apply flex gap-2 px-4 py-2 border-t border-white/10;
+}
+
+.agent-btn {
+  @apply flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200;
+  @apply bg-white/5 border border-white/15 text-white/80;
+  @apply hover:bg-white/10 hover:border-white/30 hover:text-white;
+  @apply hover:scale-105 hover:shadow-lg;
+}
+
+.vision-btn {
+  @apply bg-purple-500/10 border-purple-400/20 text-purple-300;
+  @apply hover:bg-purple-500/20 hover:border-purple-400/40 hover:text-purple-200;
+}
+
+.research-btn {
+  @apply bg-blue-500/10 border-blue-400/20 text-blue-300;
+  @apply hover:bg-blue-500/20 hover:border-blue-400/40 hover:text-blue-200;
+}
+
 .chat-input-container {
   @apply flex items-center gap-2 px-4 py-3 border-t border-white/10;
 }
@@ -2026,6 +2223,22 @@ const getModelDisplayName = (model: OllamaModel): string => {
 
 .recommended-badge {
   @apply text-xs bg-green-400/80 text-green-900 px-1 py-0.5 rounded-md font-medium;
+}
+
+.vision-badge {
+  @apply text-xs bg-purple-400/80 text-purple-900 px-1 py-0.5 rounded-md font-medium;
+}
+
+.research-badge {
+  @apply text-xs bg-blue-400/80 text-blue-900 px-1 py-0.5 rounded-md font-medium;
+}
+
+.model-pull-btn.vision-model {
+  @apply bg-purple-500/30 border-purple-400/50 text-purple-200;
+}
+
+.model-pull-btn.research-model {
+  @apply bg-blue-500/30 border-blue-400/50 text-blue-200;
 }
 
 /* AI Models Panel Transitions */
