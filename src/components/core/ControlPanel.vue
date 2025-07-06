@@ -1,26 +1,41 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { 
   MicrophoneIcon, 
   SparklesIcon,
   CommandLineIcon,
   CpuChipIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  XMarkIcon,
+  PaperAirplaneIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
 import { useWindowManager } from '../../composables/useWindowManager'
 import { useWakeWordDetection } from '../../composables/useWakeWordDetection'
 import { getCompatibilityReport } from '../../utils/browserCompat'
+import { Window } from '@tauri-apps/api/window'
+import { LogicalSize } from '@tauri-apps/api/dpi'
 
 const store = useAppStore()
 const mlEyeTracking = useMLEyeTracking()
 const windowManager = useWindowManager()
 const wakeWordDetection = useWakeWordDetection()
+const currentWindow = Window.getCurrent()
+
+// Window size constants
+const CONTROL_PANEL_HEIGHT = 60
+const CHAT_WINDOW_HEIGHT = 420
+const TOTAL_HEIGHT_WITH_CHAT = CONTROL_PANEL_HEIGHT + CHAT_WINDOW_HEIGHT
 
 // Dragging state
 const isDragging = ref(false)
 const dragStartTime = ref(0)
+
+// Chat window state
+const showChatWindow = ref(false)
+const chatMessage = ref('')
+const chatHistory = ref<Array<{type: 'user' | 'assistant', message: string, timestamp: Date}>>([])
 
 // Error handling state
 const speechError = ref<string | null>(null)
@@ -33,6 +48,22 @@ const compatibilityReport = ref(getCompatibilityReport())
 // ML Eye tracking with window movement state
 const isGazeControlActive = ref(false)
 
+// Dynamic window resizing
+const resizeWindow = async (showChat: boolean) => {
+  try {
+    const height = showChat ? TOTAL_HEIGHT_WITH_CHAT : CONTROL_PANEL_HEIGHT
+    await currentWindow.setSize(new LogicalSize(320, height))
+    console.log(`🪟 Window resized to height: ${height}px`)
+  } catch (error) {
+    console.error('Failed to resize window:', error)
+  }
+}
+
+// Watch for chat window state changes to resize window
+watch(showChatWindow, async (newValue) => {
+  await resizeWindow(newValue)
+})
+
 // Drag event handlers
 const handleDragStart = () => {
   isDragging.value = true
@@ -44,6 +75,64 @@ const handleDragEnd = () => {
   const dragDuration = Date.now() - dragStartTime.value
   isDragging.value = false
   console.log(`🎯 Control panel drag ended (${dragDuration}ms)`)
+}
+
+// Chat window functions
+const toggleChatWindow = async (event: Event) => {
+  event.stopPropagation()
+  showChatWindow.value = !showChatWindow.value
+  console.log(`💬 Chat window ${showChatWindow.value ? 'opened' : 'closed'}`)
+  
+  // Focus on input when opening
+  if (showChatWindow.value) {
+    setTimeout(() => {
+      const input = document.querySelector('.chat-input') as HTMLInputElement
+      if (input) input.focus()
+    }, 150)
+  }
+}
+
+const closeChatWindow = async () => {
+  showChatWindow.value = false
+  console.log('💬 Chat window closed')
+}
+
+const sendMessage = () => {
+  if (!chatMessage.value.trim()) return
+  
+  // Add user message to history
+  chatHistory.value.push({
+    type: 'user',
+    message: chatMessage.value,
+    timestamp: new Date()
+  })
+  
+  // Simulate assistant response (you can replace this with actual AI integration)
+  setTimeout(() => {
+    chatHistory.value.push({
+      type: 'assistant',
+      message: `I received your message: "${chatMessage.value}". This is a placeholder response. You can integrate with your AI assistant here.`,
+      timestamp: new Date()
+    })
+    
+    // Auto-scroll to bottom
+    setTimeout(() => {
+      const chatMessages = document.querySelector('.chat-messages')
+      if (chatMessages) {
+        chatMessages.scrollTop = chatMessages.scrollHeight
+      }
+    }, 50)
+  }, 1000)
+  
+  // Clear input
+  chatMessage.value = ''
+}
+
+const handleChatKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    sendMessage()
+  }
 }
 
 // Enhanced speech transcription with error handling
@@ -184,10 +273,39 @@ const handleKeydown = async (event: KeyboardEvent) => {
     isGazeControlActive.value = false
     console.log('🚨 Emergency stop: All tracking stopped')
   }
+  
+  // Ctrl+Shift+C = Toggle Chat Window
+  if (event.ctrlKey && event.shiftKey && event.key === 'C') {
+    event.preventDefault()
+    await toggleChatWindow(event)
+    console.log('💬 Keyboard shortcut: Chat window toggled')
+  }
+  
+  // Escape = Close chat window
+  if (event.key === 'Escape' && showChatWindow.value) {
+    event.preventDefault()
+    await closeChatWindow()
+  }
 }
 
-onMounted(() => {
+// Click outside to close chat window
+const handleClickOutside = (event: Event) => {
+  if (!showChatWindow.value) return
+  
+  const target = event.target as HTMLElement
+  const chatWindow = document.querySelector('.chat-window')
+  const controlPanel = document.querySelector('.control-panel-glass-bar')
+  
+  if (chatWindow && controlPanel && 
+      !chatWindow.contains(target) && 
+      !controlPanel.contains(target)) {
+    closeChatWindow()
+  }
+}
+
+onMounted(async () => {
   document.addEventListener('keydown', handleKeydown)
+  document.addEventListener('click', handleClickOutside)
   
   // Add drag event listeners
   const controlPanel = document.querySelector('.control-panel-glass-bar') as HTMLElement
@@ -196,111 +314,190 @@ onMounted(() => {
     document.addEventListener('mouseup', handleDragEnd)
   }
   
+  // Initialize window size
+  await resizeWindow(false)
+  
   // Show keyboard shortcuts in console
-  console.log('⌨️ ML Eye Tracking Keyboard Shortcuts:')
+  console.log('⌨️ Keyboard Shortcuts:')
   console.log('   Ctrl+Shift+E = Start/Stop ML Eye Tracking + Window Movement')
   console.log('   Ctrl+Shift+S = Emergency Stop (stop all tracking)')
+  console.log('   Ctrl+Shift+C = Toggle Chat Window')
+  console.log('   Escape = Close Chat Window')
   console.log('🎯 Control Panel is draggable - click and drag to move!')
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
+  document.removeEventListener('click', handleClickOutside)
   document.removeEventListener('mouseup', handleDragEnd)
 })
 </script>
 
 <template>
-  <div 
-    class="control-panel-glass-bar" 
-    :class="{ 'dragging': isDragging }"
-    data-tauri-drag-region
-  >
-    <div class="control-buttons-row">
-      <!-- AI Assistant Button -->
-      <button 
-        class="control-btn group"
-        :class="{ 'active': false }"
-        title="AI Assistant"
-        @click="(event) => event.stopPropagation()"
+  <div class="app-layout">
+    <!-- Control Panel Section -->
+    <div class="control-panel-section">
+      <div 
+        class="control-panel-glass-bar" 
+        :class="{ 'dragging': isDragging }"
+        data-tauri-drag-region
       >
-        <SparklesIcon class="w-4 h-4 text-white/70 group-hover:text-white transition-all" />
-      </button>
-      
-      <!-- Speech Transcription Button -->
-      <button 
-        @click="toggleSpeechTranscription"
-        class="control-btn group"
-        :class="{ 
-          'active-pulse': store.speechStatus.isRecording,
-          'active-warning': store.speechStatus.isProcessing,
-          'active': store.isTranscriptionEnabled && !store.speechStatus.isRecording
-        }"
-        :disabled="store.speechStatus.isProcessing"
-        title="Speech Transcription"
-      >
-        <MicrophoneIcon class="w-4 h-4 transition-all" 
-          :class="getSpeechIconClass()" />
-      </button>
+        <div class="control-buttons-row">
+          <!-- AI Assistant Button -->
+          <button 
+            class="control-btn group"
+            :class="{ 'active': false }"
+            title="AI Assistant"
+            @click="(event) => event.stopPropagation()"
+          >
+            <SparklesIcon class="w-4 h-4 text-white/70 group-hover:text-white transition-all" />
+          </button>
+          
+          <!-- Speech Transcription Button -->
+          <button 
+            @click="toggleSpeechTranscription"
+            class="control-btn group"
+            :class="{ 
+              'active-pulse': store.speechStatus.isRecording,
+              'active-warning': store.speechStatus.isProcessing,
+              'active': store.isTranscriptionEnabled && !store.speechStatus.isRecording
+            }"
+            :disabled="store.speechStatus.isProcessing"
+            title="Speech Transcription"
+          >
+            <MicrophoneIcon class="w-4 h-4 transition-all" 
+              :class="getSpeechIconClass()" />
+          </button>
 
-      <!-- Wake Word Detection Button -->
-      <button 
-        @click="toggleWakeWordDetection"
-        class="control-btn group"
-        :class="{ 
-          'active-pulse': wakeWordDetection.hasRecentDetection.value,
-          'active': wakeWordDetection.isActive.value && !wakeWordDetection.hasRecentDetection.value,
-          'active-error': wakeWordDetection.error.value,
-          'active-warning': wakeWordDetection.isStarting.value || wakeWordDetection.isStopping.value
-        }"
-        :disabled="wakeWordDetection.isStarting.value || wakeWordDetection.isStopping.value"
-        title="Wake Word Detection"
-      >
-        <ExclamationTriangleIcon class="w-4 h-4 transition-all" 
-          :class="getWakeWordIconClass()" />
-      </button>
-      
-      <!-- ML Eye Tracking + Window Movement Button -->
-      <button 
-        @click="toggleMLEyeTrackingWithMovement"
-        class="control-btn group"
-        :class="{ 
-          'active': mlEyeTracking.isActive.value && mlEyeTracking.isCalibrated.value && isGazeControlActive,
-          'active-warning': mlEyeTracking.isActive.value && (!mlEyeTracking.isCalibrated.value || !isGazeControlActive)
-        }"
-        :disabled="mlEyeTracking.isLoading.value"
-        title="ML Eye Tracking + Window Movement"
-      >
-        <CpuChipIcon class="w-4 h-4 transition-all"
-          :class="mlEyeTracking.isActive.value ? 'text-white' : 'text-white/70 group-hover:text-white'" />
-      </button>
+          <!-- Wake Word Detection Button -->
+          <button 
+            @click="toggleWakeWordDetection"
+            class="control-btn group"
+            :class="{ 
+              'active-pulse': wakeWordDetection.hasRecentDetection.value,
+              'active': wakeWordDetection.isActive.value && !wakeWordDetection.hasRecentDetection.value,
+              'active-error': wakeWordDetection.error.value,
+              'active-warning': wakeWordDetection.isStarting.value || wakeWordDetection.isStopping.value
+            }"
+            :disabled="wakeWordDetection.isStarting.value || wakeWordDetection.isStopping.value"
+            title="Wake Word Detection"
+          >
+            <ExclamationTriangleIcon class="w-4 h-4 transition-all" 
+              :class="getWakeWordIconClass()" />
+          </button>
+          
+          <!-- ML Eye Tracking + Window Movement Button -->
+          <button 
+            @click="toggleMLEyeTrackingWithMovement"
+            class="control-btn group"
+            :class="{ 
+              'active': mlEyeTracking.isActive.value && mlEyeTracking.isCalibrated.value && isGazeControlActive,
+              'active-warning': mlEyeTracking.isActive.value && (!mlEyeTracking.isCalibrated.value || !isGazeControlActive)
+            }"
+            :disabled="mlEyeTracking.isLoading.value"
+            title="ML Eye Tracking + Window Movement"
+          >
+            <CpuChipIcon class="w-4 h-4 transition-all"
+              :class="mlEyeTracking.isActive.value ? 'text-white' : 'text-white/70 group-hover:text-white'" />
+          </button>
 
-      <!-- Command Mode Button -->
-      <button 
-        class="control-btn group"
-        title="Command Mode"
-        @click="(event) => event.stopPropagation()"
-      >
-        <CommandLineIcon class="w-4 h-4 text-white/70 group-hover:text-white transition-all" />
-      </button>
-    </div>
-    
-    <!-- Drag indicator -->
-    <div class="drag-indicator" :class="{ 'visible': isDragging }">
-      <div class="drag-dots">
-        <span></span>
-        <span></span>
-        <span></span>
+          <!-- Chat Window Button -->
+          <button 
+            @click="toggleChatWindow"
+            class="control-btn group"
+            :class="{ 'active': showChatWindow }"
+            title="Chat Assistant"
+          >
+            <CommandLineIcon class="w-4 h-4 transition-all" 
+              :class="showChatWindow ? 'text-white' : 'text-white/70 group-hover:text-white'" />
+          </button>
+        </div>
+        
+        <!-- Drag indicator -->
+        <div class="drag-indicator" :class="{ 'visible': isDragging }">
+          <div class="drag-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
       </div>
     </div>
+
+    <!-- Chat Window Section -->
+    <Transition name="chat-window">
+      <div v-if="showChatWindow" class="chat-window-section">
+        <div class="chat-window">
+          <div class="chat-header">
+            <div class="chat-title">
+              <SparklesIcon class="w-4 h-4 text-white/80" />
+              <span class="text-sm font-medium text-white/90">AI Assistant</span>
+            </div>
+            <button @click="closeChatWindow" class="chat-close-btn">
+              <XMarkIcon class="w-4 h-4 text-white/70 hover:text-white transition-colors" />
+            </button>
+          </div>
+          
+          <div class="chat-messages" ref="chatMessages">
+            <div v-if="chatHistory.length === 0" class="chat-empty">
+              <SparklesIcon class="w-6 h-6 text-white/40 mb-2" />
+              <p class="text-white/60 text-sm">Start a conversation with your AI assistant</p>
+            </div>
+            
+            <div v-for="(message, index) in chatHistory" :key="index" class="chat-message"
+                 :class="{ 'user': message.type === 'user', 'assistant': message.type === 'assistant' }">
+              <div class="message-bubble">
+                <p class="message-text">{{ message.message }}</p>
+                <span class="message-time">{{ message.timestamp.toLocaleTimeString() }}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="chat-input-container">
+            <input 
+              v-model="chatMessage"
+              @keydown="handleChatKeydown"
+              class="chat-input"
+              placeholder="Type your message..."
+              type="text"
+            />
+            <button @click="sendMessage" class="chat-send-btn" :disabled="!chatMessage.trim()">
+              <PaperAirplaneIcon class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <style scoped>
+.app-layout {
+  @apply w-full h-full bg-transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.control-panel-section {
+  @apply w-full flex justify-center;
+  height: 60px;
+  padding: 8px;
+  background: transparent;
+}
+
+.chat-window-section {
+  @apply w-full flex justify-center;
+  height: 420px;
+  padding: 0 8px 8px 8px;
+  background: transparent;
+}
+
 /* Curved Glass Control Panel Bar */
 .control-panel-glass-bar {
   @apply rounded-full overflow-hidden relative;
   height: 44px;
-  min-width: 280px;
+  width: 280px;
   cursor: grab;
   user-select: none;
   
@@ -431,6 +628,131 @@ onUnmounted(() => {
 .drag-dots span {
   @apply w-1 h-1 rounded-full bg-white/60;
   display: block;
+}
+
+/* Chat Window Styles */
+.chat-window {
+  @apply rounded-2xl overflow-hidden;
+  width: 300px;
+  height: 400px;
+  pointer-events: auto;
+  
+  /* Same glass effect as control panel */
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(255, 255, 255, 0.12) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.12) 75%,
+    rgba(255, 255, 255, 0.22) 100%
+  );
+  backdrop-filter: blur(60px) saturate(180%) brightness(1.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 
+    0 20px 60px rgba(0, 0, 0, 0.4),
+    0 8px 24px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+}
+
+.chat-header {
+  @apply flex items-center justify-between px-4 py-3 border-b border-white/10;
+}
+
+.chat-title {
+  @apply flex items-center gap-2;
+}
+
+.chat-close-btn {
+  @apply rounded-full p-1 hover:bg-white/10 transition-colors;
+}
+
+.chat-messages {
+  @apply flex-1 overflow-y-auto px-4 py-3;
+  height: 280px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.chat-messages::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.chat-empty {
+  @apply flex flex-col items-center justify-center h-full text-center;
+}
+
+.chat-message {
+  @apply mb-4;
+}
+
+.chat-message.user {
+  @apply flex justify-end;
+}
+
+.chat-message.assistant {
+  @apply flex justify-start;
+}
+
+.message-bubble {
+  @apply max-w-xs px-3 py-2 rounded-2xl;
+}
+
+.chat-message.user .message-bubble {
+  @apply bg-blue-500/80 text-white;
+}
+
+.chat-message.assistant .message-bubble {
+  @apply bg-white/15 text-white/90;
+}
+
+.message-text {
+  @apply text-sm leading-relaxed;
+}
+
+.message-time {
+  @apply text-xs opacity-70 mt-1 block;
+}
+
+.chat-input-container {
+  @apply flex items-center gap-2 px-4 py-3 border-t border-white/10;
+}
+
+.chat-input {
+  @apply flex-1 bg-white/10 border border-white/20 rounded-full px-4 py-2 text-white placeholder-white/50 focus:outline-none focus:border-white/40 transition-colors;
+}
+
+.chat-send-btn {
+  @apply bg-blue-500/80 hover:bg-blue-500 disabled:bg-white/10 disabled:opacity-50 rounded-full p-2 transition-colors;
+  color: white;
+}
+
+.chat-send-btn:disabled {
+  cursor: not-allowed;
+}
+
+/* Chat Window Transitions */
+.chat-window-enter-active,
+.chat-window-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chat-window-enter-from {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+.chat-window-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
 }
 
 /* Pulse animation for active states */
