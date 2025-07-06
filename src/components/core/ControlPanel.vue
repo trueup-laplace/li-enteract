@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { 
   MicrophoneIcon, 
-  SparklesIcon,
+  Cog6ToothIcon,
   CommandLineIcon,
   CpuChipIcon,
   ExclamationTriangleIcon,
@@ -111,7 +111,7 @@ const resizeWindow = async (showChat: boolean, showTransparency: boolean = false
     
     // Add AI models window height if shown
     if (showAIModels) {
-      height += 400 // AI models window height
+      height += 520 // AI models window height (increased to show all content)
     }
     
     // Add chat window height if shown
@@ -818,14 +818,14 @@ const getModelDisplayName = (model: OllamaModel): string => {
         data-tauri-drag-region
       >
         <div class="control-buttons-row">
-          <!-- AI Assistant Button -->
+          <!-- AI Settings Button -->
           <button 
             @click="toggleAIModelsWindow"
             class="control-btn group"
             :class="{ 'active': showAIModelsWindow }"
-            title="AI Models (Ollama)"
+            title="AI Settings (Ollama)"
           >
-            <SparklesIcon class="w-4 h-4 transition-all" 
+            <Cog6ToothIcon class="w-4 h-4 transition-all" 
               :class="showAIModelsWindow ? 'text-white' : 'text-white/70 group-hover:text-white'" />
           </button>
           
@@ -937,8 +937,8 @@ const getModelDisplayName = (model: OllamaModel): string => {
         <div class="ai-models-panel">
           <div class="panel-header">
             <div class="panel-title">
-              <SparklesIcon class="w-4 h-4 text-white/80" />
-              <span class="text-sm font-medium text-white/90">AI Models (Ollama)</span>
+              <Cog6ToothIcon class="w-4 h-4 text-white/80" />
+              <span class="text-sm font-medium text-white/90">AI Settings (Ollama)</span>
               <div class="status-indicator" :class="{
                 'text-green-400': ollamaStatus.status === 'running',
                 'text-red-400': ollamaStatus.status === 'not_running',
@@ -1075,7 +1075,7 @@ const getModelDisplayName = (model: OllamaModel): string => {
           <!-- Chat Header with Resize Indicator -->
           <div class="chat-header">
             <div class="chat-title">
-              <SparklesIcon class="w-4 h-4 text-white/80" />
+              <CommandLineIcon class="w-4 h-4 text-white/80" />
               <span class="text-sm font-medium text-white/90">AI Assistant</span>
               <div class="resize-indicator">
                 <ArrowsPointingOutIcon class="w-3 h-3 text-white/50" />
@@ -1090,7 +1090,7 @@ const getModelDisplayName = (model: OllamaModel): string => {
           <div class="chat-messages" ref="chatMessages" 
                :style="{ height: (chatWindowSize.height - 120) + 'px' }">
             <div v-if="chatHistory.length === 0" class="chat-empty">
-              <SparklesIcon class="w-6 h-6 text-white/40 mb-2" />
+              <CommandLineIcon class="w-6 h-6 text-white/40 mb-2" />
               <p class="text-white/60 text-sm">Start a conversation with your AI assistant</p>
             </div>
             
@@ -1197,13 +1197,13 @@ const getModelDisplayName = (model: OllamaModel): string => {
   cursor: grab;
   user-select: none;
   
-  /* Premium curved glass effect */
+  /* Premium curved glass effect with darker background */
   background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.25) 0%,
-    rgba(255, 255, 255, 0.15) 25%,
-    rgba(255, 255, 255, 0.10) 50%,
-    rgba(255, 255, 255, 0.15) 75%,
-    rgba(255, 255, 255, 0.25) 100%
+    rgba(17, 17, 21, 0.85) 0%,
+    rgba(17, 17, 21, 0.75) 25%,
+    rgba(17, 17, 21, 0.70) 50%,
+    rgba(17, 17, 21, 0.75) 75%,
+    rgba(17, 17, 21, 0.85) 100%
   );
   backdrop-filter: blur(40px) saturate(180%) brightness(1.1);
   border: 1px solid rgba(255, 255, 255, 0.3);
@@ -1218,11 +1218,11 @@ const getModelDisplayName = (model: OllamaModel): string => {
 
 .control-panel-glass-bar:hover {
   background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.35) 0%,
-    rgba(255, 255, 255, 0.25) 25%,
-    rgba(255, 255, 255, 0.20) 50%,
-    rgba(255, 255, 255, 0.25) 75%,
-    rgba(255, 255, 255, 0.35) 100%
+    rgba(17, 17, 21, 0.90) 0%,
+    rgba(17, 17, 21, 0.80) 25%,
+    rgba(17, 17, 21, 0.75) 50%,
+    rgba(17, 17, 21, 0.80) 75%,
+    rgba(17, 17, 21, 0.90) 100%
   );
   border-color: rgba(255, 255, 255, 0.4);
   box-shadow: 
@@ -1244,11 +1244,11 @@ const getModelDisplayName = (model: OllamaModel): string => {
     inset 0 -1px 0 rgba(0, 0, 0, 0.1);
   border-color: rgba(255, 255, 255, 0.5);
   background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.4) 0%,
-    rgba(255, 255, 255, 0.3) 25%,
-    rgba(255, 255, 255, 0.25) 50%,
-    rgba(255, 255, 255, 0.3) 75%,
-    rgba(255, 255, 255, 0.4) 100%
+    rgba(17, 17, 21, 0.95) 0%,
+    rgba(17, 17, 21, 0.85) 25%,
+    rgba(17, 17, 21, 0.80) 50%,
+    rgba(17, 17, 21, 0.85) 75%,
+    rgba(17, 17, 21, 0.95) 100%
   );
 }
 
@@ -1332,13 +1332,13 @@ const getModelDisplayName = (model: OllamaModel): string => {
   width: 300px;
   pointer-events: auto;
   
-  /* Same glass effect as other panels */
+  /* Same glass effect as other panels with darker background */
   background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.22) 0%,
-    rgba(255, 255, 255, 0.12) 25%,
-    rgba(255, 255, 255, 0.08) 50%,
-    rgba(255, 255, 255, 0.12) 75%,
-    rgba(255, 255, 255, 0.22) 100%
+    rgba(17, 17, 21, 0.85) 0%,
+    rgba(17, 17, 21, 0.75) 25%,
+    rgba(17, 17, 21, 0.70) 50%,
+    rgba(17, 17, 21, 0.75) 75%,
+    rgba(17, 17, 21, 0.85) 100%
   );
   backdrop-filter: blur(60px) saturate(180%) brightness(1.1);
   border: 1px solid rgba(255, 255, 255, 0.25);
@@ -1390,13 +1390,13 @@ const getModelDisplayName = (model: OllamaModel): string => {
   max-width: 500px;
   max-height: 700px;
   
-  /* Same glass effect as control panel */
+  /* Same glass effect as control panel with darker background */
   background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.22) 0%,
-    rgba(255, 255, 255, 0.12) 25%,
-    rgba(255, 255, 255, 0.08) 50%,
-    rgba(255, 255, 255, 0.12) 75%,
-    rgba(255, 255, 255, 0.22) 100%
+    rgba(17, 17, 21, 0.85) 0%,
+    rgba(17, 17, 21, 0.75) 25%,
+    rgba(17, 17, 21, 0.70) 50%,
+    rgba(17, 17, 21, 0.75) 75%,
+    rgba(17, 17, 21, 0.85) 100%
   );
   backdrop-filter: blur(60px) saturate(180%) brightness(1.1);
   border: 1px solid rgba(255, 255, 255, 0.25);
@@ -1726,16 +1726,16 @@ const getModelDisplayName = (model: OllamaModel): string => {
 
 .ai-models-panel {
   @apply rounded-2xl overflow-hidden;
-  width: 350px;
+  width: 380px;
   pointer-events: auto;
   
-  /* Same glass effect as other panels */
+  /* Same glass effect as other panels with darker background */
   background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.22) 0%,
-    rgba(255, 255, 255, 0.12) 25%,
-    rgba(255, 255, 255, 0.08) 50%,
-    rgba(255, 255, 255, 0.12) 75%,
-    rgba(255, 255, 255, 0.22) 100%
+    rgba(17, 17, 21, 0.85) 0%,
+    rgba(17, 17, 21, 0.75) 25%,
+    rgba(17, 17, 21, 0.70) 50%,
+    rgba(17, 17, 21, 0.75) 75%,
+    rgba(17, 17, 21, 0.85) 100%
   );
   backdrop-filter: blur(60px) saturate(180%) brightness(1.1);
   border: 1px solid rgba(255, 255, 255, 0.25);
