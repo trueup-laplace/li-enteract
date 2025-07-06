@@ -7,7 +7,9 @@ import {
   CpuChipIcon,
   ExclamationTriangleIcon,
   XMarkIcon,
-  PaperAirplaneIcon
+  PaperAirplaneIcon,
+  ArrowsPointingOutIcon,
+  AdjustmentsHorizontalIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
@@ -16,6 +18,7 @@ import { useWakeWordDetection } from '../../composables/useWakeWordDetection'
 import { getCompatibilityReport } from '../../utils/browserCompat'
 import { Window } from '@tauri-apps/api/window'
 import { LogicalSize } from '@tauri-apps/api/dpi'
+import TransparencyControls from './TransparencyControls.vue'
 
 const store = useAppStore()
 const mlEyeTracking = useMLEyeTracking()
@@ -25,8 +28,10 @@ const currentWindow = Window.getCurrent()
 
 // Window size constants
 const CONTROL_PANEL_HEIGHT = 60
-const CHAT_WINDOW_HEIGHT = 420
-const TOTAL_HEIGHT_WITH_CHAT = CONTROL_PANEL_HEIGHT + CHAT_WINDOW_HEIGHT
+const MIN_CHAT_HEIGHT = 300
+const MAX_CHAT_HEIGHT = 700
+const MIN_CHAT_WIDTH = 280
+const MAX_CHAT_WIDTH = 500
 
 // Dragging state
 const isDragging = ref(false)
@@ -36,6 +41,19 @@ const dragStartTime = ref(0)
 const showChatWindow = ref(false)
 const chatMessage = ref('')
 const chatHistory = ref<Array<{type: 'user' | 'assistant', message: string, timestamp: Date}>>([])
+
+// Transparency controls state
+const showTransparencyControls = ref(false)
+
+// Chat window resize state
+const chatWindowSize = ref({
+  width: 300,
+  height: 400
+})
+const isResizing = ref(false)
+const resizeHandle = ref<string | null>(null)
+const resizeStartPos = ref({ x: 0, y: 0 })
+const resizeStartSize = ref({ width: 0, height: 0 })
 
 // Error handling state
 const speechError = ref<string | null>(null)
@@ -49,11 +67,23 @@ const compatibilityReport = ref(getCompatibilityReport())
 const isGazeControlActive = ref(false)
 
 // Dynamic window resizing
-const resizeWindow = async (showChat: boolean) => {
+const resizeWindow = async (showChat: boolean, showTransparency: boolean = false) => {
   try {
-    const height = showChat ? TOTAL_HEIGHT_WITH_CHAT : CONTROL_PANEL_HEIGHT
-    await currentWindow.setSize(new LogicalSize(320, height))
-    console.log(`🪟 Window resized to height: ${height}px`)
+    let height = CONTROL_PANEL_HEIGHT
+    
+    // Add transparency panel height if shown
+    if (showTransparency) {
+      height += 200 // Transparency panel height
+    }
+    
+    // Add chat window height if shown
+    if (showChat) {
+      height += chatWindowSize.value.height + 20
+    }
+    
+    const width = Math.max(320, chatWindowSize.value.width + 20)
+    await currentWindow.setSize(new LogicalSize(width, height))
+    console.log(`🪟 Window resized to: ${width}x${height}px`)
   } catch (error) {
     console.error('Failed to resize window:', error)
   }
@@ -61,8 +91,76 @@ const resizeWindow = async (showChat: boolean) => {
 
 // Watch for chat window state changes to resize window
 watch(showChatWindow, async (newValue) => {
-  await resizeWindow(newValue)
+  await resizeWindow(newValue, showTransparencyControls.value)
 })
+
+// Watch for transparency controls state changes to resize window
+watch(showTransparencyControls, async (newValue) => {
+  await resizeWindow(showChatWindow.value, newValue)
+})
+
+// Watch for chat window size changes to resize Tauri window
+watch(chatWindowSize, async () => {
+  if (showChatWindow.value) {
+    await resizeWindow(showChatWindow.value, showTransparencyControls.value)
+  }
+}, { deep: true })
+
+// Chat window resize functionality
+const startResize = (event: MouseEvent, handle: string) => {
+  event.preventDefault()
+  event.stopPropagation()
+  
+  isResizing.value = true
+  resizeHandle.value = handle
+  resizeStartPos.value = { x: event.clientX, y: event.clientY }
+  resizeStartSize.value = { ...chatWindowSize.value }
+  
+  document.addEventListener('mousemove', handleResize)
+  document.addEventListener('mouseup', stopResize)
+  
+  console.log(`🔄 Started resizing chat window from ${handle}`)
+}
+
+const handleResize = (event: MouseEvent) => {
+  if (!isResizing.value || !resizeHandle.value) return
+  
+  const deltaX = event.clientX - resizeStartPos.value.x
+  const deltaY = event.clientY - resizeStartPos.value.y
+  
+  let newWidth = resizeStartSize.value.width
+  let newHeight = resizeStartSize.value.height
+  
+  // Handle different resize directions
+  if (resizeHandle.value.includes('right')) {
+    newWidth = resizeStartSize.value.width + deltaX
+  }
+  if (resizeHandle.value.includes('left')) {
+    newWidth = resizeStartSize.value.width - deltaX
+  }
+  if (resizeHandle.value.includes('bottom')) {
+    newHeight = resizeStartSize.value.height + deltaY
+  }
+  if (resizeHandle.value.includes('top')) {
+    newHeight = resizeStartSize.value.height - deltaY
+  }
+  
+  // Apply constraints
+  newWidth = Math.max(MIN_CHAT_WIDTH, Math.min(MAX_CHAT_WIDTH, newWidth))
+  newHeight = Math.max(MIN_CHAT_HEIGHT, Math.min(MAX_CHAT_HEIGHT, newHeight))
+  
+  chatWindowSize.value = { width: newWidth, height: newHeight }
+}
+
+const stopResize = () => {
+  isResizing.value = false
+  resizeHandle.value = null
+  
+  document.removeEventListener('mousemove', handleResize)
+  document.removeEventListener('mouseup', stopResize)
+  
+  console.log(`✅ Finished resizing chat window to: ${chatWindowSize.value.width}x${chatWindowSize.value.height}px`)
+}
 
 // Drag event handlers
 const handleDragStart = () => {
@@ -77,9 +175,33 @@ const handleDragEnd = () => {
   console.log(`🎯 Control panel drag ended (${dragDuration}ms)`)
 }
 
+// Transparency controls functions
+const toggleTransparencyControls = (event: Event) => {
+  event.stopPropagation()
+  
+  // Close chat window if open to avoid conflicts
+  if (showChatWindow.value) {
+    showChatWindow.value = false
+  }
+  
+  showTransparencyControls.value = !showTransparencyControls.value
+  console.log(`🔍 Transparency controls ${showTransparencyControls.value ? 'opened' : 'closed'}`)
+}
+
+const closeTransparencyControls = () => {
+  showTransparencyControls.value = false
+  console.log('🔍 Transparency controls closed')
+}
+
 // Chat window functions
 const toggleChatWindow = async (event: Event) => {
   event.stopPropagation()
+  
+  // Close transparency controls if open to avoid conflicts
+  if (showTransparencyControls.value) {
+    showTransparencyControls.value = false
+  }
+  
   showChatWindow.value = !showChatWindow.value
   console.log(`💬 Chat window ${showChatWindow.value ? 'opened' : 'closed'}`)
   
@@ -281,25 +403,46 @@ const handleKeydown = async (event: KeyboardEvent) => {
     console.log('💬 Keyboard shortcut: Chat window toggled')
   }
   
-  // Escape = Close chat window
-  if (event.key === 'Escape' && showChatWindow.value) {
+  // Ctrl+Shift+T = Toggle Transparency Controls
+  if (event.ctrlKey && event.shiftKey && event.key === 'T') {
     event.preventDefault()
-    await closeChatWindow()
+    toggleTransparencyControls(event)
+    console.log('🔍 Keyboard shortcut: Transparency controls toggled')
+  }
+  
+  // Escape = Close any open panels
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    if (showChatWindow.value) {
+      await closeChatWindow()
+    }
+    if (showTransparencyControls.value) {
+      closeTransparencyControls()
+    }
   }
 }
 
-// Click outside to close chat window
+// Click outside to close panels
 const handleClickOutside = (event: Event) => {
-  if (!showChatWindow.value) return
+  if (isResizing.value) return
   
   const target = event.target as HTMLElement
   const chatWindow = document.querySelector('.chat-window')
+  const transparencyPanel = document.querySelector('.transparency-controls-panel')
   const controlPanel = document.querySelector('.control-panel-glass-bar')
   
-  if (chatWindow && controlPanel && 
+  // Close chat window if clicking outside
+  if (chatWindow && controlPanel && showChatWindow.value &&
       !chatWindow.contains(target) && 
       !controlPanel.contains(target)) {
     closeChatWindow()
+  }
+  
+  // Close transparency panel if clicking outside
+  if (transparencyPanel && controlPanel && showTransparencyControls.value &&
+      !transparencyPanel.contains(target) && 
+      !controlPanel.contains(target)) {
+    closeTransparencyControls()
   }
 }
 
@@ -315,21 +458,25 @@ onMounted(async () => {
   }
   
   // Initialize window size
-  await resizeWindow(false)
+  await resizeWindow(false, false)
   
   // Show keyboard shortcuts in console
   console.log('⌨️ Keyboard Shortcuts:')
   console.log('   Ctrl+Shift+E = Start/Stop ML Eye Tracking + Window Movement')
   console.log('   Ctrl+Shift+S = Emergency Stop (stop all tracking)')
   console.log('   Ctrl+Shift+C = Toggle Chat Window')
-  console.log('   Escape = Close Chat Window')
+  console.log('   Ctrl+Shift+T = Toggle Transparency Controls')
+  console.log('   Escape = Close any open panels')
   console.log('🎯 Control Panel is draggable - click and drag to move!')
+  console.log('📐 Chat Window is resizable - drag the resize handles!')
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
   document.removeEventListener('click', handleClickOutside)
   document.removeEventListener('mouseup', handleDragEnd)
+  document.removeEventListener('mousemove', handleResize)
+  document.removeEventListener('mouseup', stopResize)
 })
 </script>
 
@@ -401,6 +548,17 @@ onUnmounted(() => {
               :class="mlEyeTracking.isActive.value ? 'text-white' : 'text-white/70 group-hover:text-white'" />
           </button>
 
+          <!-- Transparency Controls Button -->
+          <button 
+            @click="toggleTransparencyControls"
+            class="control-btn group"
+            :class="{ 'active': showTransparencyControls }"
+            title="Transparency Controls"
+          >
+            <AdjustmentsHorizontalIcon class="w-4 h-4 transition-all" 
+              :class="showTransparencyControls ? 'text-white' : 'text-white/70 group-hover:text-white'" />
+          </button>
+
           <!-- Chat Window Button -->
           <button 
             @click="toggleChatWindow"
@@ -424,21 +582,54 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <!-- Transparency Controls Section -->
+    <Transition name="transparency-panel">
+      <div v-if="showTransparencyControls" class="transparency-controls-section">
+        <div class="transparency-controls-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <AdjustmentsHorizontalIcon class="w-4 h-4 text-white/80" />
+              <span class="text-sm font-medium text-white/90">Transparency Controls</span>
+            </div>
+            <button @click="closeTransparencyControls" class="panel-close-btn">
+              <XMarkIcon class="w-4 h-4 text-white/70 hover:text-white transition-colors" />
+            </button>
+          </div>
+          <div class="panel-content">
+            <TransparencyControls />
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- Chat Window Section -->
     <Transition name="chat-window">
       <div v-if="showChatWindow" class="chat-window-section">
-        <div class="chat-window">
+        <div 
+          class="chat-window" 
+          :class="{ 'resizing': isResizing }"
+          :style="{ 
+            width: chatWindowSize.width + 'px', 
+            height: chatWindowSize.height + 'px' 
+          }"
+        >
+          <!-- Chat Header with Resize Indicator -->
           <div class="chat-header">
             <div class="chat-title">
               <SparklesIcon class="w-4 h-4 text-white/80" />
               <span class="text-sm font-medium text-white/90">AI Assistant</span>
+              <div class="resize-indicator">
+                <ArrowsPointingOutIcon class="w-3 h-3 text-white/50" />
+                <span class="text-xs text-white/50">{{ chatWindowSize.width }}×{{ chatWindowSize.height }}</span>
+              </div>
             </div>
             <button @click="closeChatWindow" class="chat-close-btn">
               <XMarkIcon class="w-4 h-4 text-white/70 hover:text-white transition-colors" />
             </button>
           </div>
           
-          <div class="chat-messages" ref="chatMessages">
+          <div class="chat-messages" ref="chatMessages" 
+               :style="{ height: (chatWindowSize.height - 120) + 'px' }">
             <div v-if="chatHistory.length === 0" class="chat-empty">
               <SparklesIcon class="w-6 h-6 text-white/40 mb-2" />
               <p class="text-white/60 text-sm">Start a conversation with your AI assistant</p>
@@ -465,6 +656,21 @@ onUnmounted(() => {
               <PaperAirplaneIcon class="w-4 h-4" />
             </button>
           </div>
+
+          <!-- Resize Handles -->
+          <div class="resize-handles">
+            <!-- Corner handles -->
+            <div class="resize-handle corner top-left" @mousedown="startResize($event, 'top-left')"></div>
+            <div class="resize-handle corner top-right" @mousedown="startResize($event, 'top-right')"></div>
+            <div class="resize-handle corner bottom-left" @mousedown="startResize($event, 'bottom-left')"></div>
+            <div class="resize-handle corner bottom-right" @mousedown="startResize($event, 'bottom-right')"></div>
+            
+            <!-- Edge handles -->
+            <div class="resize-handle edge top" @mousedown="startResize($event, 'top')"></div>
+            <div class="resize-handle edge bottom" @mousedown="startResize($event, 'bottom')"></div>
+            <div class="resize-handle edge left" @mousedown="startResize($event, 'left')"></div>
+            <div class="resize-handle edge right" @mousedown="startResize($event, 'right')"></div>
+          </div>
         </div>
       </div>
     </Transition>
@@ -488,7 +694,12 @@ onUnmounted(() => {
 
 .chat-window-section {
   @apply w-full flex justify-center;
-  height: 420px;
+  padding: 0 8px 8px 8px;
+  background: transparent;
+}
+
+.transparency-controls-section {
+  @apply w-full flex justify-center;
   padding: 0 8px 8px 8px;
   background: transparent;
 }
@@ -497,7 +708,7 @@ onUnmounted(() => {
 .control-panel-glass-bar {
   @apply rounded-full overflow-hidden relative;
   height: 44px;
-  width: 280px;
+  width: 320px;
   cursor: grab;
   user-select: none;
   
@@ -557,14 +768,14 @@ onUnmounted(() => {
 }
 
 .control-buttons-row {
-  @apply flex items-center justify-center gap-2 px-4 py-2 relative z-10;
+  @apply flex items-center justify-center gap-2 px-3 py-2 relative z-10;
   height: 100%;
 }
 
 .control-btn {
   @apply rounded-full transition-all duration-200 flex items-center justify-center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: none;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(8px);
@@ -630,14 +841,13 @@ onUnmounted(() => {
   display: block;
 }
 
-/* Chat Window Styles */
-.chat-window {
+/* Transparency Controls Panel */
+.transparency-controls-panel {
   @apply rounded-2xl overflow-hidden;
   width: 300px;
-  height: 400px;
   pointer-events: auto;
   
-  /* Same glass effect as control panel */
+  /* Same glass effect as other panels */
   background: linear-gradient(135deg, 
     rgba(255, 255, 255, 0.22) 0%,
     rgba(255, 255, 255, 0.12) 25%,
@@ -654,6 +864,75 @@ onUnmounted(() => {
     inset 0 -1px 0 rgba(0, 0, 0, 0.1);
 }
 
+.panel-header {
+  @apply flex items-center justify-between px-4 py-3 border-b border-white/10;
+}
+
+.panel-title {
+  @apply flex items-center gap-2;
+}
+
+.panel-close-btn {
+  @apply rounded-full p-1 hover:bg-white/10 transition-colors;
+}
+
+.panel-content {
+  @apply p-4;
+}
+
+/* Transparency Panel Transitions */
+.transparency-panel-enter-active,
+.transparency-panel-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.transparency-panel-enter-from {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+.transparency-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+/* Chat Window Styles */
+.chat-window {
+  @apply rounded-2xl overflow-hidden relative;
+  pointer-events: auto;
+  min-width: 280px;
+  min-height: 300px;
+  max-width: 500px;
+  max-height: 700px;
+  
+  /* Same glass effect as control panel */
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(255, 255, 255, 0.12) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.12) 75%,
+    rgba(255, 255, 255, 0.22) 100%
+  );
+  backdrop-filter: blur(60px) saturate(180%) brightness(1.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 
+    0 20px 60px rgba(0, 0, 0, 0.4),
+    0 8px 24px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+
+  transition: all 0.2s ease;
+}
+
+.chat-window.resizing {
+  box-shadow: 
+    0 25px 70px rgba(0, 0, 0, 0.5),
+    0 12px 30px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
 .chat-header {
   @apply flex items-center justify-between px-4 py-3 border-b border-white/10;
 }
@@ -662,13 +941,16 @@ onUnmounted(() => {
   @apply flex items-center gap-2;
 }
 
+.resize-indicator {
+  @apply flex items-center gap-1 ml-2 px-2 py-1 rounded-md bg-white/5;
+}
+
 .chat-close-btn {
   @apply rounded-full p-1 hover:bg-white/10 transition-colors;
 }
 
 .chat-messages {
   @apply flex-1 overflow-y-auto px-4 py-3;
-  height: 280px;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
@@ -739,6 +1021,101 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
+/* Resize Handles */
+.resize-handles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.resize-handle {
+  position: absolute;
+  pointer-events: auto;
+  transition: background-color 0.2s ease;
+}
+
+/* Corner handles */
+.resize-handle.corner {
+  width: 12px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.resize-handle.corner:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.resize-handle.top-left {
+  top: -6px;
+  left: -6px;
+  cursor: nw-resize;
+}
+
+.resize-handle.top-right {
+  top: -6px;
+  right: -6px;
+  cursor: ne-resize;
+}
+
+.resize-handle.bottom-left {
+  bottom: -6px;
+  left: -6px;
+  cursor: sw-resize;
+}
+
+.resize-handle.bottom-right {
+  bottom: -6px;
+  right: -6px;
+  cursor: se-resize;
+}
+
+/* Edge handles */
+.resize-handle.edge {
+  background: transparent;
+}
+
+.resize-handle.edge:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.resize-handle.top {
+  top: -3px;
+  left: 12px;
+  right: 12px;
+  height: 6px;
+  cursor: n-resize;
+}
+
+.resize-handle.bottom {
+  bottom: -3px;
+  left: 12px;
+  right: 12px;
+  height: 6px;
+  cursor: s-resize;
+}
+
+.resize-handle.left {
+  left: -3px;
+  top: 12px;
+  bottom: 12px;
+  width: 6px;
+  cursor: w-resize;
+}
+
+.resize-handle.right {
+  right: -3px;
+  top: 12px;
+  bottom: 12px;
+  width: 6px;
+  cursor: e-resize;
+}
+
 /* Chat Window Transitions */
 .chat-window-enter-active,
 .chat-window-leave-active {
@@ -796,5 +1173,14 @@ onUnmounted(() => {
 
 .control-btn {
   -webkit-app-region: no-drag;
+}
+
+/* Prevent text selection during resize */
+.chat-window.resizing {
+  user-select: none;
+}
+
+.chat-window.resizing * {
+  user-select: none;
 }
 </style> 
