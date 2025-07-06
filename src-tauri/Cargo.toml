@@ -31,7 +31,7 @@ whisper-rs = "0.10"
 anyhow = "1.0"
 base64 = "0.22"
 tempfile = "3.0"
-reqwest = { version = "0.11", features = ["stream"] }
+reqwest = { version = "0.11", features = ["stream", "json"] }
 
 # Platform-specific dependencies for transparency
 [target.'cfg(windows)'.dependencies]

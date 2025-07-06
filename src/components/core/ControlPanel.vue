@@ -9,7 +9,10 @@ import {
   XMarkIcon,
   PaperAirplaneIcon,
   ArrowsPointingOutIcon,
-  AdjustmentsHorizontalIcon
+  AdjustmentsHorizontalIcon,
+  RocketLaunchIcon,
+  TrashIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
@@ -18,6 +21,7 @@ import { useWakeWordDetection } from '../../composables/useWakeWordDetection'
 import { getCompatibilityReport } from '../../utils/browserCompat'
 import { Window } from '@tauri-apps/api/window'
 import { LogicalSize } from '@tauri-apps/api/dpi'
+import { invoke } from '@tauri-apps/api/core'
 import TransparencyControls from './TransparencyControls.vue'
 
 const store = useAppStore()
@@ -45,6 +49,16 @@ const chatHistory = ref<Array<{type: 'user' | 'assistant' | 'transcription', mes
 // Transparency controls state
 const showTransparencyControls = ref(false)
 
+// AI Models window state
+const showAIModelsWindow = ref(false)
+const ollamaModels = ref<OllamaModel[]>([])
+const ollamaStatus = ref<OllamaStatus>({ status: 'checking' })
+const isLoadingModels = ref(false)
+const modelsError = ref<string | null>(null)
+const selectedModel = ref<string | null>(null)
+const pullingModel = ref<string | null>(null)
+const deletingModel = ref<string | null>(null)
+
 // Chat window resize state
 const chatWindowSize = ref({
   width: 300,
@@ -66,14 +80,38 @@ const compatibilityReport = ref(getCompatibilityReport())
 // ML Eye tracking with window movement state
 const isGazeControlActive = ref(false)
 
+// Types for Ollama
+interface OllamaModel {
+  name: string
+  modified_at: string
+  size: number
+  digest: string
+  details?: {
+    format: string
+    family: string
+    parameter_size: string
+    quantization_level: string
+  }
+}
+
+interface OllamaStatus {
+  status: string
+  version?: string
+}
+
 // Dynamic window resizing
-const resizeWindow = async (showChat: boolean, showTransparency: boolean = false) => {
+const resizeWindow = async (showChat: boolean, showTransparency: boolean = false, showAIModels: boolean = false) => {
   try {
     let height = CONTROL_PANEL_HEIGHT
     
     // Add transparency panel height if shown
     if (showTransparency) {
       height += 200 // Transparency panel height
+    }
+    
+    // Add AI models window height if shown
+    if (showAIModels) {
+      height += 400 // AI models window height
     }
     
     // Add chat window height if shown
@@ -91,18 +129,23 @@ const resizeWindow = async (showChat: boolean, showTransparency: boolean = false
 
 // Watch for chat window state changes to resize window
 watch(showChatWindow, async (newValue) => {
-  await resizeWindow(newValue, showTransparencyControls.value)
+  await resizeWindow(newValue, showTransparencyControls.value, showAIModelsWindow.value)
 })
 
 // Watch for transparency controls state changes to resize window
 watch(showTransparencyControls, async (newValue) => {
-  await resizeWindow(showChatWindow.value, newValue)
+  await resizeWindow(showChatWindow.value, newValue, showAIModelsWindow.value)
+})
+
+// Watch for AI models window state changes to resize window
+watch(showAIModelsWindow, async (newValue) => {
+  await resizeWindow(showChatWindow.value, showTransparencyControls.value, newValue)
 })
 
 // Watch for chat window size changes to resize Tauri window
 watch(chatWindowSize, async () => {
   if (showChatWindow.value) {
-    await resizeWindow(showChatWindow.value, showTransparencyControls.value)
+    await resizeWindow(showChatWindow.value, showTransparencyControls.value, showAIModelsWindow.value)
   }
 }, { deep: true })
 
@@ -179,9 +222,12 @@ const handleDragEnd = () => {
 const toggleTransparencyControls = (event: Event) => {
   event.stopPropagation()
   
-  // Close chat window if open to avoid conflicts
+  // Close other panels if open to avoid conflicts
   if (showChatWindow.value) {
     showChatWindow.value = false
+  }
+  if (showAIModelsWindow.value) {
+    showAIModelsWindow.value = false
   }
   
   showTransparencyControls.value = !showTransparencyControls.value
@@ -193,13 +239,45 @@ const closeTransparencyControls = () => {
   console.log('🔍 Transparency controls closed')
 }
 
+// AI models window functions
+const toggleAIModelsWindow = async (event: Event) => {
+  event.stopPropagation()
+  
+  // Close other panels if open to avoid conflicts
+  if (showChatWindow.value) {
+    showChatWindow.value = false
+  }
+  if (showTransparencyControls.value) {
+    showTransparencyControls.value = false
+  }
+  
+  showAIModelsWindow.value = !showAIModelsWindow.value
+  console.log(`🤖 AI Models window ${showAIModelsWindow.value ? 'opened' : 'closed'}`)
+  
+  // Fetch Ollama status and models when opening
+  if (showAIModelsWindow.value) {
+    await fetchOllamaStatus()
+    if (ollamaStatus.value.status === 'running') {
+      await fetchOllamaModels()
+    }
+  }
+}
+
+const closeAIModelsWindow = () => {
+  showAIModelsWindow.value = false
+  console.log('🤖 AI Models window closed')
+}
+
 // Chat window functions
 const toggleChatWindow = async (event: Event) => {
   event.stopPropagation()
   
-  // Close transparency controls if open to avoid conflicts
+  // Close other panels if open to avoid conflicts
   if (showTransparencyControls.value) {
     showTransparencyControls.value = false
+  }
+  if (showAIModelsWindow.value) {
+    showAIModelsWindow.value = false
   }
   
   showChatWindow.value = !showChatWindow.value
@@ -410,6 +488,13 @@ const handleKeydown = async (event: KeyboardEvent) => {
     console.log('🔍 Keyboard shortcut: Transparency controls toggled')
   }
   
+  // Ctrl+Shift+A = Toggle AI Models Window
+  if (event.ctrlKey && event.shiftKey && event.key === 'A') {
+    event.preventDefault()
+    await toggleAIModelsWindow(event)
+    console.log('🤖 Keyboard shortcut: AI Models window toggled')
+  }
+  
   // Escape = Close any open panels
   if (event.key === 'Escape') {
     event.preventDefault()
@@ -418,6 +503,9 @@ const handleKeydown = async (event: KeyboardEvent) => {
     }
     if (showTransparencyControls.value) {
       closeTransparencyControls()
+    }
+    if (showAIModelsWindow.value) {
+      closeAIModelsWindow()
     }
   }
 }
@@ -429,6 +517,7 @@ const handleClickOutside = (event: Event) => {
   const target = event.target as HTMLElement
   const chatWindow = document.querySelector('.chat-window')
   const transparencyPanel = document.querySelector('.transparency-controls-panel')
+  const aiModelsPanel = document.querySelector('.ai-models-panel')
   const controlPanel = document.querySelector('.control-panel-glass-bar')
   
   // Close chat window if clicking outside
@@ -443,6 +532,13 @@ const handleClickOutside = (event: Event) => {
       !transparencyPanel.contains(target) && 
       !controlPanel.contains(target)) {
     closeTransparencyControls()
+  }
+  
+  // Close AI models panel if clicking outside
+  if (aiModelsPanel && controlPanel && showAIModelsWindow.value &&
+      !aiModelsPanel.contains(target) && 
+      !controlPanel.contains(target)) {
+    closeAIModelsWindow()
   }
 }
 
@@ -464,7 +560,7 @@ onMounted(async () => {
   await store.initializeSpeechTranscription('base')
   
   // Initialize window size
-  await resizeWindow(false, false)
+  await resizeWindow(false, false, false)
   
   // Show keyboard shortcuts in console
   console.log('⌨️ Keyboard Shortcuts:')
@@ -472,6 +568,7 @@ onMounted(async () => {
   console.log('   Ctrl+Shift+S = Emergency Stop (stop all tracking)')
   console.log('   Ctrl+Shift+C = Toggle Chat Window')
   console.log('   Ctrl+Shift+T = Toggle Transparency Controls')
+  console.log('   Ctrl+Shift+A = Toggle AI Models Window')
   console.log('   Escape = Close any open panels')
   console.log('🎯 Control Panel is draggable - click and drag to move!')
   console.log('📐 Chat Window is resizable - drag the resize handles!')
@@ -630,6 +727,85 @@ const scrollChatToBottom = () => {
     chatMessages.scrollTop = chatMessages.scrollHeight
   }
 }
+
+// Ollama functions
+const fetchOllamaStatus = async () => {
+  try {
+    const status = await invoke<OllamaStatus>('get_ollama_status')
+    ollamaStatus.value = status
+    return status
+  } catch (error) {
+    console.error('Failed to get Ollama status:', error)
+    ollamaStatus.value = { status: 'error' }
+    return { status: 'error' }
+  }
+}
+
+const fetchOllamaModels = async () => {
+  isLoadingModels.value = true
+  modelsError.value = null
+  
+  try {
+    const models = await invoke<OllamaModel[]>('get_ollama_models')
+    ollamaModels.value = models
+    console.log('📋 Fetched Ollama models:', models)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    modelsError.value = message
+    console.error('Failed to fetch Ollama models:', error)
+  } finally {
+    isLoadingModels.value = false
+  }
+}
+
+const pullModel = async (modelName: string) => {
+  pullingModel.value = modelName
+  
+  try {
+    const result = await invoke<string>('pull_ollama_model', { modelName })
+    console.log('📥 Pull result:', result)
+    // Refresh models list after pulling
+    setTimeout(() => {
+      fetchOllamaModels()
+    }, 2000)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('Failed to pull model:', error)
+    modelsError.value = `Failed to pull ${modelName}: ${message}`
+  } finally {
+    pullingModel.value = null
+  }
+}
+
+const deleteModel = async (modelName: string) => {
+  if (!confirm(`Are you sure you want to delete the model "${modelName}"?`)) {
+    return
+  }
+  
+  deletingModel.value = modelName
+  
+  try {
+    const result = await invoke<string>('delete_ollama_model', { modelName })
+    console.log('🗑️ Delete result:', result)
+    // Refresh models list after deletion
+    await fetchOllamaModels()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('Failed to delete model:', error)
+    modelsError.value = `Failed to delete ${modelName}: ${message}`
+  } finally {
+    deletingModel.value = null
+  }
+}
+
+const formatModelSize = (size: number): string => {
+  const gb = size / (1024 * 1024 * 1024)
+  return `${gb.toFixed(1)} GB`
+}
+
+const getModelDisplayName = (model: OllamaModel): string => {
+  return model.name.split(':')[0] || model.name
+}
 </script>
 
 <template>
@@ -644,12 +820,13 @@ const scrollChatToBottom = () => {
         <div class="control-buttons-row">
           <!-- AI Assistant Button -->
           <button 
+            @click="toggleAIModelsWindow"
             class="control-btn group"
-            :class="{ 'active': false }"
-            title="AI Assistant"
-            @click="(event) => event.stopPropagation()"
+            :class="{ 'active': showAIModelsWindow }"
+            title="AI Models (Ollama)"
           >
-            <SparklesIcon class="w-4 h-4 text-white/70 group-hover:text-white transition-all" />
+            <SparklesIcon class="w-4 h-4 transition-all" 
+              :class="showAIModelsWindow ? 'text-white' : 'text-white/70 group-hover:text-white'" />
           </button>
           
           <!-- Speech Transcription Button -->
@@ -749,6 +926,136 @@ const scrollChatToBottom = () => {
           </div>
           <div class="panel-content">
             <TransparencyControls />
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- AI Models Window Section -->
+    <Transition name="ai-models-panel">
+      <div v-if="showAIModelsWindow" class="ai-models-section">
+        <div class="ai-models-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <SparklesIcon class="w-4 h-4 text-white/80" />
+              <span class="text-sm font-medium text-white/90">AI Models (Ollama)</span>
+              <div class="status-indicator" :class="{
+                'text-green-400': ollamaStatus.status === 'running',
+                'text-red-400': ollamaStatus.status === 'not_running',
+                'text-yellow-400': ollamaStatus.status === 'checking' || ollamaStatus.status === 'error'
+              }">
+                {{ ollamaStatus.status === 'running' ? '●' : ollamaStatus.status === 'not_running' ? '●' : '●' }}
+              </div>
+            </div>
+            <button @click="closeAIModelsWindow" class="panel-close-btn">
+              <XMarkIcon class="w-4 h-4 text-white/70 hover:text-white transition-colors" />
+            </button>
+          </div>
+          
+          <div class="panel-content">
+            <!-- Ollama Status -->
+            <div class="ollama-status">
+              <div v-if="ollamaStatus.status === 'running'" class="status-good">
+                <span class="text-green-400">● Ollama is running</span>
+                <span v-if="ollamaStatus.version" class="text-white/60 text-xs ml-2">v{{ ollamaStatus.version }}</span>
+              </div>
+              <div v-else-if="ollamaStatus.status === 'not_running'" class="status-error">
+                <span class="text-red-400">● Ollama is not running</span>
+                <p class="text-white/60 text-xs mt-1">Please start Ollama to manage models</p>
+              </div>
+              <div v-else-if="ollamaStatus.status === 'checking'" class="status-loading">
+                <span class="text-yellow-400">● Checking Ollama status...</span>
+              </div>
+              <div v-else class="status-error">
+                <span class="text-red-400">● Failed to connect to Ollama</span>
+              </div>
+            </div>
+            
+            <!-- Models List -->
+            <div v-if="ollamaStatus.status === 'running'" class="models-section">
+              <div class="models-header">
+                <h3 class="text-white/90 font-medium">Available Models</h3>
+                <button 
+                  @click="fetchOllamaModels" 
+                  :disabled="isLoadingModels"
+                  class="refresh-btn"
+                  title="Refresh Models"
+                >
+                  <ArrowsPointingOutIcon class="w-4 h-4" :class="{ 'animate-spin': isLoadingModels }" />
+                </button>
+              </div>
+              
+              <!-- Error Message -->
+              <div v-if="modelsError" class="error-message">
+                <span class="text-red-400 text-sm">{{ modelsError }}</span>
+                <button @click="modelsError = null" class="ml-2 text-white/60 hover:text-white">×</button>
+              </div>
+              
+              <!-- Loading State -->
+              <div v-if="isLoadingModels" class="loading-state">
+                <div class="animate-pulse text-white/60">Loading models...</div>
+              </div>
+              
+              <!-- Models List -->
+              <div v-else-if="ollamaModels.length > 0" class="models-list">
+                <div v-for="model in ollamaModels" :key="model.name" class="model-item">
+                  <div class="model-info">
+                    <div class="model-name">{{ getModelDisplayName(model) }}</div>
+                    <div class="model-details">
+                      <span class="model-size">{{ formatModelSize(model.size) }}</span>
+                      <span v-if="model.details?.parameter_size" class="model-params">
+                        {{ model.details.parameter_size }}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div class="model-actions">
+                    <button
+                      @click="selectedModel = model.name"
+                      :class="{ 'active': selectedModel === model.name }"
+                      class="select-btn"
+                      title="Select Model"
+                    >
+                      {{ selectedModel === model.name ? '✓' : '○' }}
+                    </button>
+                    
+                    <button
+                      @click="deleteModel(model.name)"
+                      :disabled="deletingModel === model.name"
+                      class="delete-btn"
+                      title="Delete Model"
+                    >
+                      <TrashIcon v-if="deletingModel !== model.name" class="w-3 h-3" />
+                      <div v-else class="w-3 h-3 animate-spin">⟳</div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- No Models -->
+              <div v-else class="no-models">
+                <p class="text-white/60 text-sm">No models available</p>
+                <p class="text-white/40 text-xs mt-1">Pull a model to get started</p>
+              </div>
+              
+              <!-- Pull Model Section -->
+              <div class="pull-model-section">
+                <h4 class="text-white/80 text-sm font-medium mb-2">Pull New Model</h4>
+                <div class="popular-models">
+                  <button 
+                    v-for="modelName in ['llama3.2', 'codellama', 'mistral', 'phi3']" 
+                    :key="modelName"
+                    @click="pullModel(modelName)"
+                    :disabled="pullingModel === modelName"
+                    class="model-pull-btn"
+                  >
+                    <ArrowDownTrayIcon v-if="pullingModel !== modelName" class="w-3 h-3" />
+                    <div v-else class="w-3 h-3 animate-spin">⟳</div>
+                    <span>{{ modelName }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1408,5 +1715,161 @@ const scrollChatToBottom = () => {
 
 .chat-window.resizing * {
   user-select: none;
+}
+
+/* AI Models Window */
+.ai-models-section {
+  @apply w-full flex justify-center;
+  padding: 0 8px 8px 8px;
+  background: transparent;
+}
+
+.ai-models-panel {
+  @apply rounded-2xl overflow-hidden;
+  width: 350px;
+  pointer-events: auto;
+  
+  /* Same glass effect as other panels */
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(255, 255, 255, 0.12) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.12) 75%,
+    rgba(255, 255, 255, 0.22) 100%
+  );
+  backdrop-filter: blur(60px) saturate(180%) brightness(1.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 
+    0 20px 60px rgba(0, 0, 0, 0.4),
+    0 8px 24px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+}
+
+.status-indicator {
+  @apply ml-2 text-xs;
+}
+
+.ollama-status {
+  @apply mb-4;
+}
+
+.models-section {
+  @apply mt-4;
+}
+
+.models-header {
+  @apply flex items-center justify-between mb-3;
+}
+
+.refresh-btn {
+  @apply p-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-white/70 hover:text-white;
+}
+
+.error-message {
+  @apply flex items-center justify-between bg-red-500/20 border border-red-400/30 rounded-lg p-2 mb-3;
+}
+
+.loading-state {
+  @apply p-4 text-center;
+}
+
+.models-list {
+  @apply space-y-2 mb-4 max-h-48 overflow-y-auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.models-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.models-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.models-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.model-item {
+  @apply flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-colors;
+}
+
+.model-info {
+  @apply flex-1;
+}
+
+.model-name {
+  @apply text-white/90 font-medium text-sm;
+}
+
+.model-details {
+  @apply flex items-center gap-2 mt-1;
+}
+
+.model-size {
+  @apply text-white/60 text-xs;
+}
+
+.model-params {
+  @apply text-white/60 text-xs px-1.5 py-0.5 bg-white/10 rounded-md;
+}
+
+.model-actions {
+  @apply flex items-center gap-2;
+}
+
+.select-btn {
+  @apply w-6 h-6 rounded-full border border-white/30 text-xs flex items-center justify-center hover:bg-white/10 transition-colors;
+}
+
+.select-btn.active {
+  @apply bg-green-500/80 border-green-400 text-white;
+}
+
+.delete-btn {
+  @apply p-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/40 transition-colors text-red-400 hover:text-red-300;
+}
+
+.delete-btn:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+.no-models {
+  @apply text-center p-4 bg-white/5 rounded-lg border border-white/10;
+}
+
+.pull-model-section {
+  @apply mt-4 pt-4 border-t border-white/10;
+}
+
+.popular-models {
+  @apply grid grid-cols-2 gap-2;
+}
+
+.model-pull-btn {
+  @apply flex items-center gap-2 p-2 bg-blue-500/20 hover:bg-blue-500/40 rounded-lg border border-blue-400/30 text-blue-300 hover:text-blue-200 transition-colors text-sm;
+}
+
+.model-pull-btn:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* AI Models Panel Transitions */
+.ai-models-panel-enter-active,
+.ai-models-panel-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ai-models-panel-enter-from {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+.ai-models-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
 }
 </style> 
