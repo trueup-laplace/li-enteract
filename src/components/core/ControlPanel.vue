@@ -22,7 +22,10 @@ import {
   EyeSlashIcon,
   ClipboardDocumentIcon,
   ChevronDownIcon,
-  ChevronUpIcon
+  ChevronUpIcon,
+  ChatBubbleLeftIcon,
+  CodeBracketIcon,
+  ComputerDesktopIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
@@ -46,8 +49,8 @@ const currentWindow = Window.getCurrent()
 const CONTROL_PANEL_HEIGHT = 60
 const MIN_CHAT_HEIGHT = 400
 const MAX_CHAT_HEIGHT = 1200
-const MIN_CHAT_WIDTH = 450
-const MAX_CHAT_WIDTH = 800
+const MIN_CHAT_WIDTH = 650
+const MAX_CHAT_WIDTH = 1200
 
 // Dragging state
 const isDragging = ref(false)
@@ -77,7 +80,7 @@ const deletingModel = ref<string | null>(null)
 
 // Chat window resize state
 const chatWindowSize = ref({
-  width: 500,
+  width: 750,
   height: 500
 })
 const isResizing = ref(false)
@@ -475,21 +478,115 @@ const startDeepResearch = async () => {
   
   // If no input, prompt for research topic
   if (!researchQuery) {
-    researchQuery = prompt('🧠 Deep Research Mode\n\nWhat would you like me to research in detail?')
+    const promptResult = prompt('🧠 Deep Research Mode\n\nWhat would you like me to research in detail?')
     
-    if (!researchQuery || !researchQuery.trim()) {
+    if (!promptResult || !promptResult.trim()) {
       console.log('🧠 Deep research cancelled - no query provided')
       return
     }
     
+    researchQuery = promptResult.trim()
+    
     // Add the query to chat input for user to see, then clear it
-    chatMessage.value = researchQuery.trim()
+    chatMessage.value = researchQuery
   }
   
   console.log('🧠 FRONTEND: Deep Research button clicked, calling sendMessage with deep_research mode')
   console.log('🧠 FRONTEND: Research query:', researchQuery)
   
   await sendMessage('deep_research')
+}
+
+// Conversational Agent
+const startConversationalAgent = async () => {
+  // Auto-open chat window if not open
+  if (!showChatWindow.value) {
+    showChatWindow.value = true
+    setTimeout(() => {
+      scrollChatToBottom()
+    }, 150)
+  }
+  
+  let conversationTopic = chatMessage.value.trim()
+  
+  // If no input, prompt for conversation topic
+  if (!conversationTopic) {
+    const promptResult = prompt('💬 Conversational Agent\n\nWhat would you like to chat about?')
+    
+    if (!promptResult || !promptResult.trim()) {
+      console.log('💬 Conversational agent cancelled - no topic provided')
+      return
+    }
+    
+    conversationTopic = promptResult.trim()
+    chatMessage.value = conversationTopic
+  }
+  
+  console.log('💬 FRONTEND: Conversational Agent clicked')
+  // For now, use the default enteract agent
+  await sendMessage('enteract')
+}
+
+// Coding Agent
+const startCodingAgent = async () => {
+  // Auto-open chat window if not open
+  if (!showChatWindow.value) {
+    showChatWindow.value = true
+    setTimeout(() => {
+      scrollChatToBottom()
+    }, 150)
+  }
+  
+  let codingTask = chatMessage.value.trim()
+  
+  // If no input, prompt for coding task
+  if (!codingTask) {
+    const promptResult = prompt('👨‍💻 Coding Agent\n\nWhat coding task can I help you with?')
+    
+    if (!promptResult || !promptResult.trim()) {
+      console.log('👨‍💻 Coding agent cancelled - no task provided')
+      return
+    }
+    
+    codingTask = promptResult.trim()
+    chatMessage.value = codingTask
+  }
+  
+  console.log('👨‍💻 FRONTEND: Coding Agent clicked')
+  // TODO: Implement coding-specific agent
+  // For now, use the default enteract agent
+  await sendMessage('enteract')
+}
+
+// Computer Use Agent (Experimental)
+const startComputerUseAgent = async () => {
+  // Auto-open chat window if not open
+  if (!showChatWindow.value) {
+    showChatWindow.value = true
+    setTimeout(() => {
+      scrollChatToBottom()
+    }, 150)
+  }
+  
+  let computerTask = chatMessage.value.trim()
+  
+  // If no input, prompt for computer task
+  if (!computerTask) {
+    const promptResult = prompt('🖥️ Computer Use Agent (Experimental)\n\nWhat computer task would you like me to help with?\n\n⚠️ This is experimental and may require screen access.')
+    
+    if (!promptResult || !promptResult.trim()) {
+      console.log('🖥️ Computer Use agent cancelled - no task provided')
+      return
+    }
+    
+    computerTask = promptResult.trim()
+    chatMessage.value = computerTask
+  }
+  
+  console.log('🖥️ FRONTEND: Computer Use Agent clicked')
+  // TODO: Implement computer use agent with screen interaction
+  // For now, use screen analysis as a foundation
+  await takeScreenshotAndAnalyze()
 }
 
 const closeChatWindow = async () => {
@@ -1703,40 +1800,56 @@ const renderMarkdown = (text: string): string => {
           
           <!-- Agent Action Buttons -->
           <div class="agent-actions">
-            <button @click="takeScreenshotAndAnalyze" class="agent-btn vision-btn" title="Analyze Screen">
-              <CameraIcon class="w-4 h-4" />
-              <span>Analyze Screen</span>
-              <div class="feature-indicators">
-                <PhotoIcon class="w-3 h-3 text-blue-400" title="Image Analysis" />
-                <DocumentIcon class="w-3 h-3 text-green-400" title="Document Processing" />
+            <!-- AI Agents Row -->
+            <div class="agents-row">
+              <div class="section-label">AI Agents</div>
+              <div class="agents-buttons">
+                <button @click="takeScreenshotAndAnalyze" class="agent-btn-icon vision-btn" title="Screen Analysis Agent - Analyze screenshots and visual content">
+                  <CameraIcon class="w-4 h-4" />
+                </button>
+                
+                <button @click="startDeepResearch" class="agent-btn-icon research-btn" title="Deep Reasoning Agent - Advanced research with step-by-step thinking">
+                  <MagnifyingGlassIcon class="w-4 h-4" />
+                </button>
+                
+                <button @click="startConversationalAgent" class="agent-btn-icon conversation-btn" title="Conversational Agent - General chat and conversation">
+                  <ChatBubbleLeftIcon class="w-4 h-4" />
+                </button>
+                
+                <button @click="startCodingAgent" class="agent-btn-icon coding-btn" title="Coding Agent - Programming assistance and code review">
+                  <CodeBracketIcon class="w-4 h-4" />
+                </button>
+                
+                <button @click="startComputerUseAgent" class="agent-btn-icon computer-btn" title="Computer Use Agent (Experimental) - Screen interaction and automation">
+                  <ComputerDesktopIcon class="w-4 h-4" />
+                  <div class="experimental-badge">β</div>
+                </button>
               </div>
-            </button>
+            </div>
             
-            <button @click="startDeepResearch" class="agent-btn research-btn" title="Deep Research Mode">
-              <MagnifyingGlassIcon class="w-4 h-4" />
-              <span>Research</span>
-              <div class="feature-indicators">
-                <EyeIcon class="w-3 h-3 text-purple-400" title="Thinking Process" />
-                <ClipboardDocumentIcon class="w-3 h-3 text-yellow-400" title="Clipboard Support" />
+            <!-- Tools Row -->
+            <div class="tools-row">
+              <div class="section-label">Tools</div>
+              <div class="tools-buttons">
+                <!-- File Upload Tool -->
+                <input 
+                  type="file" 
+                  ref="fileInput" 
+                  @change="handleFileUpload"
+                  multiple
+                  accept="image/*,.pdf,.txt,.md,.doc,.docx"
+                  class="hidden"
+                />
+                <button @click="triggerFileUpload" class="tool-btn-icon upload-tool" title="Upload Files - Add documents, images, and other files">
+                  <DocumentIcon class="w-4 h-4" />
+                </button>
+                
+                <!-- Quick Screenshot Tool -->
+                <button @click="() => takeScreenshotAndAnalyze()" class="tool-btn-icon screenshot-tool" title="Quick Screenshot - Capture screen instantly">
+                  <PhotoIcon class="w-4 h-4" />
+                </button>
               </div>
-            </button>
-            
-            <!-- File Upload Button -->
-            <input 
-              type="file" 
-              ref="fileInput" 
-              @change="handleFileUpload"
-              multiple
-              accept="image/*,.pdf,.txt,.md,.doc,.docx"
-              class="hidden"
-            />
-            <button @click="triggerFileUpload" class="agent-btn upload-btn" title="Upload Files">
-              <DocumentIcon class="w-4 h-4" />
-              <span>Upload</span>
-              <div class="feature-indicators">
-                <PhotoIcon class="w-3 h-3 text-blue-400" title="Drag & Drop" />
-              </div>
-            </button>
+            </div>
           </div>
           
           <div class="chat-input-container">
@@ -1744,7 +1857,7 @@ const renderMarkdown = (text: string): string => {
               v-model="chatMessage"
               @keydown="handleChatKeydown"
               class="chat-input"
-              placeholder="Ask the Enteract Agent..."
+              placeholder="Ask any AI agent..."
               type="text"
             />
             <button @click="() => sendMessage()" class="chat-send-btn" :disabled="!chatMessage.trim()">
@@ -2152,37 +2265,133 @@ const renderMarkdown = (text: string): string => {
 }
 
 .agent-actions {
-  @apply flex gap-2 px-4 py-2 border-t border-white/10;
+  @apply px-4 py-3 border-t border-white/10 space-y-3;
 }
 
-.agent-btn {
-  @apply flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200;
-  @apply bg-white/5 border border-white/15 text-white/80;
-  @apply hover:bg-white/10 hover:border-white/30 hover:text-white;
-  @apply hover:scale-105 hover:shadow-lg;
+.agents-row, .tools-row {
+  @apply flex flex-col gap-2;
+}
+
+.section-label {
+  @apply text-white/60 text-xs font-medium uppercase tracking-wider;
+}
+
+.agents-buttons, .tools-buttons {
+  @apply flex items-center gap-2;
+}
+
+.agent-btn-icon, .tool-btn-icon {
+  @apply rounded-full transition-all duration-200 flex items-center justify-center;
+  @apply relative;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.agent-btn-icon:hover, .tool-btn-icon:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .vision-btn {
-  @apply bg-purple-500/10 border-purple-400/20 text-purple-300;
-  @apply hover:bg-purple-500/20 hover:border-purple-400/40 hover:text-purple-200;
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  color: rgb(196, 181, 253);
+}
+
+.vision-btn:hover {
+  background: rgba(168, 85, 247, 0.25);
+  border-color: rgba(168, 85, 247, 0.5);
+  color: rgb(221, 214, 254);
 }
 
 .research-btn {
-  @apply bg-blue-500/10 border-blue-400/20 text-blue-300;
-  @apply hover:bg-blue-500/20 hover:border-blue-400/40 hover:text-blue-200;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: rgb(147, 197, 253);
 }
 
-.upload-btn {
-  @apply bg-green-500/10 border-green-400/20 text-green-300;
-  @apply hover:bg-green-500/20 hover:border-green-400/40 hover:text-green-200;
+.research-btn:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: rgba(59, 130, 246, 0.5);
+  color: rgb(191, 219, 254);
 }
 
-.feature-indicators {
-  @apply flex gap-1 ml-1 opacity-50 transition-opacity;
+.conversation-btn {
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  color: rgb(196, 181, 253);
 }
 
-.agent-btn:hover .feature-indicators {
-  @apply opacity-70;
+.conversation-btn:hover {
+  background: rgba(168, 85, 247, 0.25);
+  border-color: rgba(168, 85, 247, 0.5);
+  color: rgb(221, 214, 254);
+}
+
+.coding-btn {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: rgb(147, 197, 253);
+}
+
+.coding-btn:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: rgba(59, 130, 246, 0.5);
+  color: rgb(191, 219, 254);
+}
+
+.computer-btn {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: rgb(134, 239, 172);
+}
+
+.computer-btn:hover {
+  background: rgba(34, 197, 94, 0.25);
+  border-color: rgba(34, 197, 94, 0.5);
+  color: rgb(187, 247, 208);
+}
+
+.upload-tool {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: rgb(134, 239, 172);
+}
+
+.upload-tool:hover {
+  background: rgba(34, 197, 94, 0.25);
+  border-color: rgba(34, 197, 94, 0.5);
+  color: rgb(187, 247, 208);
+}
+
+.screenshot-tool {
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  color: rgb(196, 181, 253);
+}
+
+.screenshot-tool:hover {
+  background: rgba(168, 85, 247, 0.25);
+  border-color: rgba(168, 85, 247, 0.5);
+  color: rgb(221, 214, 254);
+}
+
+.experimental-badge {
+  @apply absolute -top-1 -right-1 text-xs bg-yellow-400 text-yellow-900 px-1 py-0.5 rounded-full font-bold;
+  font-size: 8px;
+  line-height: 1;
+  min-width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .hidden {
@@ -2569,4 +2778,6 @@ const renderMarkdown = (text: string): string => {
   opacity: 0;
   transform: translateY(-10px) scale(0.95);
 }
+
+
 </style> 
