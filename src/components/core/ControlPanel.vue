@@ -337,12 +337,12 @@ const takeScreenshotAndAnalyze = async () => {
     // Generate unique session ID
     const sessionId = `vision-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     
-    // Add streaming message placeholder
+    // Add streaming message placeholder with more detailed status
     const streamingMessageIndex = chatHistory.value.length
     chatHistory.value.push({
       id: messageIdCounter++,
       sender: 'assistant',
-      text: '🔍 Analyzing screenshot▋',
+      text: '🔍 Initializing Qwen vision model for analysis▋',
       timestamp: new Date(),
       messageType: 'text'
     })
@@ -353,6 +353,7 @@ const takeScreenshotAndAnalyze = async () => {
     
     let fullResponse = ''
     let isTyping = true
+    let hasStarted = false
     
     // Set up event listener for vision analysis
     const unlisten = await listen(`ollama-stream-${sessionId}`, (event: any) => {
@@ -360,14 +361,28 @@ const takeScreenshotAndAnalyze = async () => {
       
       switch (data.type) {
         case 'start':
+          hasStarted = true
           console.log(`👁️ Started vision analysis with ${data.model}`)
+          if (chatHistory.value[streamingMessageIndex]) {
+            chatHistory.value[streamingMessageIndex].text = `👁️ Qwen ${data.model} is analyzing your screenshot▋`
+          }
+          setTimeout(() => {
+            scrollChatToBottom()
+          }, 10)
           break
           
         case 'chunk':
           if (data.text) {
+            // First chunk - update status
+            if (fullResponse === '') {
+              if (chatHistory.value[streamingMessageIndex]) {
+                chatHistory.value[streamingMessageIndex].text = '👁️ Vision Analysis:\n\n'
+              }
+            }
+            
             fullResponse += data.text
             if (chatHistory.value[streamingMessageIndex]) {
-              chatHistory.value[streamingMessageIndex].text = fullResponse + (isTyping ? '▋' : '')
+              chatHistory.value[streamingMessageIndex].text = '👁️ Vision Analysis:\n\n' + fullResponse + (isTyping ? '▋' : '')
             }
             
             setTimeout(() => {
@@ -378,8 +393,9 @@ const takeScreenshotAndAnalyze = async () => {
           if (data.done) {
             isTyping = false
             if (chatHistory.value[streamingMessageIndex]) {
-              chatHistory.value[streamingMessageIndex].text = fullResponse
+              chatHistory.value[streamingMessageIndex].text = '👁️ Vision Analysis:\n\n' + fullResponse
             }
+            console.log('✅ Vision analysis streaming completed')
           }
           break
           
@@ -387,16 +403,31 @@ const takeScreenshotAndAnalyze = async () => {
           isTyping = false
           console.error('Vision analysis error:', data.error)
           if (chatHistory.value[streamingMessageIndex]) {
-            chatHistory.value[streamingMessageIndex].text = `❌ Vision analysis error: ${data.error}`
+            if (data.error.includes('qwen2.5vl:3b')) {
+              chatHistory.value[streamingMessageIndex].text = `❌ Vision model not found. Please install qwen2.5vl:3b first:\n\n\`\`\`bash\nollama pull qwen2.5vl:3b\n\`\`\``
+            } else {
+              chatHistory.value[streamingMessageIndex].text = `❌ Vision analysis error: ${data.error}`
+            }
           }
           break
           
         case 'complete':
           isTyping = false
+          console.log('🎉 Vision analysis session completed')
           unlisten()
           break
       }
     })
+    
+    // Add a timeout to show model loading if it takes too long
+    const loadingTimeout = setTimeout(() => {
+      if (!hasStarted && chatHistory.value[streamingMessageIndex]) {
+        chatHistory.value[streamingMessageIndex].text = '🔄 Loading Qwen vision model (this may take a moment for the first run)▋'
+        setTimeout(() => {
+          scrollChatToBottom()
+        }, 10)
+      }
+    }, 2000)
     
     // Start vision analysis
     await invoke('generate_vision_analysis', {
@@ -405,12 +436,25 @@ const takeScreenshotAndAnalyze = async () => {
       sessionId: sessionId
     })
     
+    // Clear the loading timeout
+    clearTimeout(loadingTimeout)
+    
   } catch (error) {
     console.error('Failed to analyze screen:', error)
+    
+    // More detailed error messages
+    const errorString = error instanceof Error ? error.message : String(error)
+    let errorMessage = `❌ Failed to analyze screen: ${errorString}`
+    if (errorString.includes('connection refused') || errorString.includes('ECONNREFUSED')) {
+      errorMessage = `❌ Cannot connect to Ollama. Please make sure Ollama is running:\n\n\`\`\`bash\nollama serve\n\`\`\``
+    } else if (errorString.includes('model') && errorString.includes('not found')) {
+      errorMessage = `❌ Vision model not available. Install with:\n\n\`\`\`bash\nollama pull qwen2.5vl:3b\n\`\`\``
+    }
+    
     chatHistory.value.push({
       id: messageIdCounter++,
       sender: 'assistant',
-      text: `❌ Failed to analyze screen: ${error}`,
+      text: errorMessage,
       timestamp: new Date(),
       messageType: 'text'
     })
@@ -419,15 +463,31 @@ const takeScreenshotAndAnalyze = async () => {
 
 // Deep Research Mode
 const startDeepResearch = async () => {
-  if (!chatMessage.value.trim()) {
-    chatMessage.value = 'Conduct a deep research analysis on: '
-    const input = document.querySelector('.chat-input') as HTMLInputElement
-    if (input) {
-      input.focus()
-      input.setSelectionRange(input.value.length, input.value.length)
-    }
-    return
+  // Auto-open chat window if not open
+  if (!showChatWindow.value) {
+    showChatWindow.value = true
+    setTimeout(() => {
+      scrollChatToBottom()
+    }, 150)
   }
+  
+  let researchQuery = chatMessage.value.trim()
+  
+  // If no input, prompt for research topic
+  if (!researchQuery) {
+    researchQuery = prompt('🧠 Deep Research Mode\n\nWhat would you like me to research in detail?')
+    
+    if (!researchQuery || !researchQuery.trim()) {
+      console.log('🧠 Deep research cancelled - no query provided')
+      return
+    }
+    
+    // Add the query to chat input for user to see, then clear it
+    chatMessage.value = researchQuery.trim()
+  }
+  
+  console.log('🧠 FRONTEND: Deep Research button clicked, calling sendMessage with deep_research mode')
+  console.log('🧠 FRONTEND: Research query:', researchQuery)
   
   await sendMessage('deep_research')
 }
@@ -469,10 +529,13 @@ const sendMessage = async (agentType: string = 'enteract') => {
     // Add streaming message placeholder with agent indicator
     const streamingMessageIndex = chatHistory.value.length
     const agentEmoji = agentType === 'deep_research' ? '🧠' : agentType === 'vision' ? '👁️' : '🛡️'
+    const agentName = agentType === 'deep_research' ? 'DeepSeek R1' : agentType === 'vision' ? 'Vision' : 'Enteract'
+    const expectedModel = agentType === 'deep_research' ? 'deepseek-r1:1.5b' : agentType === 'vision' ? 'qwen2.5vl:3b' : 'gemma3:1b-it-qat'
+    
     chatHistory.value.push({
       id: messageIdCounter++,
       sender: 'assistant',
-      text: `${agentEmoji}▋`,
+      text: `${agentEmoji} Initializing ${agentName} agent (${expectedModel})▋`,
       timestamp: new Date(),
       messageType: 'text'
     })
@@ -483,6 +546,10 @@ const sendMessage = async (agentType: string = 'enteract') => {
     
     let fullResponse = ''
     let isTyping = true
+    let hasStarted = false
+    let isInThinking = false
+    let thinkingContent = ''
+    let actualResponse = ''
     
     // Set up event listener for streaming response
     const unlisten = await listen(`ollama-stream-${sessionId}`, (event: any) => {
@@ -490,18 +557,84 @@ const sendMessage = async (agentType: string = 'enteract') => {
       
       switch (data.type) {
         case 'start':
+          hasStarted = true
           console.log(`🚀 Started ${agentType} streaming from ${data.model}`)
+          
+          // Check if actual model matches expected model
+          if (data.model !== expectedModel) {
+            console.warn(`⚠️ MODEL MISMATCH: Expected ${expectedModel} but got ${data.model}`)
+            if (chatHistory.value[streamingMessageIndex]) {
+              chatHistory.value[streamingMessageIndex].text = `${agentEmoji} ⚠️ Using ${data.model} (expected ${expectedModel}) - ${agentType === 'deep_research' ? 'researching your query' : 'processing your request'}▋`
+            }
+          } else {
+            console.log(`✅ MODEL CORRECT: Using expected model ${data.model}`)
+            if (chatHistory.value[streamingMessageIndex]) {
+              chatHistory.value[streamingMessageIndex].text = `${agentEmoji} ${data.model} is ${agentType === 'deep_research' ? 'researching your query' : 'processing your request'}▋`
+            }
+          }
+          
+          setTimeout(() => {
+            scrollChatToBottom()
+          }, 10)
           break
           
         case 'chunk':
           if (data.text) {
             fullResponse += data.text
-            // Update the streaming message with accumulated text + cursor
-            if (chatHistory.value[streamingMessageIndex]) {
-              chatHistory.value[streamingMessageIndex].text = fullResponse + (isTyping ? '▋' : '')
+            
+            // Handle DeepSeek thinking process
+            if (agentType === 'deep_research') {
+              // Check if we're entering thinking mode
+              if (fullResponse.includes('<thinking>') && !isInThinking) {
+                isInThinking = true
+                const thinkingStart = fullResponse.indexOf('<thinking>')
+                actualResponse = fullResponse.substring(0, thinkingStart)
+                thinkingContent = fullResponse.substring(thinkingStart + 10) // Skip <thinking>
+              }
+              
+              // Check if we're exiting thinking mode
+              if (isInThinking && fullResponse.includes('</thinking>')) {
+                const thinkingEnd = fullResponse.indexOf('</thinking>')
+                const afterThinking = fullResponse.substring(thinkingEnd + 11) // Skip </thinking>
+                thinkingContent = fullResponse.substring(fullResponse.indexOf('<thinking>') + 10, thinkingEnd)
+                actualResponse += afterThinking
+                isInThinking = false
+                
+                // Update with thinking section collapsed by default
+                if (chatHistory.value[streamingMessageIndex]) {
+                  const thinkingDisplay = `<details style="margin: 10px 0; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 10px;">
+<summary style="cursor: pointer; font-weight: bold; color: #a855f7;">🤔 Show thinking process</summary>
+<div style="margin-top: 10px; padding: 10px; background: rgba(168,85,247,0.1); border-radius: 6px; font-family: monospace; white-space: pre-wrap;">${thinkingContent}</div>
+</details>`
+                  
+                  chatHistory.value[streamingMessageIndex].text = `🧠 Deep Research Analysis:\n\n${thinkingDisplay}\n\n${actualResponse}${isTyping ? '▋' : ''}`
+                }
+              } else if (isInThinking) {
+                // Currently in thinking mode - update thinking content
+                const currentThinking = fullResponse.substring(fullResponse.indexOf('<thinking>') + 10)
+                if (chatHistory.value[streamingMessageIndex]) {
+                  chatHistory.value[streamingMessageIndex].text = `🧠 Deep Research Analysis:\n\n🤔 **Thinking...**\n\n_${currentThinking.slice(-100)}_${isTyping ? '▋' : ''}`
+                }
+              } else {
+                // Regular response mode
+                if (chatHistory.value[streamingMessageIndex]) {
+                  if (actualResponse === '' && fullResponse.trim()) {
+                    actualResponse = fullResponse
+                  }
+                  chatHistory.value[streamingMessageIndex].text = `🧠 Deep Research Analysis:\n\n${actualResponse || fullResponse}${isTyping ? '▋' : ''}`
+                }
+              }
+            } else {
+              // Regular agent response
+              if (chatHistory.value[streamingMessageIndex]) {
+                if (fullResponse.trim() && !chatHistory.value[streamingMessageIndex].text.includes(':\n\n')) {
+                  chatHistory.value[streamingMessageIndex].text = `${agentEmoji} ${agentName} Response:\n\n${fullResponse}${isTyping ? '▋' : ''}`
+                } else {
+                  chatHistory.value[streamingMessageIndex].text = fullResponse + (isTyping ? '▋' : '')
+                }
+              }
             }
             
-            // Auto-scroll to bottom as text streams in
             setTimeout(() => {
               scrollChatToBottom()
             }, 10)
@@ -509,9 +642,18 @@ const sendMessage = async (agentType: string = 'enteract') => {
           
           if (data.done) {
             isTyping = false
-            // Remove cursor when done
             if (chatHistory.value[streamingMessageIndex]) {
-              chatHistory.value[streamingMessageIndex].text = fullResponse
+              if (agentType === 'deep_research' && thinkingContent) {
+                const thinkingDisplay = `<details style="margin: 10px 0; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 10px;">
+<summary style="cursor: pointer; font-weight: bold; color: #a855f7;">🤔 Show thinking process</summary>
+<div style="margin-top: 10px; padding: 10px; background: rgba(168,85,247,0.1); border-radius: 6px; font-family: monospace; white-space: pre-wrap;">${thinkingContent}</div>
+</details>`
+                chatHistory.value[streamingMessageIndex].text = `🧠 Deep Research Analysis:\n\n${thinkingDisplay}\n\n${actualResponse}`
+              } else {
+                chatHistory.value[streamingMessageIndex].text = agentType === 'deep_research' 
+                  ? `🧠 Deep Research Analysis:\n\n${fullResponse}`
+                  : chatHistory.value[streamingMessageIndex].text.replace('▋', '')
+              }
             }
             console.log(`✅ ${agentType} streaming completed. Full response: ${fullResponse}`)
           }
@@ -522,7 +664,13 @@ const sendMessage = async (agentType: string = 'enteract') => {
           console.error(`${agentType} streaming error:`, data.error)
           // Update message to show error
           if (chatHistory.value[streamingMessageIndex]) {
-            chatHistory.value[streamingMessageIndex].text = `❌ Error: ${data.error}`
+            let errorMessage = `❌ Error: ${data.error}`
+            if (data.error.includes('deepseek-r1:1.5b') && agentType === 'deep_research') {
+              errorMessage = `❌ DeepSeek R1 model not found. Please install it first:\n\n\`\`\`bash\nollama pull deepseek-r1:1.5b\n\`\`\``
+            } else if (data.error.includes('connection refused') || data.error.includes('ECONNREFUSED')) {
+              errorMessage = `❌ Cannot connect to Ollama. Please make sure Ollama is running:\n\n\`\`\`bash\nollama serve\n\`\`\``
+            }
+            chatHistory.value[streamingMessageIndex].text = errorMessage
           }
           break
           
@@ -535,13 +683,25 @@ const sendMessage = async (agentType: string = 'enteract') => {
       }
     })
     
+    // Add a timeout to show model loading if it takes too long
+    const loadingTimeout = setTimeout(() => {
+      if (!hasStarted && chatHistory.value[streamingMessageIndex]) {
+        chatHistory.value[streamingMessageIndex].text = `🔄 Loading ${agentName} model (this may take a moment for the first run)▋`
+        setTimeout(() => {
+          scrollChatToBottom()
+        }, 10)
+      }
+    }, 2000)
+    
     // Route to appropriate agent based on type
     if (agentType === 'deep_research') {
+      console.log('🧠 FRONTEND: Calling generate_deep_research (should use deepseek-r1:1.5b)')
       await invoke('generate_deep_research', {
         prompt: userMessage,
         sessionId: sessionId
       })
     } else {
+      console.log('🛡️ FRONTEND: Calling generate_enteract_agent_response (should use gemma3:1b-it-qat)')
       // Default to Enteract agent (gemma with security focus)
       await invoke('generate_enteract_agent_response', {
         prompt: userMessage,
@@ -549,17 +709,28 @@ const sendMessage = async (agentType: string = 'enteract') => {
       })
     }
     
+    // Clear the loading timeout
+    clearTimeout(loadingTimeout)
+    
     console.log(`🤖 Started streaming AI response from ${modelToUse}`)
     
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorString = error instanceof Error ? error.message : String(error)
     console.error('Failed to start AI response streaming:', error)
+    
+    // Enhanced error messages
+    let errorMessage = `❌ Failed to get AI response: ${errorString}. Make sure Ollama is running and the model "${selectedModel.value || 'gemma3:1b-it-qat'}" is available.`
+    if (errorString.includes('connection refused') || errorString.includes('ECONNREFUSED')) {
+      errorMessage = `❌ Cannot connect to Ollama. Please make sure Ollama is running:\n\n\`\`\`bash\nollama serve\n\`\`\``
+    } else if (errorString.includes('model') && errorString.includes('not found')) {
+      errorMessage = `❌ Model not available. Install with:\n\n\`\`\`bash\nollama pull ${selectedModel.value || 'gemma3:1b-it-qat'}\n\`\`\``
+    }
     
     // Add error message to chat
     chatHistory.value.push({
       id: messageIdCounter++,
       sender: 'assistant',
-      text: `❌ Failed to get AI response: ${errorMessage}. Make sure Ollama is running and the model "${selectedModel.value || 'gemma3:1b-it-qat'}" is available.`,
+      text: errorMessage,
       timestamp: new Date(),
       messageType: 'text'
     })

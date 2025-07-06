@@ -377,7 +377,7 @@ pub async fn generate_enteract_agent_response(
     session_id: String,
 ) -> Result<(), String> {
     let model = "gemma3:1b-it-qat".to_string();
-    generate_agent_response_stream(app_handle, model, prompt, ENTERACT_AGENT_PROMPT.to_string(), session_id).await
+    generate_agent_response_stream(app_handle, model, prompt, ENTERACT_AGENT_PROMPT.to_string(), session_id, "enteract".to_string()).await
 }
 
 #[tauri::command]
@@ -396,7 +396,8 @@ pub async fn generate_vision_analysis(
         full_prompt, 
         VISION_ANALYSIS_PROMPT.to_string(),
         image_base64,
-        session_id
+        session_id,
+        "vision".to_string()
     ).await
 }
 
@@ -409,7 +410,8 @@ pub async fn generate_deep_research(
     let model = "deepseek-r1:1.5b".to_string();
     let full_prompt = format!("Deep Research Query:\n\n{}", prompt);
     
-    generate_agent_response_stream(app_handle, model, full_prompt, DEEP_RESEARCH_PROMPT.to_string(), session_id).await
+    println!("🧠 DEEP RESEARCH: Using model {} for session {}", model, session_id);
+    generate_agent_response_stream(app_handle, model, full_prompt, DEEP_RESEARCH_PROMPT.to_string(), session_id, "deep_research".to_string()).await
 }
 
 // Helper function for streaming with system prompt
@@ -419,6 +421,7 @@ async fn generate_agent_response_stream(
     prompt: String,
     system_prompt: String,
     session_id: String,
+    agent_type: String,
 ) -> Result<(), String> {
     let client = reqwest::Client::new();
     let url = format!("{}/api/generate", OLLAMA_BASE_URL);
@@ -432,13 +435,13 @@ async fn generate_agent_response_stream(
         system: Some(system_prompt),
     };
     
-    println!("🤖 Starting {} agent streaming for session: {}", model, session_id);
+    println!("🤖 Starting {} agent ({}) streaming for session: {}", agent_type, model, session_id);
     
-    // Emit start event
+    // Emit start event with correct agent type
     if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
         "type": "start",
         "model": model,
-        "agent_type": "enteract"
+        "agent_type": agent_type
     })) {
         return Err(format!("Failed to emit start event: {}", e));
     }
@@ -454,6 +457,7 @@ async fn generate_agent_response_stream_with_image(
     system_prompt: String,
     image_base64: String,
     session_id: String,
+    agent_type: String,
 ) -> Result<(), String> {
     let client = reqwest::Client::new();
     let url = format!("{}/api/generate", OLLAMA_BASE_URL);
@@ -467,13 +471,13 @@ async fn generate_agent_response_stream_with_image(
         system: Some(system_prompt),
     };
     
-    println!("👁️ Starting {} vision analysis for session: {}", model, session_id);
+    println!("👁️ Starting {} vision analysis ({}) for session: {}", agent_type, model, session_id);
     
-    // Emit start event
+    // Emit start event with correct agent type
     if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
         "type": "start",
         "model": model,
-        "agent_type": "vision"
+        "agent_type": agent_type
     })) {
         return Err(format!("Failed to emit start event: {}", e));
     }
