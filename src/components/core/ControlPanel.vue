@@ -2,12 +2,10 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { 
   MicrophoneIcon, 
-  ChatBubbleLeftRightIcon,
   SparklesIcon,
   CommandLineIcon,
   CpuChipIcon,
-  ExclamationTriangleIcon,
-  AdjustmentsHorizontalIcon
+  ExclamationTriangleIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
@@ -42,29 +40,7 @@ const showTransparencyControls = ref(false)
 // ML Eye tracking with window movement state
 const isGazeControlActive = ref(false)
 
-// Calibration state
-const showCalibrationModal = ref(false)
-const calibrationActive = ref(false)
-const calibrationTargets = ref<Array<{x: number, y: number}>>([])
-const currentTargetIndex = ref(0)
-const calibrationPoints = ref<Array<{x: number, y: number}>>([])
-
-// Computed properties for calibration
-const currentCalibrationTarget = computed(() => {
-  if (!calibrationActive.value || currentTargetIndex.value >= calibrationTargets.value.length) {
-    return null
-  }
-  return calibrationTargets.value[currentTargetIndex.value]
-})
-
-const calibrationTargetStyle = computed(() => {
-  if (!currentCalibrationTarget.value) return {}
-  
-  return {
-    left: `${currentCalibrationTarget.value.x - 100}px`,
-    top: `${currentCalibrationTarget.value.y - 100}px`
-  }
-})
+// Calibration state removed - multimonitor calibration functionality removed
 
 // Retry and error handling functions
 const retrySpeechSetup = async () => {
@@ -205,84 +181,7 @@ const toggleTransparencyControls = () => {
   showTransparencyControls.value = !showTransparencyControls.value
 }
 
-// Calibration functions
-const openCalibrationModal = () => {
-  generateCalibrationTargets()
-  showCalibrationModal.value = true
-}
-
-const generateCalibrationTargets = () => {
-  calibrationTargets.value = []
-  const monitors = windowManager.state.value.monitors
-  
-  monitors.forEach(monitor => {
-    const margin = 50
-    
-    // Generate 5 points per monitor: 4 corners + center
-    const points = [
-      { x: monitor.x + margin, y: monitor.y + margin }, // Top-left
-      { x: monitor.x + monitor.width - margin, y: monitor.y + margin }, // Top-right
-      { x: monitor.x + margin, y: monitor.y + monitor.height - margin }, // Bottom-left
-      { x: monitor.x + monitor.width - margin, y: monitor.y + monitor.height - margin }, // Bottom-right
-      { x: monitor.x + monitor.width / 2, y: monitor.y + monitor.height / 2 } // Center
-    ]
-    
-    calibrationTargets.value.push(...points)
-  })
-}
-
-const startFullCalibration = () => {
-  calibrationActive.value = true
-  currentTargetIndex.value = 0
-  calibrationPoints.value = []
-  
-  // Add keyboard listener for calibration
-  document.addEventListener('keydown', handleCalibrationKeydown)
-}
-
-const skipCalibration = () => {
-  showCalibrationModal.value = false
-  calibrationActive.value = false
-  document.removeEventListener('keydown', handleCalibrationKeydown)
-}
-
-const handleCalibrationKeydown = (event: KeyboardEvent) => {
-  if (!calibrationActive.value) return
-  
-  if (event.code === 'Space') {
-    event.preventDefault()
-    recordCalibrationPoint()
-  } else if (event.code === 'Escape') {
-    event.preventDefault()
-    cancelCalibration()
-  }
-}
-
-const recordCalibrationPoint = () => {
-  if (!currentCalibrationTarget.value) return
-  
-  calibrationPoints.value.push(currentCalibrationTarget.value)
-  currentTargetIndex.value++
-  
-  if (currentTargetIndex.value >= calibrationTargets.value.length) {
-    finishCalibration()
-  }
-}
-
-const finishCalibration = () => {
-  calibrationActive.value = false
-  showCalibrationModal.value = false
-  document.removeEventListener('keydown', handleCalibrationKeydown)
-  
-  console.log('🎯 Calibration completed with', calibrationPoints.value.length, 'points')
-}
-
-const cancelCalibration = () => {
-  calibrationActive.value = false
-  showCalibrationModal.value = false
-  document.removeEventListener('keydown', handleCalibrationKeydown)
-  console.log('🎯 Calibration cancelled')
-}
+// Calibration functions removed - multimonitor calibration functionality removed
 
 const toggleMLEyeTrackingWithMovement = async () => {
   if (mlEyeTracking.isActive.value) {
@@ -458,19 +357,7 @@ onUnmounted(() => {
             :class="mlEyeTracking.isActive.value ? 'text-white' : 'text-white/80 group-hover:text-white'" />
         </button>
 
-        <!-- Calibration Button -->
-        <button 
-          @click="openCalibrationModal"
-          class="btn btn-circle btn-sm glass-btn-compact group tooltip flex items-center justify-center"
-          :class="{ 
-            'btn-info': showCalibrationModal,
-            'glass-btn-compact': !showCalibrationModal 
-          }"
-          data-tip="Multi-Monitor Calibration"
-        >
-          <AdjustmentsHorizontalIcon class="w-3.5 h-3.5 transition-colors"
-            :class="showCalibrationModal ? 'text-white' : 'text-white/80 group-hover:text-white'" />
-        </button>
+        <!-- Calibration Button removed - multimonitor calibration functionality removed -->
 
         <!-- Command Mode Button (Transparency Controls) -->
         <button 
@@ -483,16 +370,7 @@ onUnmounted(() => {
             :class="showTransparencyControls ? 'text-white' : 'text-white/80 group-hover:text-white'" />
         </button>
         
-        <!-- Chat Button -->
-        <button 
-          @click="store.toggleChat"
-          class="btn btn-circle btn-sm glass-btn-compact group tooltip flex items-center justify-center"
-          :class="{ 'btn-accent': store.chatOpen, 'glass-btn-compact': !store.chatOpen }"
-          data-tip="Toggle Chat"
-        >
-          <ChatBubbleLeftRightIcon class="w-3.5 h-3.5 transition-colors"
-            :class="store.chatOpen ? 'text-white' : 'text-white/80 group-hover:text-white'" />
-        </button>
+        <!-- Chat Button removed - chat is now part of home screen -->
       </div>
     </div>
     
@@ -621,57 +499,7 @@ onUnmounted(() => {
       </div>
     </Transition>
     
-    <!-- Calibration Modal -->
-    <div v-if="showCalibrationModal" class="calibration-overlay">
-      <!-- Calibration Info Modal -->
-      <div v-if="!calibrationActive" class="calibration-modal">
-        <div class="modal-header">
-          <h2>🎯 Gaze Calibration</h2>
-          <p>Detected {{ windowManager.state.value.monitors.length }} monitor(s)</p>
-        </div>
-        
-        <div class="monitor-info">
-          <h3>Monitor Layout</h3>
-          <div v-for="(monitor, index) in windowManager.state.value.monitors" :key="index" class="monitor-item">
-            <span class="monitor-name">{{ monitor.name }}</span>
-            <span class="monitor-details">
-              {{ monitor.width }}×{{ monitor.height }} at ({{ monitor.x }}, {{ monitor.y }})
-            </span>
-            <span v-if="monitor.is_primary" class="primary-badge">[PRIMARY]</span>
-          </div>
-        </div>
-        
-        <div class="instructions">
-          <p>This will show calibration targets across all monitors.</p>
-          <p>Look at each target and press <kbd>SPACE</kbd> when ready.</p>
-          <p>This improves gaze tracking accuracy for multi-monitor setups.</p>
-        </div>
-        
-        <div class="button-group">
-          <button @click="startFullCalibration" class="btn-primary">
-            Start Calibration
-          </button>
-          <button @click="skipCalibration" class="btn-secondary">
-            Skip Calibration
-          </button>
-        </div>
-      </div>
-      
-      <!-- Calibration Target -->
-      <div v-if="calibrationActive && currentCalibrationTarget" class="calibration-target" 
-           :style="calibrationTargetStyle">
-        <div class="target-circle">
-          <div class="outer-ring"></div>
-          <div class="middle-ring"></div>
-          <div class="inner-dot"></div>
-        </div>
-        <div class="target-instructions">
-          <p>Look at target {{ currentTargetIndex + 1 }}/{{ calibrationTargets.length }}</p>
-          <p>Press <kbd>SPACE</kbd> when ready</p>
-          <p class="escape-hint">Press <kbd>ESC</kbd> to cancel</p>
-        </div>
-      </div>
-    </div>
+    <!-- Calibration Modal removed - multimonitor calibration functionality removed -->
   </div>
 </template>
 
@@ -715,195 +543,7 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-/* Calibration modal styles */
-.calibration-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.9);
-  z-index: 10000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: 'IBM Plex Mono', monospace;
-}
-
-.calibration-modal {
-  background: #1a1a1a;
-  border: 2px solid #333;
-  border-radius: 12px;
-  padding: 2rem;
-  max-width: 600px;
-  width: 90%;
-  color: white;
-}
-
-.modal-header h2 {
-  margin: 0 0 0.5rem 0;
-  color: #fff;
-  font-size: 1.5rem;
-}
-
-.modal-header p {
-  margin: 0;
-  color: #aaa;
-}
-
-.monitor-info {
-  margin: 1.5rem 0;
-  padding: 1rem;
-  background: #222;
-  border-radius: 8px;
-}
-
-.monitor-info h3 {
-  margin: 0 0 1rem 0;
-  color: #fff;
-  font-size: 1.1rem;
-}
-
-.monitor-item {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 0.5rem;
-  font-family: 'Courier New', monospace;
-  font-size: 0.9rem;
-}
-
-.monitor-name {
-  color: #4CAF50;
-  font-weight: bold;
-}
-
-.monitor-details {
-  color: #ccc;
-}
-
-.primary-badge {
-  color: #ff6b35;
-  font-weight: bold;
-}
-
-.instructions {
-  margin: 1.5rem 0;
-  color: #ccc;
-  line-height: 1.5;
-}
-
-.instructions kbd {
-  background: #333;
-  border: 1px solid #666;
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 0.9em;
-  color: #fff;
-}
-
-.button-group {
-  display: flex;
-  gap: 1rem;
-  margin: 1.5rem 0;
-}
-
-.btn-primary {
-  background: #4CAF50;
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: bold;
-  transition: background 0.2s;
-}
-
-.btn-primary:hover {
-  background: #45a049;
-}
-
-.btn-secondary {
-  background: #666;
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.btn-secondary:hover {
-  background: #777;
-}
-
-.calibration-target {
-  position: absolute;
-  width: 200px;
-  height: 200px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  z-index: 10001;
-}
-
-.target-circle {
-  position: relative;
-  width: 60px;
-  height: 60px;
-  margin-bottom: 1rem;
-}
-
-.outer-ring {
-  position: absolute;
-  width: 60px;
-  height: 60px;
-  border: 3px solid white;
-  border-radius: 50%;
-  background: rgba(255, 0, 0, 0.7);
-}
-
-.middle-ring {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 30px;
-  height: 30px;
-  border: 2px solid white;
-  border-radius: 50%;
-  background: white;
-}
-
-.inner-dot {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 10px;
-  height: 10px;
-  border: 1px solid black;
-  border-radius: 50%;
-  background: black;
-}
-
-.target-instructions {
-  text-align: center;
-  color: white;
-  background: rgba(0, 0, 0, 0.8);
-  padding: 1rem;
-  border-radius: 8px;
-  border: 1px solid #333;
-}
-
-.target-instructions p {
-  margin: 0.25rem 0;
-}
-
-.escape-hint {
-  color: #aaa;
-  font-size: 0.8rem;
-}
+/* Calibration modal styles removed - multimonitor calibration functionality removed */
 
 /* Transparency panel positioning */
 .transparency-panel-container {

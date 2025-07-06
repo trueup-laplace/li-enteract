@@ -7,7 +7,7 @@ import { useTransparency } from './composables/useTransparency'
 // Components
 import WindowHeader from './components/core/WindowHeader.vue'
 import ControlPanel from './components/core/ControlPanel.vue'
-import ChatDrawer from './components/core/ChatDrawer.vue'
+import HomeScreen from './components/core/HomeScreen.vue'
 import MinimizedView from './components/core/MinimizedView.vue'
 import RefractionBorder from './components/core/RefractionBorder.vue'
 
@@ -73,16 +73,15 @@ onMounted(() => {
         <div class="content-overlay">
           <!-- Main Content Area -->
           <div class="main-content">
-            <!-- Breathing room -->
-            <div class="flex-1"></div>
+            <!-- Home Screen with Chat Interface -->
+            <div class="flex-1">
+              <HomeScreen />
+            </div>
             
             <!-- Control Panel -->
             <ControlPanel />
           </div>
         </div>
-        
-        <!-- Chat Drawer -->
-        <ChatDrawer />
       </div>
       
       <!-- Refraction Border Effects -->

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { 
   MicrophoneIcon,
-  ChatBubbleLeftRightIcon,
   Squares2X2Icon,
   EyeIcon,
   EyeSlashIcon
@@ -46,14 +45,7 @@ const store = useAppStore()
         Ask AI
       </button>
       
-      <!-- Chat Toggle -->
-      <button 
-        @click="store.toggleChat"
-        class="w-6 h-6 flex items-center justify-center rounded-lg transition-all"
-        :class="store.chatOpen ? 'bg-blue-500/30 text-blue-300' : 'bg-white/10 text-white/60 hover:bg-white/20'"
-      >
-        <ChatBubbleLeftRightIcon class="w-4 h-4" />
-      </button>
+      <!-- Chat Toggle removed - chat is now part of home screen -->
       
       <!-- Expand -->
       <button 

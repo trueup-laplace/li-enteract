@@ -6,7 +6,6 @@ import { useSpeechTranscription } from '../composables/useSpeechTranscription'
 export const useAppStore = defineStore('app', () => {
   // State
   const micEnabled = ref(false)
-  const chatOpen = ref(false)
   const windowCollapsed = ref(false)
   const isRecording = ref(false)
   const recordingTime = ref(0)
@@ -43,9 +42,7 @@ export const useAppStore = defineStore('app', () => {
     micEnabled.value = !micEnabled.value
   }
 
-  const toggleChat = () => {
-    chatOpen.value = !chatOpen.value
-  }
+  // toggleChat removed - chat is now part of home screen
 
   const toggleWindowCollapse = () => {
     windowCollapsed.value = !windowCollapsed.value
@@ -246,7 +243,6 @@ export const useAppStore = defineStore('app', () => {
   return {
     // State
     micEnabled,
-    chatOpen,
     windowCollapsed,
     isRecording,
     recordingTime,
@@ -259,7 +255,6 @@ export const useAppStore = defineStore('app', () => {
     speechStatus,
     // Actions
     toggleMic,
-    toggleChat,
     toggleWindowCollapse,
     toggleRecording,
     addMessage,
