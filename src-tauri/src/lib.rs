@@ -25,7 +25,7 @@ use speech::{
 };
 use ollama::{
     get_ollama_models, get_ollama_status, pull_ollama_model, delete_ollama_model,
-    generate_ollama_response, get_ollama_model_info
+    generate_ollama_response, generate_ollama_response_stream, get_ollama_model_info
 };
 
 #[tauri::command]
@@ -107,6 +107,7 @@ pub fn run() {
             pull_ollama_model,
             delete_ollama_model,
             generate_ollama_response,
+            generate_ollama_response_stream,
             get_ollama_model_info
         ])
         .run(tauri::generate_context!())

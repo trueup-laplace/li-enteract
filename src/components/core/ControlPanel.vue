@@ -22,6 +22,7 @@ import { getCompatibilityReport } from '../../utils/browserCompat'
 import { Window } from '@tauri-apps/api/window'
 import { LogicalSize } from '@tauri-apps/api/dpi'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import TransparencyControls from './TransparencyControls.vue'
 
 const store = useAppStore()
@@ -32,10 +33,10 @@ const currentWindow = Window.getCurrent()
 
 // Window size constants
 const CONTROL_PANEL_HEIGHT = 60
-const MIN_CHAT_HEIGHT = 300
-const MAX_CHAT_HEIGHT = 700
-const MIN_CHAT_WIDTH = 280
-const MAX_CHAT_WIDTH = 500
+const MIN_CHAT_HEIGHT = 400
+const MAX_CHAT_HEIGHT = 1200
+const MIN_CHAT_WIDTH = 450
+const MAX_CHAT_WIDTH = 800
 
 // Dragging state
 const isDragging = ref(false)
@@ -61,8 +62,8 @@ const deletingModel = ref<string | null>(null)
 
 // Chat window resize state
 const chatWindowSize = ref({
-  width: 300,
-  height: 400
+  width: 500,
+  height: 500
 })
 const isResizing = ref(false)
 const resizeHandle = ref<string | null>(null)
@@ -106,12 +107,12 @@ const resizeWindow = async (showChat: boolean, showTransparency: boolean = false
     
     // Add transparency panel height if shown
     if (showTransparency) {
-      height += 200 // Transparency panel height
+      height += 220 // Transparency panel height
     }
     
     // Add AI models window height if shown
     if (showAIModels) {
-      height += 520 // AI models window height (increased to show all content)
+      height += 550 // AI models window height (increased to show all content)
     }
     
     // Add chat window height if shown
@@ -119,7 +120,7 @@ const resizeWindow = async (showChat: boolean, showTransparency: boolean = false
       height += chatWindowSize.value.height + 20
     }
     
-    const width = Math.max(320, chatWindowSize.value.width + 20)
+    const width = Math.max(320, chatWindowSize.value.width + 40)
     await currentWindow.setSize(new LogicalSize(width, height))
     console.log(`🪟 Window resized to: ${width}x${height}px`)
   } catch (error) {
@@ -321,10 +322,14 @@ const sendMessage = async () => {
     // Use selected model or default to gemma3:1b-it-qat
     const modelToUse = selectedModel.value || 'gemma3:1b-it-qat'
     
-    // Add typing indicator
+    // Generate unique session ID for this conversation
+    const sessionId = `chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    
+    // Add streaming message placeholder
+    const streamingMessageIndex = chatHistory.value.length
     chatHistory.value.push({
       type: 'assistant',
-      message: '🤔 Thinking...',
+      message: '▋',
       timestamp: new Date()
     })
     
@@ -332,32 +337,76 @@ const sendMessage = async () => {
       scrollChatToBottom()
     }, 50)
     
-    // Generate AI response using Ollama
-    const response = await invoke<string>('generate_ollama_response', {
+    let fullResponse = ''
+    let isTyping = true
+    
+    // Set up event listener for streaming response
+    const unlisten = await listen(`ollama-stream-${sessionId}`, (event: any) => {
+      const data = event.payload
+      
+      switch (data.type) {
+        case 'start':
+          console.log(`🚀 Started streaming from ${data.model}`)
+          // Update message to show typing cursor
+          if (chatHistory.value[streamingMessageIndex]) {
+            chatHistory.value[streamingMessageIndex].message = '▋'
+          }
+          break
+          
+        case 'chunk':
+          if (data.text) {
+            fullResponse += data.text
+            // Update the streaming message with accumulated text + cursor
+            if (chatHistory.value[streamingMessageIndex]) {
+              chatHistory.value[streamingMessageIndex].message = fullResponse + (isTyping ? '▋' : '')
+            }
+            
+            // Auto-scroll to bottom as text streams in
+            setTimeout(() => {
+              scrollChatToBottom()
+            }, 10)
+          }
+          
+          if (data.done) {
+            isTyping = false
+            // Remove cursor when done
+            if (chatHistory.value[streamingMessageIndex]) {
+              chatHistory.value[streamingMessageIndex].message = fullResponse
+            }
+            console.log(`✅ Streaming completed. Full response: ${fullResponse}`)
+          }
+          break
+          
+        case 'error':
+          isTyping = false
+          console.error('Streaming error:', data.error)
+          // Update message to show error
+          if (chatHistory.value[streamingMessageIndex]) {
+            chatHistory.value[streamingMessageIndex].message = `❌ Error: ${data.error}`
+          }
+          break
+          
+        case 'complete':
+          isTyping = false
+          console.log('🎉 Streaming session completed')
+          // Clean up listener
+          unlisten()
+          break
+      }
+    })
+    
+    // Start streaming generation
+    await invoke('generate_ollama_response_stream', {
       model: modelToUse,
-      prompt: userMessage
+      prompt: userMessage,
+      sessionId: sessionId
     })
     
-    // Remove typing indicator
-    chatHistory.value.pop()
-    
-    // Add AI response to history
-    chatHistory.value.push({
-      type: 'assistant',
-      message: response,
-      timestamp: new Date()
-    })
-    
-    console.log(`🤖 AI Response from ${modelToUse}:`, response)
+    console.log(`🤖 Started streaming AI response from ${modelToUse}`)
     
   } catch (error) {
-    // Remove typing indicator if there was an error
-    if (chatHistory.value[chatHistory.value.length - 1]?.message === '🤔 Thinking...') {
-      chatHistory.value.pop()
-    }
-    
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error('Failed to get AI response:', error)
+    console.error('Failed to start AI response streaming:', error)
     
     // Add error message to chat
     chatHistory.value.push({
@@ -727,8 +776,10 @@ const handleTranscriptionFinal = async (event: Event) => {
       
       // Set the transcribed text as the chat message and send it
       setTimeout(async () => {
+        // Temporarily set the message to trigger sendMessage
         chatMessage.value = finalText
         await sendMessage()
+        // Clear it again since sendMessage already clears it
       }, 1000) // Small delay to show the transcription first
     }
   }
@@ -1202,7 +1253,14 @@ const getModelDisplayName = (model: OllamaModel): string => {
                 </div>
                 
                 <!-- Regular user/assistant messages -->
-                <p v-else class="message-text">{{ message.message }}</p>
+                <div v-else class="message-text">
+                  <!-- Streaming text with cursor -->
+                  <template v-if="message.message.endsWith('▋')">
+                    <span>{{ message.message.slice(0, -1) }}</span><span class="streaming-cursor">▋</span>
+                  </template>
+                  <!-- Regular completed text -->
+                  <span v-else>{{ message.message }}</span>
+                </div>
                 
                 <span class="message-time">{{ message.timestamp.toLocaleTimeString() }}</span>
               </div>
@@ -1409,7 +1467,7 @@ const getModelDisplayName = (model: OllamaModel): string => {
 /* Transparency Controls Panel */
 .transparency-controls-panel {
   @apply rounded-2xl overflow-hidden;
-  width: 300px;
+  width: 350px;
   pointer-events: auto;
   
   /* Same glass effect as other panels with darker background */
@@ -1465,10 +1523,10 @@ const getModelDisplayName = (model: OllamaModel): string => {
 .chat-window {
   @apply rounded-2xl overflow-hidden relative;
   pointer-events: auto;
-  min-width: 280px;
-  min-height: 300px;
-  max-width: 500px;
-  max-height: 700px;
+  min-width: 450px;
+  min-height: 400px;
+  max-width: 800px;
+  max-height: 1200px;
   
   /* Same glass effect as control panel with darker background */
   background: linear-gradient(135deg, 
@@ -1656,11 +1714,11 @@ const getModelDisplayName = (model: OllamaModel): string => {
 
 /* Corner handles */
 .resize-handle.corner {
-  width: 12px;
-  height: 12px;
-  background: rgba(255, 255, 255, 0.1);
+  width: 16px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .resize-handle.corner:hover {
@@ -1669,26 +1727,26 @@ const getModelDisplayName = (model: OllamaModel): string => {
 }
 
 .resize-handle.top-left {
-  top: -6px;
-  left: -6px;
+  top: -8px;
+  left: -8px;
   cursor: nw-resize;
 }
 
 .resize-handle.top-right {
-  top: -6px;
-  right: -6px;
+  top: -8px;
+  right: -8px;
   cursor: ne-resize;
 }
 
 .resize-handle.bottom-left {
-  bottom: -6px;
-  left: -6px;
+  bottom: -8px;
+  left: -8px;
   cursor: sw-resize;
 }
 
 .resize-handle.bottom-right {
-  bottom: -6px;
-  right: -6px;
+  bottom: -8px;
+  right: -8px;
   cursor: se-resize;
 }
 
@@ -1702,34 +1760,34 @@ const getModelDisplayName = (model: OllamaModel): string => {
 }
 
 .resize-handle.top {
-  top: -3px;
-  left: 12px;
-  right: 12px;
-  height: 6px;
+  top: -4px;
+  left: 16px;
+  right: 16px;
+  height: 8px;
   cursor: n-resize;
 }
 
 .resize-handle.bottom {
-  bottom: -3px;
-  left: 12px;
-  right: 12px;
-  height: 6px;
+  bottom: -4px;
+  left: 16px;
+  right: 16px;
+  height: 8px;
   cursor: s-resize;
 }
 
 .resize-handle.left {
-  left: -3px;
-  top: 12px;
-  bottom: 12px;
-  width: 6px;
+  left: -4px;
+  top: 16px;
+  bottom: 16px;
+  width: 8px;
   cursor: w-resize;
 }
 
 .resize-handle.right {
-  right: -3px;
-  top: 12px;
-  bottom: 12px;
-  width: 6px;
+  right: -4px;
+  top: 16px;
+  bottom: 16px;
+  width: 8px;
   cursor: e-resize;
 }
 
@@ -1757,6 +1815,27 @@ const getModelDisplayName = (model: OllamaModel): string => {
   50% {
     opacity: 0.7;
   }
+}
+
+/* Blinking cursor animation for streaming responses */
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+.message-text {
+  @apply text-sm leading-relaxed;
+}
+
+/* Style for streaming cursor */
+.streaming-cursor {
+  animation: blink 1s infinite;
+  color: #60a5fa;
+  font-weight: bold;
 }
 
 /* Floating animation for the entire bar (disabled when dragging) */
@@ -1810,7 +1889,7 @@ const getModelDisplayName = (model: OllamaModel): string => {
 
 .ai-models-panel {
   @apply rounded-2xl overflow-hidden;
-  width: 380px;
+  width: 420px;
   pointer-events: auto;
   
   /* Same glass effect as other panels with darker background */

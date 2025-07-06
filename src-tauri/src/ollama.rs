@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use reqwest;
 use std::collections::HashMap;
+use tauri::{AppHandle, Emitter};
+use futures_util::StreamExt;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OllamaModel {
@@ -183,6 +185,135 @@ pub async fn generate_ollama_response(model: String, prompt: String) -> Result<S
             }
         }
         Err(e) => Err(format!("Failed to connect to Ollama: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn generate_ollama_response_stream(
+    app_handle: AppHandle,
+    model: String,
+    prompt: String,
+    session_id: String,
+) -> Result<(), String> {
+    let client = reqwest::Client::new();
+    let url = format!("{}/api/generate", OLLAMA_BASE_URL);
+    
+    let request = GenerateRequest {
+        model: model.clone(),
+        prompt: prompt.clone(),
+        stream: Some(true),
+        context: None,
+    };
+    
+    println!("🚀 Starting streaming generation for session: {}", session_id);
+    
+    // Emit start event
+    if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+        "type": "start",
+        "model": model,
+        "prompt": prompt
+    })) {
+        return Err(format!("Failed to emit start event: {}", e));
+    }
+    
+    match client.post(&url).json(&request).send().await {
+        Ok(response) => {
+            if response.status().is_success() {
+                let mut stream = response.bytes_stream();
+                let mut buffer = Vec::new();
+                
+                while let Some(chunk_result) = stream.next().await {
+                    match chunk_result {
+                        Ok(chunk) => {
+                            buffer.extend_from_slice(&chunk);
+                            
+                            // Process complete lines from buffer
+                            while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
+                                let line = buffer.drain(..=newline_pos).collect::<Vec<u8>>();
+                                let line_str = String::from_utf8_lossy(&line[..line.len()-1]); // Remove newline
+                                
+                                if line_str.trim().is_empty() {
+                                    continue;
+                                }
+                                
+                                // Parse JSON response
+                                match serde_json::from_str::<GenerateResponse>(&line_str) {
+                                    Ok(response_chunk) => {
+                                        // Emit chunk event
+                                        if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                                            "type": "chunk",
+                                            "text": response_chunk.response,
+                                            "done": response_chunk.done
+                                        })) {
+                                            eprintln!("Failed to emit chunk event: {}", e);
+                                        }
+                                        
+                                        // If done, break the loop
+                                        if response_chunk.done {
+                                            println!("✅ Streaming completed for session: {}", session_id);
+                                            break;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Failed to parse streaming response: {} - Line: {}", e, line_str);
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            let error_msg = format!("Stream error: {}", e);
+                            eprintln!("{}", error_msg);
+                            
+                            // Emit error event
+                            if let Err(emit_err) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                                "type": "error",
+                                "error": error_msg
+                            })) {
+                                eprintln!("Failed to emit error event: {}", emit_err);
+                            }
+                            
+                            return Err(error_msg);
+                        }
+                    }
+                }
+                
+                // Emit completion event
+                if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                    "type": "complete"
+                })) {
+                    eprintln!("Failed to emit complete event: {}", e);
+                }
+                
+                Ok(())
+            } else {
+                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                let error_msg = format!("Generation failed: {}", error_text);
+                
+                // Emit error event
+                if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                    "type": "error",
+                    "error": error_msg
+                })) {
+                    eprintln!("Failed to emit error event: {}", e);
+                }
+                
+                Err(error_msg)
+            }
+        }
+        Err(e) => {
+            let error_msg = format!("Failed to connect to Ollama: {}", e);
+            
+            // Emit error event
+            if let Err(emit_err) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                "type": "error",
+                "error": error_msg
+            })) {
+                eprintln!("Failed to emit error event: {}", emit_err);
+            }
+            
+            Err(error_msg)
+        }
     }
 }
 
