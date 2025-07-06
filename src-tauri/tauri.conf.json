@@ -12,18 +12,24 @@
   "app": {
     "windows": [
       {
-        "title": "Agentic Assistant",
-        "width": 800,
-        "height": 600,
-        "minWidth": 300,
-        "minHeight": 80,
+        "title": "Enteract Control Panel",
+        "width": 320,
+        "height": 60,
+        "minWidth": 320,
+        "minHeight": 60,
+        "maxWidth": 900,
+        "maxHeight": 1600,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
         "center": true,
         "resizable": true,
-        "shadow": true,
-        "visibleOnAllWorkspaces": false
+        "shadow": false,
+        "visibleOnAllWorkspaces": true,
+        "skipTaskbar": true,
+        "fullscreen": false,
+        "maximized": false,
+        "closable": false
       }
     ],
     "security": {

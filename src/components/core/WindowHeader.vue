@@ -2,7 +2,9 @@
 import { 
   MinusIcon, 
   Squares2X2Icon,
-  XMarkIcon
+  XMarkIcon,
+  ChevronDownIcon,
+  ChevronUpIcon
 } from '@heroicons/vue/24/outline'
 import { useWindowManager } from '../../composables/useWindowManager'
 import { useAppStore } from '../../stores/app'
@@ -32,19 +34,16 @@ const handleToggleCollapse = (event: Event) => {
   toggleCollapse()
 }
 
-// Simple test handler
-const testClick = () => {
-  console.log('Test button works!')
-  alert('Button is clickable!')
+const handleToggleViewCollapse = (event: Event) => {
+  event.stopPropagation()
+  event.preventDefault()
+  console.log('View collapse button clicked!')
+  store.toggleViewCollapse()
 }
 
 // Mouse event debugging
 const onMouseOver = () => {
   console.log('Mouse over WindowHeader detected!')
-}
-
-const onTestMouseOver = () => {
-  console.log('Mouse over TEST button!')
 }
 </script>
 
@@ -64,13 +63,16 @@ const onTestMouseOver = () => {
 
     <!-- Right: Window Controls (NOT draggable) -->
     <div class="controls-container">
-      <!-- Test Button (much more prominent) -->
+      <!-- View Collapse/Expand -->
       <button 
-        @click="testClick"
-        @mouseover="onTestMouseOver"
-        class="test-button"
+        @click="handleToggleViewCollapse"
+        @mousedown.stop.prevent
+        class="window-control-btn"
+        style="pointer-events: auto; position: relative; z-index: 1000;"
+        :title="store.viewCollapsed ? 'Expand View' : 'Collapse View'"
       >
-        TEST
+        <ChevronDownIcon v-if="!store.viewCollapsed" class="w-2.5 h-2.5 text-white/70" />
+        <ChevronUpIcon v-else class="w-2.5 h-2.5 text-white/70" />
       </button>
       
       <!-- Collapse/Expand -->
@@ -136,20 +138,7 @@ const onTestMouseOver = () => {
   z-index: 100;
 }
 
-.test-button {
-  @apply px-3 py-1 rounded bg-red-600 text-white font-bold text-xs;
-  -webkit-app-region: no-drag;
-  pointer-events: auto;
-  cursor: pointer;
-  z-index: 10001;
-  position: relative;
-  min-width: 40px;
-  border: 2px solid white;
-}
-
-.test-button:hover {
-  @apply bg-red-700;
-}
+/* Test button styles removed */
 
 .window-control-btn {
   @apply w-5 h-5 rounded-full bg-white/5 hover:bg-white/15 flex items-center justify-center transition-all duration-200 hover:scale-110;

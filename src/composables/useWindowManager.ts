@@ -3,6 +3,7 @@ import { Window } from '@tauri-apps/api/window'
 import { LogicalSize, LogicalPosition } from '@tauri-apps/api/dpi'
 import { useAppStore } from '../stores/app'
 import { invoke } from '@tauri-apps/api/core'
+import type { MonitorInfo } from '../types/monitor'
 // Type definitions for window management
 interface Point2D {
   x: number
@@ -20,6 +21,9 @@ interface WindowState {
   position: Point2D
   size: { width: number; height: number }
   screenSize: { width: number; height: number }
+  monitors: MonitorInfo[]
+  currentMonitor: MonitorInfo | null
+  homeMonitor: MonitorInfo | null
   isMoving: boolean
   lastMoveTime: number
 }
@@ -50,6 +54,9 @@ export function useWindowManager() {
     position: { x: 0, y: 0 },
     size: { width: 400, height: 300 },
     screenSize: { width: 1920, height: 1080 },
+    monitors: [],
+    currentMonitor: null,
+    homeMonitor: null,
     isMoving: false,
     lastMoveTime: 0
   })
@@ -187,21 +194,75 @@ export function useWindowManager() {
     // })
   }
 
+  // Monitor management functions
+  const loadMonitorLayout = async (): Promise<void> => {
+    try {
+      const monitors = await invoke<MonitorInfo[]>('get_monitor_layout')
+      state.value.monitors = monitors
+      
+      // Find the smallest monitor (home monitor)
+      const homeMonitor = monitors.reduce((smallest, monitor) => {
+        const area = monitor.width * monitor.height
+        const smallestArea = smallest.width * smallest.height
+        return area < smallestArea ? monitor : smallest
+      })
+      
+      state.value.homeMonitor = homeMonitor
+      console.log('🏠 Home monitor set:', homeMonitor)
+      console.log('📊 Detected monitors:', monitors)
+    } catch (error) {
+      console.error('Failed to load monitor layout:', error)
+      // Fallback to single monitor
+      const [virtualWidth, virtualHeight] = await invoke<[number, number]>('get_virtual_desktop_size')
+      state.value.monitors = [{
+        x: 0,
+        y: 0,
+        width: virtualWidth,
+        height: virtualHeight,
+        is_primary: true,
+        name: 'Primary'
+      }]
+      state.value.homeMonitor = state.value.monitors[0]
+    }
+  }
+
+  const getMonitorAt = (x: number, y: number): MonitorInfo | null => {
+    return state.value.monitors.find(monitor => 
+      x >= monitor.x && x < monitor.x + monitor.width &&
+      y >= monitor.y && y < monitor.y + monitor.height
+    ) || null
+  }
+
+  const moveToHomePosition = async (): Promise<void> => {
+    if (!state.value.homeMonitor) return
+    
+    const monitor = state.value.homeMonitor
+    // Position in upper third of home monitor
+    const targetX = monitor.x + (monitor.width - state.value.size.width) / 2
+    const targetY = monitor.y + monitor.height / 4  // Upper quarter
+    
+    await moveWindow({ x: targetX, y: targetY })
+    console.log('🏠 Moved to home position:', { x: targetX, y: targetY })
+  }
+
   // Initialize window state
   const initializeWindowState = async (): Promise<void> => {
     try {
-      // Get current window position and size
+      // Load monitor layout first
+      await loadMonitorLayout()
+      
+      // Get current window position and size, and virtual desktop size for multi-monitor support
       const [position, size, screenSize] = await Promise.all([
         invoke<[number, number]>('get_window_position'),
         invoke<[number, number]>('get_window_size'),
-        invoke<[number, number]>('get_screen_size')
+        invoke<[number, number]>('get_virtual_desktop_size')  // Use virtual desktop for multi-monitor
       ])
 
       state.value.position = { x: position[0], y: position[1] }
       state.value.size = { width: size[0], height: size[1] }
       state.value.screenSize = { width: screenSize[0], height: screenSize[1] }
 
-      console.log('Window initialized:', state.value)
+      console.log('Window initialized (multi-monitor aware):', state.value)
     } catch (error) {
       console.error('Failed to initialize window state:', error)
     }
@@ -347,6 +408,13 @@ export function useWindowManager() {
       // Convert to screen coordinates
       const screenPos = gazeToScreenCoordinates(filteredGaze)
       
+      // Detect which monitor the gaze is on (for monitor switching)
+      const gazeMonitor = getMonitorAt(screenPos.x, screenPos.y)
+      if (gazeMonitor && gazeMonitor !== state.value.currentMonitor) {
+        state.value.currentMonitor = gazeMonitor
+        console.log(`🖥️ Switched to monitor: ${gazeMonitor.name}`)
+      }
+      
       // Calculate target window position
       const rawTargetPos = calculateTargetPosition(screenPos)
       
@@ -356,7 +424,7 @@ export function useWindowManager() {
       // Check if movement is significant enough
       if (!shouldMove(smoothedPos)) return
 
-      // Execute movement
+      // Execute movement (allows cross-monitor movement)
       await moveWindow(smoothedPos)
 
     } catch (error) {
@@ -419,6 +487,11 @@ export function useWindowManager() {
 
   // Initialize on mount
   initializeWindow()
+  
+  // Move to home position after initialization
+  setTimeout(() => {
+    moveToHomePosition()
+  }, 1000)
 
   return {
     isDragging,
@@ -443,6 +516,9 @@ export function useWindowManager() {
     initializeWindowState,
     gazeToScreenCoordinates,
     calculateTargetPosition,
+    loadMonitorLayout,
+    getMonitorAt,
+    moveToHomePosition,
     isEnabled: computed(() => config.value.enabled),
     isMoving: computed(() => state.value.isMoving)
   }

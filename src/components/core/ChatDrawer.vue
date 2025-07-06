@@ -1,33 +1,258 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { 
   PaperAirplaneIcon,
-  XMarkIcon
+  XMarkIcon,
+  MicrophoneIcon,
+  SpeakerWaveIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
+import type { ChatMessage } from '../../types'
 
-const store = useAppStore()
+const appStore = useAppStore()
+
 const newMessage = ref('')
+const apiKey = ref('')
+const showApiKeyInput = ref(false)
+const messagesContainer = ref<HTMLElement>()
+const editingMessageId = ref<number | null>(null)
+const editText = ref('')
+const editInput = ref<HTMLInputElement>()
+
+// Speech transcription state
+const isTranscribing = ref(false)
+const currentTranscript = ref('')
+const transcriptionStatus = ref<'idle' | 'listening' | 'processing' | 'error'>('idle')
+const transcriptionError = ref<string | null>(null)
+const showWakeWordFeedback = ref(false)
+
+onMounted(() => {
+  appStore.initializeSpeechTranscription()
+  setupEventListeners()
+})
+
+onUnmounted(() => {
+  removeEventListeners()
+})
+
+// Setup event listeners for speech transcription
+function setupEventListeners() {
+  // Wake word detection events
+  window.addEventListener('wake-word-detected', handleWakeWordDetected as EventListener)
+  window.addEventListener('wake-word-feedback', handleWakeWordFeedback as EventListener)
+  window.addEventListener('show-chat-drawer', handleShowChatDrawer as EventListener)
+  
+  // Speech transcription events
+  window.addEventListener('transcription-started', handleTranscriptionStarted as EventListener)
+  window.addEventListener('transcription-interim', handleTranscriptionInterim as EventListener)
+  window.addEventListener('transcription-final', handleTranscriptionFinal as EventListener)
+  window.addEventListener('transcription-error', handleTranscriptionError as EventListener)
+  window.addEventListener('transcription-stopped', handleTranscriptionStopped as EventListener)
+  window.addEventListener('transcription-complete', handleTranscriptionComplete as EventListener)
+  window.addEventListener('transcription-auto-stopped', handleTranscriptionAutoStopped as EventListener)
+  window.addEventListener('start-transcription-from-wake-word', handleStartTranscriptionFromWakeWord as EventListener)
+}
+
+function removeEventListeners() {
+  window.removeEventListener('wake-word-detected', handleWakeWordDetected)
+  window.removeEventListener('wake-word-feedback', handleWakeWordFeedback)
+  window.removeEventListener('show-chat-drawer', handleShowChatDrawer)
+  window.removeEventListener('transcription-started', handleTranscriptionStarted)
+  window.removeEventListener('transcription-interim', handleTranscriptionInterim)
+  window.removeEventListener('transcription-final', handleTranscriptionFinal)
+  window.removeEventListener('transcription-error', handleTranscriptionError)
+  window.removeEventListener('transcription-stopped', handleTranscriptionStopped)
+  window.removeEventListener('transcription-complete', handleTranscriptionComplete)
+  window.removeEventListener('transcription-auto-stopped', handleTranscriptionAutoStopped)
+  window.removeEventListener('start-transcription-from-wake-word', handleStartTranscriptionFromWakeWord)
+}
+
+// Event handlers
+function handleWakeWordDetected(event: CustomEvent) {
+  console.log('ChatDrawer: Wake word detected!', event.detail)
+  showWakeWordFeedback.value = true
+  setTimeout(() => {
+    showWakeWordFeedback.value = false
+  }, 3000)
+  
+  // Auto-open chat drawer
+  if (!appStore.chatOpen) {
+    appStore.toggleChat()
+  }
+}
+
+function handleWakeWordFeedback(event: CustomEvent) {
+  console.log('ChatDrawer: Wake word feedback', event.detail)
+  showWakeWordFeedback.value = true
+  setTimeout(() => {
+    showWakeWordFeedback.value = false
+  }, 2000)
+}
+
+function handleShowChatDrawer(event: CustomEvent) {
+  console.log('ChatDrawer: Show chat drawer requested', event.detail)
+  if (!appStore.chatOpen) {
+    appStore.toggleChat()
+  }
+}
+
+function handleStartTranscriptionFromWakeWord(event: CustomEvent) {
+  console.log('ChatDrawer: Starting transcription from wake word', event.detail)
+  transcriptionStatus.value = 'listening'
+  isTranscribing.value = true
+  currentTranscript.value = ''
+  transcriptionError.value = null
+  
+  // Auto-open drawer and scroll to bottom
+  if (!appStore.chatOpen) {
+    appStore.toggleChat()
+  }
+  scrollToBottom()
+  
+  // Start transcription via app store
+  appStore.startSpeechTranscription()
+}
+
+function handleTranscriptionStarted(event: CustomEvent) {
+  console.log('ChatDrawer: Transcription started', event.detail)
+  transcriptionStatus.value = 'listening'
+  isTranscribing.value = true
+  currentTranscript.value = ''
+  transcriptionError.value = null
+  scrollToBottom()
+}
+
+function handleTranscriptionInterim(event: CustomEvent) {
+  console.log('ChatDrawer: Interim transcription', event.detail)
+  transcriptionStatus.value = 'processing'
+  currentTranscript.value = event.detail.text || ''
+  
+  // Add interim message to chat if not already present
+  const lastMessage = appStore.chatMessages[appStore.chatMessages.length - 1]
+  if (!lastMessage || !lastMessage.isInterim) {
+    appStore.addMessage(currentTranscript.value, 'transcription', { 
+      source: 'speech',
+      isInterim: true,
+      confidence: event.detail.confidence 
+    })
+  } else {
+    // Update existing interim message
+    appStore.updateMessage(lastMessage.id, currentTranscript.value)
+  }
+  
+  scrollToBottom()
+}
+
+function handleTranscriptionFinal(event: CustomEvent) {
+  console.log('ChatDrawer: Final transcription', event.detail)
+  transcriptionStatus.value = 'idle'
+  
+  // Replace interim message with final one or add new final message
+  const lastMessage = appStore.chatMessages[appStore.chatMessages.length - 1]
+  if (lastMessage && lastMessage.isInterim) {
+    // Update interim message to final
+    appStore.updateMessage(lastMessage.id, event.detail.text, { isInterim: false })
+  } else {
+    // Add new final message
+    appStore.addMessage(event.detail.text, 'transcription', { 
+      source: 'speech',
+      isInterim: false,
+      confidence: event.detail.confidence 
+    })
+  }
+  
+  scrollToBottom()
+}
+
+function handleTranscriptionError(event: CustomEvent) {
+  console.log('ChatDrawer: Transcription error', event.detail)
+  transcriptionStatus.value = 'error'
+  transcriptionError.value = event.detail.error
+  isTranscribing.value = false
+}
+
+function handleTranscriptionStopped(event: CustomEvent) {
+  console.log('ChatDrawer: Transcription stopped', event.detail)
+  transcriptionStatus.value = 'idle'
+  isTranscribing.value = false
+}
+
+function handleTranscriptionComplete(event: CustomEvent) {
+  console.log('ChatDrawer: Transcription complete', event.detail)
+  transcriptionStatus.value = 'idle'
+  isTranscribing.value = false
+  currentTranscript.value = ''
+}
+
+function handleTranscriptionAutoStopped(event: CustomEvent) {
+  console.log('ChatDrawer: Transcription auto-stopped', event.detail)
+  transcriptionStatus.value = 'idle'
+  isTranscribing.value = false
+  
+  // Add system message about auto-stop
+  appStore.addMessage(`Transcription stopped automatically (${event.detail.reason})`, 'system', { 
+    source: 'auto-stop' 
+  })
+  scrollToBottom()
+}
 
 const sendMessage = () => {
-  if (!newMessage.value.trim()) return
-  
-  store.addMessage(newMessage.value, 'user')
-  
-  // Simulate assistant response
-  setTimeout(() => {
-    store.addMessage("I understand. Let me help you with that.", 'assistant')
-  }, 1000)
-  
-  newMessage.value = ''
+  if (newMessage.value.trim()) {
+    appStore.addMessage(newMessage.value, 'user', { source: 'typed' })
+    newMessage.value = ''
+    scrollToBottom()
+  }
 }
+
+const toggleSpeechTranscription = () => {
+  if (appStore.speechStatus.isRecording) {
+    appStore.stopSpeechTranscription()
+  } else {
+    appStore.startSpeechTranscription()
+  }
+}
+
+const startEditing = (message: ChatMessage) => {
+  if (message.sender === 'transcription' && !message.isInterim) {
+    editingMessageId.value = message.id
+    editText.value = message.text
+    nextTick(() => {
+      editInput.value?.focus()
+      editInput.value?.select()
+    })
+  }
+}
+
+const saveEdit = () => {
+  if (editingMessageId.value && editText.value.trim()) {
+    appStore.updateMessage(editingMessageId.value, editText.value.trim())
+  }
+  cancelEdit()
+}
+
+const cancelEdit = () => {
+  editingMessageId.value = null
+  editText.value = ''
+}
+
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    }
+  })
+}
+
+// Auto-scroll when new messages arrive
+watch(() => appStore.chatMessages.length, scrollToBottom)
 </script>
 
 <template>
   <!-- Chat Drawer -->
   <div 
     class="fixed top-0 right-0 h-full w-96 z-50 transform transition-all duration-500 ease-out"
-    :class="store.chatOpen ? 'translate-x-0' : 'translate-x-full'"
+    :class="appStore.chatOpen ? 'translate-x-0' : 'translate-x-full'"
   >
     <div class="h-full chat-panel flex flex-col">
       <!-- Chat Header -->
@@ -36,41 +261,131 @@ const sendMessage = () => {
           <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
           <h3 class="text-lg font-medium text-white/90">Assistant Chat</h3>
         </div>
-        <button @click="store.toggleChat" class="btn btn-sm btn-circle btn-ghost hover:bg-white/10">
+        <button @click="appStore.toggleChat" class="btn btn-sm btn-circle btn-ghost hover:bg-white/10">
           <XMarkIcon class="w-4 h-4 text-white/70" />
         </button>
       </div>
       
       <!-- Chat Messages -->
-      <div class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-        <div 
-          v-for="message in store.chatMessages" 
+      <div 
+        ref="messagesContainer" 
+        class="flex-1 p-4 space-y-3 overflow-y-auto max-h-[300px] scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
+      >
+        <div
+          v-for="message in appStore.chatMessages"
           :key="message.id"
-          class="flex animate-fade-in"
-          :class="message.sender === 'user' ? 'justify-end' : 'justify-start'"
+          :class="[
+            'p-3 rounded-lg max-w-[80%] break-words',
+            message.sender === 'user' 
+              ? 'bg-blue-600 text-white ml-auto' 
+              : message.sender === 'transcription'
+              ? `${message.isInterim ? 'bg-orange-500/20 text-orange-200 border border-orange-500/30' : 'bg-green-600/20 text-green-200 border border-green-600/30'} mr-auto`
+              : 'bg-gray-700 text-white mr-auto'
+          ]"
         >
+          <!-- Editable transcription message -->
           <div 
-            class="max-w-xs rounded-2xl px-4 py-3 text-sm shadow-lg"
-            :class="message.sender === 'user' 
-              ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white' 
-              : 'bg-white/5 text-white/90 border border-white/10 backdrop-blur-sm'"
+            v-if="message.sender === 'transcription'"
+            @click="startEditing(message)"
+            class="cursor-pointer group relative"
           >
+            <div v-if="editingMessageId === message.id" class="space-y-2">
+              <input
+                v-model="editText"
+                @keyup.enter="saveEdit"
+                @keyup.escape="cancelEdit"
+                @blur="saveEdit"
+                class="w-full bg-transparent border-b border-white/30 text-white outline-none"
+                :placeholder="message.text"
+                ref="editInput"
+              />
+              <div class="text-xs text-white/60">
+                Press Enter to save, Esc to cancel
+              </div>
+            </div>
+            <div v-else>
+              <!-- Thought stream animation for interim messages -->
+              <div 
+                v-if="message.isInterim"
+                :class="['flex items-center', message.isInterim ? 'animate-pulse' : '']"
+              >
+                <span class="text-orange-300 mr-2">💭</span>
+                <span :class="message.isInterim ? 'italic' : ''">{{ message.text }}</span>
+                <span v-if="message.isInterim" class="ml-2 text-orange-400 animate-pulse">...</span>
+              </div>
+              <!-- Final transcription -->
+              <div v-else class="flex items-center">
+                <span class="text-green-300 mr-2">🎤</span>
+                <span>{{ message.text }}</span>
+              </div>
+              
+              <!-- Edit hint on hover -->
+              <div class="absolute -top-6 right-0 text-xs text-white/60 opacity-0 group-hover:opacity-100 transition-opacity">
+                Click to edit
+              </div>
+              
+              <!-- Confidence indicator for final messages -->
+              <div v-if="!message.isInterim && message.confidence" class="text-xs text-white/60 mt-1">
+                Confidence: {{ Math.round(message.confidence * 100) }}%
+              </div>
+            </div>
+          </div>
+          
+          <!-- Regular messages -->
+          <div v-else>
             {{ message.text }}
+          </div>
+          
+          <div class="text-xs opacity-60 mt-1">
+            {{ message.timestamp.toLocaleTimeString() }}
           </div>
         </div>
       </div>
       
       <!-- Chat Input -->
       <div class="p-4 border-t border-white/10">
-        <div class="flex gap-3">
-          <input 
+        <!-- Speech Transcription Info -->
+        <div v-if="appStore.speechStatus.error" class="mb-3 text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg p-2">
+          Speech Error: {{ appStore.speechStatus.error }}
+        </div>
+
+        <!-- Clear Chat Button -->
+        <div v-if="appStore.isTranscriptionEnabled" class="mb-3 flex justify-center">
+          <button 
+            @click="appStore.clearChat"
+            class="btn-clear text-xs px-3 py-1"
+            title="Clear All Chat Messages"
+          >
+            Clear Chat
+          </button>
+        </div>
+
+        <!-- Text Input with Minimal Mic -->
+        <div class="flex gap-2">
+          <input
             v-model="newMessage"
             @keyup.enter="sendMessage"
             type="text" 
             placeholder="Type your message..."
             class="input-enhanced flex-1"
           />
-          <button 
+          
+          <!-- Minimal Mic Button -->
+          <button
+            @click="toggleSpeechTranscription"
+            class="btn-mic-minimal"
+            :class="{
+              'btn-mic-recording': appStore.speechStatus.isRecording,
+              'btn-mic-processing': appStore.speechStatus.isProcessing,
+              'btn-mic-ready': appStore.isTranscriptionEnabled && !appStore.speechStatus.isRecording
+            }"
+            :disabled="appStore.speechStatus.isProcessing"
+            :title="appStore.speechStatus.isRecording ? 'Stop Recording' : 'Start Speech Recording'"
+          >
+            <MicrophoneIcon class="w-4 h-4" />
+          </button>
+          
+          <button
             @click="sendMessage"
             class="btn-send"
             :disabled="!newMessage.trim()"
@@ -84,8 +399,8 @@ const sendMessage = () => {
   
   <!-- Backdrop -->
   <div 
-    v-if="store.chatOpen"
-    @click="store.toggleChat"
+    v-if="appStore.chatOpen"
+    @click="appStore.toggleChat"
     class="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-all duration-500"
   ></div>
 </template>
@@ -137,6 +452,27 @@ const sendMessage = () => {
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
+}
+
+.btn-clear {
+  @apply bg-white/10 hover:bg-white/20 text-white/70 hover:text-white rounded-lg transition-all duration-200;
+}
+
+/* Minimal mic button */
+.btn-mic-minimal {
+  @apply w-12 h-12 rounded-xl bg-white/5 hover:bg-white/10 border border-white/20 hover:border-white/30 text-white/70 hover:text-white flex items-center justify-center transition-all duration-200;
+}
+
+.btn-mic-ready {
+  @apply bg-green-500/20 hover:bg-green-500/30 border-green-400/40 text-green-300;
+}
+
+.btn-mic-recording {
+  @apply bg-red-500/30 border-red-400/50 text-red-300 animate-pulse;
+}
+
+.btn-mic-processing {
+  @apply bg-yellow-500/20 border-yellow-400/40 text-yellow-300;
 }
 
 @keyframes fade-in {
