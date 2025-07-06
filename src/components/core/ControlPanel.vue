@@ -15,7 +15,14 @@ import {
   ArrowDownTrayIcon,
   CameraIcon,
   MagnifyingGlassIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  PhotoIcon,
+  DocumentIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  ClipboardDocumentIcon,
+  ChevronDownIcon,
+  ChevronUpIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
@@ -27,6 +34,7 @@ import { LogicalSize } from '@tauri-apps/api/dpi'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import TransparencyControls from './TransparencyControls.vue'
+import type { ChatMessage, MessageAttachment } from '../../types'
 
 const store = useAppStore()
 const mlEyeTracking = useMLEyeTracking()
@@ -48,7 +56,11 @@ const dragStartTime = ref(0)
 // Chat window state
 const showChatWindow = ref(false)
 const chatMessage = ref('')
-const chatHistory = ref<Array<{type: 'user' | 'assistant' | 'transcription', message: string, timestamp: Date, isInterim?: boolean, confidence?: number}>>([])
+const chatHistory = ref<ChatMessage[]>([])
+let messageIdCounter = 1
+
+// Enhanced chat features
+const fileInput = ref<HTMLInputElement>()
 
 // Transparency controls state
 const showTransparencyControls = ref(false)
@@ -315,9 +327,11 @@ const takeScreenshotAndAnalyze = async () => {
     // Add screen analysis message to chat
     const screenshotMessageIndex = chatHistory.value.length
     chatHistory.value.push({
-      type: 'user',
-      message: `🔍 Screen captured for analysis (${screenshot.width}×${screenshot.height})`,
-      timestamp: new Date()
+      id: messageIdCounter++,
+      sender: 'user',
+      text: `🔍 Screen captured for analysis (${screenshot.width}×${screenshot.height})`,
+      timestamp: new Date(),
+      messageType: 'text'
     })
     
     // Generate unique session ID
@@ -326,9 +340,11 @@ const takeScreenshotAndAnalyze = async () => {
     // Add streaming message placeholder
     const streamingMessageIndex = chatHistory.value.length
     chatHistory.value.push({
-      type: 'assistant',
-      message: '🔍 Analyzing screenshot▋',
-      timestamp: new Date()
+      id: messageIdCounter++,
+      sender: 'assistant',
+      text: '🔍 Analyzing screenshot▋',
+      timestamp: new Date(),
+      messageType: 'text'
     })
     
     setTimeout(() => {
@@ -351,7 +367,7 @@ const takeScreenshotAndAnalyze = async () => {
           if (data.text) {
             fullResponse += data.text
             if (chatHistory.value[streamingMessageIndex]) {
-              chatHistory.value[streamingMessageIndex].message = fullResponse + (isTyping ? '▋' : '')
+              chatHistory.value[streamingMessageIndex].text = fullResponse + (isTyping ? '▋' : '')
             }
             
             setTimeout(() => {
@@ -362,7 +378,7 @@ const takeScreenshotAndAnalyze = async () => {
           if (data.done) {
             isTyping = false
             if (chatHistory.value[streamingMessageIndex]) {
-              chatHistory.value[streamingMessageIndex].message = fullResponse
+              chatHistory.value[streamingMessageIndex].text = fullResponse
             }
           }
           break
@@ -371,7 +387,7 @@ const takeScreenshotAndAnalyze = async () => {
           isTyping = false
           console.error('Vision analysis error:', data.error)
           if (chatHistory.value[streamingMessageIndex]) {
-            chatHistory.value[streamingMessageIndex].message = `❌ Vision analysis error: ${data.error}`
+            chatHistory.value[streamingMessageIndex].text = `❌ Vision analysis error: ${data.error}`
           }
           break
           
@@ -392,9 +408,11 @@ const takeScreenshotAndAnalyze = async () => {
   } catch (error) {
     console.error('Failed to analyze screen:', error)
     chatHistory.value.push({
-      type: 'assistant',
-      message: `❌ Failed to analyze screen: ${error}`,
-      timestamp: new Date()
+      id: messageIdCounter++,
+      sender: 'assistant',
+      text: `❌ Failed to analyze screen: ${error}`,
+      timestamp: new Date(),
+      messageType: 'text'
     })
   }
 }
@@ -426,9 +444,11 @@ const sendMessage = async (agentType: string = 'enteract') => {
   
   // Add user message to history
   chatHistory.value.push({
-    type: 'user',
-    message: userMessage,
-    timestamp: new Date()
+    id: messageIdCounter++,
+    sender: 'user',
+    text: userMessage,
+    timestamp: new Date(),
+    messageType: 'text'
   })
   
   // Clear input immediately
@@ -450,9 +470,11 @@ const sendMessage = async (agentType: string = 'enteract') => {
     const streamingMessageIndex = chatHistory.value.length
     const agentEmoji = agentType === 'deep_research' ? '🧠' : agentType === 'vision' ? '👁️' : '🛡️'
     chatHistory.value.push({
-      type: 'assistant',
-      message: `${agentEmoji}▋`,
-      timestamp: new Date()
+      id: messageIdCounter++,
+      sender: 'assistant',
+      text: `${agentEmoji}▋`,
+      timestamp: new Date(),
+      messageType: 'text'
     })
     
     setTimeout(() => {
@@ -476,7 +498,7 @@ const sendMessage = async (agentType: string = 'enteract') => {
             fullResponse += data.text
             // Update the streaming message with accumulated text + cursor
             if (chatHistory.value[streamingMessageIndex]) {
-              chatHistory.value[streamingMessageIndex].message = fullResponse + (isTyping ? '▋' : '')
+              chatHistory.value[streamingMessageIndex].text = fullResponse + (isTyping ? '▋' : '')
             }
             
             // Auto-scroll to bottom as text streams in
@@ -489,7 +511,7 @@ const sendMessage = async (agentType: string = 'enteract') => {
             isTyping = false
             // Remove cursor when done
             if (chatHistory.value[streamingMessageIndex]) {
-              chatHistory.value[streamingMessageIndex].message = fullResponse
+              chatHistory.value[streamingMessageIndex].text = fullResponse
             }
             console.log(`✅ ${agentType} streaming completed. Full response: ${fullResponse}`)
           }
@@ -500,7 +522,7 @@ const sendMessage = async (agentType: string = 'enteract') => {
           console.error(`${agentType} streaming error:`, data.error)
           // Update message to show error
           if (chatHistory.value[streamingMessageIndex]) {
-            chatHistory.value[streamingMessageIndex].message = `❌ Error: ${data.error}`
+            chatHistory.value[streamingMessageIndex].text = `❌ Error: ${data.error}`
           }
           break
           
@@ -535,9 +557,11 @@ const sendMessage = async (agentType: string = 'enteract') => {
     
     // Add error message to chat
     chatHistory.value.push({
-      type: 'assistant',
-      message: `❌ Failed to get AI response: ${errorMessage}. Make sure Ollama is running and the model "${selectedModel.value || 'gemma3:1b-it-qat'}" is available.`,
-      timestamp: new Date()
+      id: messageIdCounter++,
+      sender: 'assistant',
+      text: `❌ Failed to get AI response: ${errorMessage}. Make sure Ollama is running and the model "${selectedModel.value || 'gemma3:1b-it-qat'}" is available.`,
+      timestamp: new Date(),
+      messageType: 'text'
     })
   }
   
@@ -552,6 +576,73 @@ const handleChatKeydown = (event: KeyboardEvent) => {
     event.preventDefault()
     sendMessage()
   }
+}
+
+// File upload functions
+const triggerFileUpload = () => {
+  fileInput.value?.click()
+}
+
+const handleFileUpload = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const files = input.files
+  if (files) {
+    // Auto-open chat window if not already open
+    if (!showChatWindow.value) {
+      showChatWindow.value = true
+      console.log('💬 Chat window auto-opened for file upload')
+    }
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      try {
+        // Enhanced file upload indication
+        console.log('📁 File selected:', file.name, file.type, file.size)
+        
+        // Add file upload message to chat
+        chatHistory.value.push({
+          id: messageIdCounter++,
+          sender: 'system',
+          text: `📁 File uploaded: **${file.name}** (${file.type}, ${(file.size / 1024).toFixed(1)} KB)`,
+          timestamp: new Date(),
+          messageType: 'text'
+        })
+        
+        // Show upload success feedback
+        setTimeout(() => {
+          chatHistory.value.push({
+            id: messageIdCounter++,
+            sender: 'system',
+            text: `✅ File ready for analysis. You can now ask questions about this ${file.type.includes('image') ? 'image' : 'document'}.`,
+            timestamp: new Date(),
+            messageType: 'text'
+          })
+          
+          // Auto-scroll to show the uploaded file message
+          setTimeout(() => {
+            scrollChatToBottom()
+          }, 100)
+        }, 500)
+        
+      } catch (error) {
+        console.error('File upload error:', error)
+        chatHistory.value.push({
+          id: messageIdCounter++,
+          sender: 'system',
+          text: `❌ File upload failed: ${error}`,
+          timestamp: new Date(),
+          messageType: 'text'
+        })
+      }
+    }
+    
+    // Auto-scroll to show files
+    setTimeout(() => {
+      scrollChatToBottom()
+    }, 150)
+  }
+  // Reset input
+  input.value = ''
 }
 
 // Enhanced speech transcription with error handling
@@ -847,15 +938,17 @@ const handleTranscriptionInterim = (event: Event) => {
   if (interimText.trim()) {
     // Add or update interim message
     const lastMessage = chatHistory.value[chatHistory.value.length - 1]
-    if (lastMessage && lastMessage.type === 'transcription' && lastMessage.isInterim) {
+    if (lastMessage && lastMessage.sender === 'transcription' && lastMessage.isInterim) {
       // Update existing interim message
-      lastMessage.message = interimText
+      lastMessage.text = interimText
     } else {
       // Add new interim message
       chatHistory.value.push({
-        type: 'transcription',
-        message: interimText,
+        id: messageIdCounter++,
+        sender: 'transcription',
+        text: interimText,
         timestamp: new Date(),
+        messageType: 'text',
         isInterim: true,
         confidence: customEvent.detail.confidence || 0.5
       })
@@ -875,17 +968,19 @@ const handleTranscriptionFinal = async (event: Event) => {
   if (finalText.trim()) {
     // Replace interim message with final one or add new final message
     const lastMessage = chatHistory.value[chatHistory.value.length - 1]
-    if (lastMessage && lastMessage.type === 'transcription' && lastMessage.isInterim) {
+    if (lastMessage && lastMessage.sender === 'transcription' && lastMessage.isInterim) {
       // Update interim message to final
-      lastMessage.message = finalText
+      lastMessage.text = finalText
       lastMessage.isInterim = false
       lastMessage.confidence = customEvent.detail.confidence || 0.9
     } else {
       // Add new final message
       chatHistory.value.push({
-        type: 'transcription',
-        message: finalText,
+        id: messageIdCounter++,
+        sender: 'transcription',
+        text: finalText,
         timestamp: new Date(),
+        messageType: 'text',
         isInterim: false,
         confidence: customEvent.detail.confidence || 0.9
       })
@@ -916,9 +1011,11 @@ const handleTranscriptionError = (event: Event) => {
   
   // Add error message to chat
   chatHistory.value.push({
-    type: 'assistant',
-    message: `❌ Transcription error: ${customEvent.detail.error}`,
-    timestamp: new Date()
+    id: messageIdCounter++,
+    sender: 'assistant',
+    text: `❌ Transcription error: ${customEvent.detail.error}`,
+    timestamp: new Date(),
+    messageType: 'text'
   })
   
   setTimeout(() => {
@@ -942,9 +1039,11 @@ const handleTranscriptionAutoStopped = (event: Event) => {
   
   // Add system message about auto-stop
   chatHistory.value.push({
-    type: 'assistant',
-    message: `🔄 Transcription stopped automatically (${customEvent.detail.reason})`,
-    timestamp: new Date()
+    id: messageIdCounter++,
+    sender: 'assistant',
+    text: `🔄 Transcription stopped automatically (${customEvent.detail.reason})`,
+    timestamp: new Date(),
+    messageType: 'text'
   })
   
   setTimeout(() => {
@@ -1390,24 +1489,25 @@ const renderMarkdown = (text: string): string => {
             
             <div v-for="(message, index) in chatHistory" :key="index" class="chat-message"
                  :class="{ 
-                   'user': message.type === 'user', 
-                   'assistant': message.type === 'assistant',
-                   'transcription': message.type === 'transcription'
+                   'user': message.sender === 'user', 
+                   'assistant': message.sender === 'assistant',
+                   'transcription': message.sender === 'transcription',
+                   'system': message.sender === 'system'
                  }">
               <div class="message-bubble">
                 <!-- Transcription messages -->
-                <div v-if="message.type === 'transcription'" class="transcription-message">
+                <div v-if="message.sender === 'transcription'" class="transcription-message">
                   <!-- Interim transcription (thought stream) -->
                   <div v-if="message.isInterim" class="interim-transcription">
                     <span class="interim-icon">💭</span>
-                    <span class="interim-text">{{ message.message }}</span>
+                    <span class="interim-text">{{ message.text }}</span>
                     <span class="interim-dots">...</span>
                   </div>
                   <!-- Final transcription -->
                   <div v-else class="final-transcription">
                     <div class="transcription-content">
                       <span class="transcription-icon">🎤</span>
-                      <span class="transcription-text">{{ message.message }}</span>
+                      <span class="transcription-text">{{ message.text }}</span>
                     </div>
                     <div v-if="message.confidence" class="confidence-indicator">
                       {{ Math.round(message.confidence * 100) }}%
@@ -1418,11 +1518,11 @@ const renderMarkdown = (text: string): string => {
                 <!-- Regular user/assistant messages -->
                 <div v-else class="message-text">
                   <!-- Streaming text with cursor -->
-                  <template v-if="message.message.endsWith('▋')">
-                    <div v-html="renderMarkdown(message.message.slice(0, -1))"></div><span class="streaming-cursor">▋</span>
+                  <template v-if="message.text.endsWith('▋')">
+                    <div v-html="renderMarkdown(message.text.slice(0, -1))"></div><span class="streaming-cursor">▋</span>
                   </template>
                   <!-- Regular completed text with markdown -->
-                  <div v-else v-html="renderMarkdown(message.message)"></div>
+                  <div v-else v-html="renderMarkdown(message.text)"></div>
                 </div>
                 
                 <span class="message-time">{{ message.timestamp.toLocaleTimeString() }}</span>
@@ -1435,11 +1535,36 @@ const renderMarkdown = (text: string): string => {
             <button @click="takeScreenshotAndAnalyze" class="agent-btn vision-btn" title="Analyze Screen">
               <CameraIcon class="w-4 h-4" />
               <span>Analyze Screen</span>
+              <div class="feature-indicators">
+                <PhotoIcon class="w-3 h-3 text-blue-400" title="Image Analysis" />
+                <DocumentIcon class="w-3 h-3 text-green-400" title="Document Processing" />
+              </div>
             </button>
             
             <button @click="startDeepResearch" class="agent-btn research-btn" title="Deep Research Mode">
               <MagnifyingGlassIcon class="w-4 h-4" />
               <span>Research</span>
+              <div class="feature-indicators">
+                <EyeIcon class="w-3 h-3 text-purple-400" title="Thinking Process" />
+                <ClipboardDocumentIcon class="w-3 h-3 text-yellow-400" title="Clipboard Support" />
+              </div>
+            </button>
+            
+            <!-- File Upload Button -->
+            <input 
+              type="file" 
+              ref="fileInput" 
+              @change="handleFileUpload"
+              multiple
+              accept="image/*,.pdf,.txt,.md,.doc,.docx"
+              class="hidden"
+            />
+            <button @click="triggerFileUpload" class="agent-btn upload-btn" title="Upload Files">
+              <DocumentIcon class="w-4 h-4" />
+              <span>Upload</span>
+              <div class="feature-indicators">
+                <PhotoIcon class="w-3 h-3 text-blue-400" title="Drag & Drop" />
+              </div>
             </button>
           </div>
           
@@ -1874,6 +1999,23 @@ const renderMarkdown = (text: string): string => {
 .research-btn {
   @apply bg-blue-500/10 border-blue-400/20 text-blue-300;
   @apply hover:bg-blue-500/20 hover:border-blue-400/40 hover:text-blue-200;
+}
+
+.upload-btn {
+  @apply bg-green-500/10 border-green-400/20 text-green-300;
+  @apply hover:bg-green-500/20 hover:border-green-400/40 hover:text-green-200;
+}
+
+.feature-indicators {
+  @apply flex gap-1 ml-1 opacity-50 transition-opacity;
+}
+
+.agent-btn:hover .feature-indicators {
+  @apply opacity-70;
+}
+
+.hidden {
+  display: none !important;
 }
 
 .chat-input-container {

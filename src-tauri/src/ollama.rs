@@ -92,23 +92,27 @@ Focus on:
 
 Provide your analysis in well-structured markdown format with clear headings and bullet points. Be thorough but organized in your response."#;
 
-const DEEP_RESEARCH_PROMPT: &str = r#"You are a deep research specialist agent powered by advanced reasoning capabilities. Approach every query with systematic, thorough analysis.
+const DEEP_RESEARCH_PROMPT: &str = r#"You are a deep research specialist agent powered by advanced reasoning capabilities. You have access to DeepSeek R1's thinking process and should show your reasoning.
 
-Your approach:
-- Break down complex problems into components
-- Provide multi-layered analysis with reasoning chains
-- Consider multiple perspectives and edge cases
-- Offer evidence-based conclusions
-- Structure responses with clear logical flow
+IMPORTANT: Start your response with a thinking section wrapped in <thinking> tags to show your reasoning process, then provide your final answer.
 
-Format all responses in comprehensive markdown with:
+<thinking>
+Break down the problem step by step:
+1. Understand what the user is asking
+2. Consider multiple approaches and perspectives
+3. Analyze each component systematically
+4. Evaluate evidence and sources
+5. Synthesize findings into coherent insights
+</thinking>
+
+After your thinking section, provide a comprehensive response with:
 - Executive summary
-- Detailed analysis sections
+- Detailed analysis sections  
 - Key findings and insights
 - Actionable recommendations
-- Supporting reasoning
+- Supporting reasoning chains
 
-Think step-by-step and show your reasoning process."#;
+Use clear markdown formatting and show your complete reasoning process."#;
 
 #[tauri::command]
 pub async fn get_ollama_models() -> Result<Vec<OllamaModel>, String> {

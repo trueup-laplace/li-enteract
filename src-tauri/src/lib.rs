@@ -7,6 +7,7 @@ mod eye_tracking;
 mod speech;
 mod ollama;
 mod screenshot;
+mod file_handler;
 
 // Re-export the commands from modules
 use transparency::{set_window_transparency, emergency_restore_window, toggle_transparency};
@@ -30,6 +31,10 @@ use ollama::{
     generate_enteract_agent_response, generate_vision_analysis, generate_deep_research
 };
 use screenshot::{capture_screenshot, capture_screenshot_area};
+use file_handler::{
+    upload_file_base64, validate_file_upload, get_file_upload_config,
+    process_clipboard_image, cleanup_temp_files
+};
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -120,7 +125,14 @@ pub fn run() {
             
             // Screenshot commands
             capture_screenshot,
-            capture_screenshot_area
+            capture_screenshot_area,
+            
+            // File upload commands
+            upload_file_base64,
+            validate_file_upload,
+            get_file_upload_config,
+            process_clipboard_image,
+            cleanup_temp_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

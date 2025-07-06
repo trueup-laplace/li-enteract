@@ -1,11 +1,73 @@
 export interface ChatMessage {
   id: number
   text: string
-  sender: 'user' | 'assistant' | 'transcription'
+  sender: 'user' | 'assistant' | 'transcription' | 'system'
   timestamp: Date
   isInterim?: boolean
   confidence?: number
-  source?: 'web-speech' | 'whisper' | 'typed'
+  source?: 'web-speech' | 'whisper' | 'typed' | 'clipboard' | 'file-upload' | 'drag-drop'
+  // Enhanced content support
+  attachments?: MessageAttachment[]
+  thinking?: ThinkingProcess
+  messageType?: 'text' | 'image' | 'document' | 'mixed' | 'thinking'
+  metadata?: MessageMetadata
+}
+
+export interface MessageAttachment {
+  id: string
+  type: 'image' | 'document' | 'audio' | 'video'
+  name: string
+  size: number
+  mimeType: string
+  url?: string // For display
+  base64Data?: string // For processing
+  thumbnail?: string // Base64 thumbnail for images
+  extractedText?: string // For documents
+  dimensions?: { width: number; height: number } // For images/videos
+  uploadProgress?: number // 0-100
+  uploadStatus?: 'uploading' | 'completed' | 'failed' | 'processing'
+  error?: string
+}
+
+export interface ThinkingProcess {
+  isVisible: boolean
+  content: string
+  isStreaming: boolean
+  steps?: ThinkingStep[]
+}
+
+export interface ThinkingStep {
+  id: string
+  title: string
+  content: string
+  timestamp: Date
+  status: 'thinking' | 'completed' | 'current'
+}
+
+export interface MessageMetadata {
+  agentType?: 'enteract' | 'vision' | 'deep_research'
+  model?: string
+  tokens?: number
+  processingTime?: number
+  analysisType?: string[]
+  searchQueries?: string[]
+  sources?: string[]
+}
+
+// File upload types
+export interface FileUploadConfig {
+  maxFileSize: number // in bytes
+  allowedImageTypes: string[]
+  allowedDocumentTypes: string[]
+  maxFiles: number
+}
+
+export interface UploadProgress {
+  fileId: string
+  fileName: string
+  progress: number
+  status: 'uploading' | 'processing' | 'completed' | 'failed'
+  error?: string
 }
 
 export interface AppState {
