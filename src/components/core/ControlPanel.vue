@@ -18,6 +18,10 @@ const mlEyeTracking = useMLEyeTracking()
 const windowManager = useWindowManager()
 const wakeWordDetection = useWakeWordDetection()
 
+// Dragging state
+const isDragging = ref(false)
+const dragStartTime = ref(0)
+
 // Error handling state
 const speechError = ref<string | null>(null)
 const wakeWordError = ref<string | null>(null)
@@ -29,8 +33,24 @@ const compatibilityReport = ref(getCompatibilityReport())
 // ML Eye tracking with window movement state
 const isGazeControlActive = ref(false)
 
+// Drag event handlers
+const handleDragStart = () => {
+  isDragging.value = true
+  dragStartTime.value = Date.now()
+  console.log('🎯 Control panel drag started')
+}
+
+const handleDragEnd = () => {
+  const dragDuration = Date.now() - dragStartTime.value
+  isDragging.value = false
+  console.log(`🎯 Control panel drag ended (${dragDuration}ms)`)
+}
+
 // Enhanced speech transcription with error handling
-const toggleSpeechTranscription = async () => {
+const toggleSpeechTranscription = async (event: Event) => {
+  // Prevent drag if clicking button
+  event.stopPropagation()
+  
   try {
     speechError.value = null
     
@@ -63,7 +83,10 @@ const getSpeechIconClass = () => {
 }
 
 // Enhanced wake word detection with error handling
-const toggleWakeWordDetection = async () => {
+const toggleWakeWordDetection = async (event: Event) => {
+  // Prevent drag if clicking button
+  event.stopPropagation()
+  
   try {
     wakeWordError.value = null
     
@@ -88,7 +111,10 @@ const getWakeWordIconClass = () => {
   return 'text-white/80 group-hover:text-white'
 }
 
-const toggleMLEyeTrackingWithMovement = async () => {
+const toggleMLEyeTrackingWithMovement = async (event: Event) => {
+  // Prevent drag if clicking button
+  event.stopPropagation()
+  
   if (mlEyeTracking.isActive.value) {
     // Stop both ML tracking and window movement
     await mlEyeTracking.stopTracking()
@@ -146,7 +172,7 @@ const handleKeydown = async (event: KeyboardEvent) => {
   // Ctrl+Shift+E = Toggle ML Eye Tracking
   if (event.ctrlKey && event.shiftKey && event.key === 'E') {
     event.preventDefault()
-    await toggleMLEyeTrackingWithMovement()
+    await toggleMLEyeTrackingWithMovement(event)
     console.log('⌨️ Keyboard shortcut: ML Eye Tracking toggled')
   }
   
@@ -163,25 +189,39 @@ const handleKeydown = async (event: KeyboardEvent) => {
 onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
   
+  // Add drag event listeners
+  const controlPanel = document.querySelector('.control-panel-glass-bar') as HTMLElement
+  if (controlPanel) {
+    controlPanel.addEventListener('mousedown', handleDragStart)
+    document.addEventListener('mouseup', handleDragEnd)
+  }
+  
   // Show keyboard shortcuts in console
   console.log('⌨️ ML Eye Tracking Keyboard Shortcuts:')
   console.log('   Ctrl+Shift+E = Start/Stop ML Eye Tracking + Window Movement')
   console.log('   Ctrl+Shift+S = Emergency Stop (stop all tracking)')
+  console.log('🎯 Control Panel is draggable - click and drag to move!')
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
+  document.removeEventListener('mouseup', handleDragEnd)
 })
 </script>
 
 <template>
-  <div class="control-panel-glass-bar" data-tauri-drag-region>
+  <div 
+    class="control-panel-glass-bar" 
+    :class="{ 'dragging': isDragging }"
+    data-tauri-drag-region
+  >
     <div class="control-buttons-row">
       <!-- AI Assistant Button -->
       <button 
         class="control-btn group"
         :class="{ 'active': false }"
         title="AI Assistant"
+        @click="(event) => event.stopPropagation()"
       >
         <SparklesIcon class="w-4 h-4 text-white/70 group-hover:text-white transition-all" />
       </button>
@@ -238,9 +278,19 @@ onUnmounted(() => {
       <button 
         class="control-btn group"
         title="Command Mode"
+        @click="(event) => event.stopPropagation()"
       >
         <CommandLineIcon class="w-4 h-4 text-white/70 group-hover:text-white transition-all" />
       </button>
+    </div>
+    
+    <!-- Drag indicator -->
+    <div class="drag-indicator" :class="{ 'visible': isDragging }">
+      <div class="drag-dots">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
     </div>
   </div>
 </template>
@@ -248,10 +298,10 @@ onUnmounted(() => {
 <style scoped>
 /* Curved Glass Control Panel Bar */
 .control-panel-glass-bar {
-  @apply rounded-full overflow-hidden;
+  @apply rounded-full overflow-hidden relative;
   height: 44px;
-  min-width: 240px;
-  cursor: move;
+  min-width: 280px;
+  cursor: grab;
   user-select: none;
   
   /* Premium curved glass effect */
@@ -290,8 +340,27 @@ onUnmounted(() => {
   transform: translateY(-1px);
 }
 
+/* Dragging state */
+.control-panel-glass-bar.dragging {
+  cursor: grabbing;
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 
+    0 16px 50px rgba(0, 0, 0, 0.4),
+    0 8px 20px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.4) 0%,
+    rgba(255, 255, 255, 0.3) 25%,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0.3) 75%,
+    rgba(255, 255, 255, 0.4) 100%
+  );
+}
+
 .control-buttons-row {
-  @apply flex items-center justify-center gap-2 px-4 py-2;
+  @apply flex items-center justify-center gap-2 px-4 py-2 relative z-10;
   height: 100%;
 }
 
@@ -303,6 +372,7 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(8px);
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .control-btn:hover {
@@ -342,6 +412,27 @@ onUnmounted(() => {
   box-shadow: none;
 }
 
+/* Drag indicator */
+.drag-indicator {
+  @apply absolute top-1/2 left-3 transform -translate-y-1/2;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.drag-indicator.visible {
+  opacity: 1;
+}
+
+.drag-dots {
+  @apply flex flex-col gap-1;
+}
+
+.drag-dots span {
+  @apply w-1 h-1 rounded-full bg-white/60;
+  display: block;
+}
+
 /* Pulse animation for active states */
 @keyframes pulse {
   0%, 100% {
@@ -352,8 +443,8 @@ onUnmounted(() => {
   }
 }
 
-/* Floating animation for the entire bar */
-.control-panel-glass-bar {
+/* Floating animation for the entire bar (disabled when dragging) */
+.control-panel-glass-bar:not(.dragging) {
   animation: float 6s ease-in-out infinite;
 }
 
@@ -366,7 +457,22 @@ onUnmounted(() => {
   }
 }
 
-.control-panel-glass-bar:hover {
+.control-panel-glass-bar:hover:not(.dragging) {
   animation: none;
+}
+
+/* Ensure buttons don't interfere with dragging */
+.control-btn {
+  position: relative;
+  z-index: 10;
+}
+
+/* Drag region styling */
+.control-panel-glass-bar[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+}
+
+.control-btn {
+  -webkit-app-region: no-drag;
 }
 </style> 
