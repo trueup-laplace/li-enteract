@@ -297,35 +297,80 @@ const closeChatWindow = async () => {
   console.log('💬 Chat window closed')
 }
 
-const sendMessage = () => {
+const sendMessage = async () => {
   if (!chatMessage.value.trim()) return
+  
+  const userMessage = chatMessage.value
   
   // Add user message to history
   chatHistory.value.push({
     type: 'user',
-    message: chatMessage.value,
+    message: userMessage,
     timestamp: new Date()
   })
   
-  // Simulate assistant response (you can replace this with actual AI integration)
+  // Clear input immediately
+  chatMessage.value = ''
+  
+  // Auto-scroll to bottom
   setTimeout(() => {
+    scrollChatToBottom()
+  }, 50)
+  
+  try {
+    // Use selected model or default to gemma3:1b-it-qat
+    const modelToUse = selectedModel.value || 'gemma3:1b-it-qat'
+    
+    // Add typing indicator
     chatHistory.value.push({
       type: 'assistant',
-      message: `I received your message: "${chatMessage.value}". This is a placeholder response. You can integrate with your AI assistant here.`,
+      message: '🤔 Thinking...',
       timestamp: new Date()
     })
     
-    // Auto-scroll to bottom
     setTimeout(() => {
-      const chatMessages = document.querySelector('.chat-messages')
-      if (chatMessages) {
-        chatMessages.scrollTop = chatMessages.scrollHeight
-      }
+      scrollChatToBottom()
     }, 50)
-  }, 1000)
+    
+    // Generate AI response using Ollama
+    const response = await invoke<string>('generate_ollama_response', {
+      model: modelToUse,
+      prompt: userMessage
+    })
+    
+    // Remove typing indicator
+    chatHistory.value.pop()
+    
+    // Add AI response to history
+    chatHistory.value.push({
+      type: 'assistant',
+      message: response,
+      timestamp: new Date()
+    })
+    
+    console.log(`🤖 AI Response from ${modelToUse}:`, response)
+    
+  } catch (error) {
+    // Remove typing indicator if there was an error
+    if (chatHistory.value[chatHistory.value.length - 1]?.message === '🤔 Thinking...') {
+      chatHistory.value.pop()
+    }
+    
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error('Failed to get AI response:', error)
+    
+    // Add error message to chat
+    chatHistory.value.push({
+      type: 'assistant',
+      message: `❌ Failed to get AI response: ${errorMessage}. Make sure Ollama is running and the model "${selectedModel.value || 'gemma3:1b-it-qat'}" is available.`,
+      timestamp: new Date()
+    })
+  }
   
-  // Clear input
-  chatMessage.value = ''
+  // Auto-scroll to bottom
+  setTimeout(() => {
+    scrollChatToBottom()
+  }, 50)
 }
 
 const handleChatKeydown = (event: KeyboardEvent) => {
@@ -648,7 +693,7 @@ const handleTranscriptionInterim = (event: Event) => {
   }
 }
 
-const handleTranscriptionFinal = (event: Event) => {
+const handleTranscriptionFinal = async (event: Event) => {
   const customEvent = event as CustomEvent
   console.log('🎤 Final transcription', customEvent.detail)
   
@@ -675,6 +720,17 @@ const handleTranscriptionFinal = (event: Event) => {
     setTimeout(() => {
       scrollChatToBottom()
     }, 50)
+    
+    // Auto-send transcribed text to AI if confidence is high enough
+    if ((customEvent.detail.confidence || 0.9) > 0.7) {
+      console.log('🎤 Auto-sending transcription to AI:', finalText)
+      
+      // Set the transcribed text as the chat message and send it
+      setTimeout(async () => {
+        chatMessage.value = finalText
+        await sendMessage()
+      }, 1000) // Small delay to show the transcription first
+    }
   }
 }
 
@@ -749,6 +805,25 @@ const fetchOllamaModels = async () => {
     const models = await invoke<OllamaModel[]>('get_ollama_models')
     ollamaModels.value = models
     console.log('📋 Fetched Ollama models:', models)
+    
+    // Auto-select gemma3:1b-it-qat if available and no model is selected
+    if (!selectedModel.value) {
+      const gemmaModel = models.find(model => 
+        model.name.includes('gemma3:1b-it-qat') || 
+        model.name.includes('gemma3') ||
+        model.name.includes('gemma')
+      )
+      
+      if (gemmaModel) {
+        selectedModel.value = gemmaModel.name
+        console.log('🎯 Auto-selected Gemma model:', gemmaModel.name)
+      } else if (models.length > 0) {
+        // Fallback to first available model
+        selectedModel.value = models[0].name
+        console.log('🎯 Auto-selected first available model:', models[0].name)
+      }
+    }
+    
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     modelsError.value = message
@@ -1043,15 +1118,17 @@ const getModelDisplayName = (model: OllamaModel): string => {
                 <h4 class="text-white/80 text-sm font-medium mb-2">Pull New Model</h4>
                 <div class="popular-models">
                   <button 
-                    v-for="modelName in ['llama3.2', 'codellama', 'mistral', 'phi3']" 
+                    v-for="modelName in ['gemma3:1b-it-qat', 'llama3.2', 'codellama', 'mistral']" 
                     :key="modelName"
                     @click="pullModel(modelName)"
                     :disabled="pullingModel === modelName"
                     class="model-pull-btn"
+                    :class="{ 'recommended': modelName === 'gemma3:1b-it-qat' }"
                   >
                     <ArrowDownTrayIcon v-if="pullingModel !== modelName" class="w-3 h-3" />
                     <div v-else class="w-3 h-3 animate-spin">⟳</div>
                     <span>{{ modelName }}</span>
+                    <span v-if="modelName === 'gemma3:1b-it-qat'" class="recommended-badge">Recommended</span>
                   </button>
                 </div>
               </div>
@@ -1077,6 +1154,9 @@ const getModelDisplayName = (model: OllamaModel): string => {
             <div class="chat-title">
               <CommandLineIcon class="w-4 h-4 text-white/80" />
               <span class="text-sm font-medium text-white/90">AI Assistant</span>
+              <div class="model-indicator" v-if="selectedModel">
+                <span class="text-xs text-green-400">{{ selectedModel.split(':')[0] || selectedModel }}</span>
+              </div>
               <div class="resize-indicator">
                 <ArrowsPointingOutIcon class="w-3 h-3 text-white/50" />
                 <span class="text-xs text-white/50">{{ chatWindowSize.width }}×{{ chatWindowSize.height }}</span>
@@ -1424,6 +1504,10 @@ const getModelDisplayName = (model: OllamaModel): string => {
 
 .chat-title {
   @apply flex items-center gap-2;
+}
+
+.model-indicator {
+  @apply flex items-center gap-1 ml-2 px-2 py-1 rounded-md bg-green-500/20 border border-green-400/30;
 }
 
 .resize-indicator {
@@ -1855,6 +1939,14 @@ const getModelDisplayName = (model: OllamaModel): string => {
 
 .model-pull-btn:disabled {
   @apply opacity-50 cursor-not-allowed;
+}
+
+.model-pull-btn.recommended {
+  @apply bg-green-500/30 border-green-400/50 text-green-200;
+}
+
+.recommended-badge {
+  @apply text-xs bg-green-400/80 text-green-900 px-1 py-0.5 rounded-md font-medium;
 }
 
 /* AI Models Panel Transitions */
