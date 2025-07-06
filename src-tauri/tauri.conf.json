@@ -18,7 +18,7 @@
         "minWidth": 320,
         "minHeight": 60,
         "maxWidth": 900,
-        "maxHeight": 1400,
+        "maxHeight": 1600,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,

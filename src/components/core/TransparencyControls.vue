@@ -200,8 +200,8 @@ const handleSliderChange = (event: Event) => {
     rgba(0, 0, 0, 0.8) 0%, 
     rgba(0, 0, 0, 0.9) 100%
   );
-  min-width: 280px;
-  max-width: 320px;
+  min-width: 320px;
+  max-width: 360px;
 }
 
 .controls-header {

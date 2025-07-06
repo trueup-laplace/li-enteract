@@ -107,7 +107,7 @@ const resizeWindow = async (showChat: boolean, showTransparency: boolean = false
     
     // Add transparency panel height if shown
     if (showTransparency) {
-      height += 220 // Transparency panel height
+      height += 380 // Transparency panel height (increased for all components)
     }
     
     // Add AI models window height if shown
@@ -1467,7 +1467,7 @@ const getModelDisplayName = (model: OllamaModel): string => {
 /* Transparency Controls Panel */
 .transparency-controls-panel {
   @apply rounded-2xl overflow-hidden;
-  width: 350px;
+  width: 380px;
   pointer-events: auto;
   
   /* Same glass effect as other panels with darker background */
