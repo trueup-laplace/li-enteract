@@ -28,12 +28,12 @@ defineEmits<Emits>()
 </script>
 
 <template>
-  <!-- Agent Action Buttons -->
+  <!-- Agent Action Buttons - All Inline -->
   <div class="agent-actions">
-    <!-- AI Agents Row -->
-    <div class="agents-row">
-      <div class="section-label">AI Agents</div>
-      <div class="agents-buttons">
+    <div class="actions-container">
+      <!-- All buttons in one inline row with separators -->
+      <div class="inline-buttons">
+        <!-- AI Agents -->
         <button @click="$emit('takeScreenshot')" class="agent-btn-icon vision-btn" title="Screen Analysis Agent - Analyze screenshots and visual content">
           <CameraIcon class="w-4 h-4" />
         </button>
@@ -54,14 +54,11 @@ defineEmits<Emits>()
           <ComputerDesktopIcon class="w-4 h-4" />
           <div class="experimental-badge">β</div>
         </button>
-      </div>
-    </div>
-    
-    <!-- Tools Row -->
-    <div class="tools-row">
-      <div class="section-label">Tools</div>
-      <div class="tools-buttons">
-        <!-- File Upload Tool -->
+        
+        <!-- Separator -->
+        <div class="button-separator"></div>
+        
+        <!-- Tools -->
         <input 
           type="file" 
           ref="fileInput" 
@@ -74,7 +71,6 @@ defineEmits<Emits>()
           <DocumentIcon class="w-4 h-4" />
         </button>
         
-        <!-- Quick Screenshot Tool -->
         <button @click="$emit('takeScreenshot')" class="tool-btn-icon screenshot-tool" title="Quick Screenshot - Capture screen instantly">
           <PhotoIcon class="w-4 h-4" />
         </button>
@@ -85,19 +81,19 @@ defineEmits<Emits>()
 
 <style scoped>
 .agent-actions {
-  @apply px-4 py-3 border-t border-white/10 space-y-3;
+  @apply px-4 py-3 border-t border-white/10;
 }
 
-.agents-row, .tools-row {
-  @apply flex flex-col gap-2;
+.actions-container {
+  @apply w-full;
 }
 
-.section-label {
-  @apply text-white/60 text-xs font-medium uppercase tracking-wider;
+.inline-buttons {
+  @apply flex items-center justify-center gap-2 flex-wrap;
 }
 
-.agents-buttons, .tools-buttons {
-  @apply flex items-center gap-2;
+.button-separator {
+  @apply w-px h-6 bg-white/20 mx-1;
 }
 
 .agent-btn-icon, .tool-btn-icon {

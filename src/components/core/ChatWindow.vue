@@ -288,21 +288,29 @@ const handleFileUploadEvent = (event: Event) => {
 
 .chat-messages {
   @apply flex-1 overflow-y-auto px-4 py-3;
+  max-height: calc(100% - 120px); /* Ensure it doesn't overflow the window */
+  scroll-behavior: smooth; /* Smooth scrolling animation */
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.4) rgba(255, 255, 255, 0.1);
 }
 
 .chat-messages::-webkit-scrollbar {
-  width: 4px;
+  width: 8px; /* Made wider for better visibility */
 }
 
 .chat-messages::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
 }
 
 .chat-messages::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.3); /* Made more visible */
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5); /* Even more visible on hover */
 }
 
 .chat-empty {
@@ -311,6 +319,10 @@ const handleFileUploadEvent = (event: Event) => {
 
 .chat-message {
   @apply mb-4;
+}
+
+.chat-message:last-child {
+  @apply mb-6; /* Extra margin for the last message to ensure good scroll space */
 }
 
 .chat-message.user {
@@ -326,7 +338,7 @@ const handleFileUploadEvent = (event: Event) => {
 }
 
 .message-bubble {
-  @apply max-w-xs px-3 py-2 rounded-2xl;
+  @apply max-w-sm px-4 py-3 rounded-2xl; /* Increased max width and padding for better readability */
 }
 
 .chat-message.user .message-bubble {
