@@ -6,7 +6,8 @@ import {
   CommandLineIcon,
   CpuChipIcon,
   ExclamationTriangleIcon,
-  AdjustmentsHorizontalIcon
+  AdjustmentsHorizontalIcon,
+  XMarkIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
@@ -65,7 +66,10 @@ watch(showChatWindow, async (newValue) => {
 })
 
 watch(showTransparencyControls, async (newValue) => {
-  await resizeWindow(showChatWindow.value, newValue, showAIModelsWindow.value)
+  console.log(`🔧 TRANSPARENCY WATCH: newValue=${newValue}, showChat=${showChatWindow.value}, showAI=${showAIModelsWindow.value}`)
+  // Temporarily disabled to debug window disappearing issue
+  // await resizeWindow(showChatWindow.value, newValue, showAIModelsWindow.value)
+  console.log('🔧 TRANSPARENCY WATCH: Skipping resize to debug issue')
 })
 
 watch(showAIModelsWindow, async (newValue) => {

@@ -26,26 +26,54 @@ export const useWindowResizing = () => {
     try {
       let height = CONTROL_PANEL_HEIGHT
       
+      console.log(`🔧 RESIZE DEBUG - showChat: ${showChat}, showTransparency: ${showTransparency}, showAIModels: ${showAIModels}`)
+      
       // Add transparency panel height if shown
       if (showTransparency) {
         height += 380 // Transparency panel height (increased for all components)
+        console.log(`🔧 Added transparency panel height: ${height}px`)
       }
       
       // Add AI models window height if shown
       if (showAIModels) {
         height += 550 // AI models window height (increased to show all content)
+        console.log(`🔧 Added AI models height: ${height}px`)
       }
       
       // Add chat window height if shown
       if (showChat) {
         height += chatWindowSize.value.height + 20
+        console.log(`🔧 Added chat window height: ${height}px`)
       }
       
       const width = Math.max(320, chatWindowSize.value.width + 40)
+      
+      // Validate dimensions before setting
+      if (width <= 0 || height <= 0) {
+        console.error(`🚨 Invalid window dimensions: ${width}x${height}px - aborting resize`)
+        return
+      }
+      
+      if (width > 2000 || height > 2000) {
+        console.error(`🚨 Window dimensions too large: ${width}x${height}px - aborting resize`)
+        return
+      }
+      
+      console.log(`🔧 Attempting to resize window to: ${width}x${height}px`)
       await currentWindow.setSize(new LogicalSize(width, height))
-      console.log(`🪟 Window resized to: ${width}x${height}px`)
+      console.log(`✅ Window resized successfully to: ${width}x${height}px`)
     } catch (error) {
-      console.error('Failed to resize window:', error)
+      console.error('🚨 CRITICAL: Failed to resize window:', error)
+      console.error('Error details:', JSON.stringify(error))
+      
+      // Try to restore to a safe size if resize failed
+      try {
+        console.log('🔄 Attempting to restore window to safe size...')
+        await currentWindow.setSize(new LogicalSize(320, 60))
+        console.log('✅ Window restored to safe size')
+      } catch (restoreError) {
+        console.error('🚨 CRITICAL: Failed to restore window size:', restoreError)
+      }
     }
   }
 

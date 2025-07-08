@@ -39,7 +39,9 @@ export function useTransparency() {
       isLoading.value = true
       lastError.value = null
       
-      const clampedLevel = Math.max(0, Math.min(1, level))
+      const clampedLevel = Math.max(0.1, Math.min(1, level)) // Minimum 10% opacity to prevent full invisibility
+      console.log(`🔧 TRANSPARENCY: Applying level ${clampedLevel} (original: ${level})`)
+      
       await invoke('set_window_transparency', { alpha: clampedLevel })
       
       transparencyLevel.value = clampedLevel
@@ -48,9 +50,20 @@ export function useTransparency() {
       localStorage.setItem('transparency_level', clampedLevel.toString())
       localStorage.setItem('transparency_enabled', 'true')
       
+      console.log(`✅ TRANSPARENCY: Successfully applied ${clampedLevel}`)
+      
     } catch (error) {
       lastError.value = error instanceof Error ? error.message : 'Failed to set transparency'
-      console.error('Transparency error:', error)
+      console.error('🚨 TRANSPARENCY ERROR:', error)
+      
+      // Emergency restore on error
+      try {
+        console.log('🔄 TRANSPARENCY: Emergency restore due to error')
+        await invoke('emergency_restore_window')
+        transparencyLevel.value = 1.0
+      } catch (restoreError) {
+        console.error('🚨 EMERGENCY RESTORE FAILED:', restoreError)
+      }
     } finally {
       isLoading.value = false
     }
@@ -81,9 +94,9 @@ export function useTransparency() {
     isEnabled.value = level < 1.0
   }
 
-  // Preset transparency levels
+  // Preset transparency levels (with safety minimums)
   const presets = {
-    invisible: () => setLevel(0.0),
+    invisible: () => setLevel(0.1), // Changed from 0.0 to prevent full invisibility
     ghostMode: () => setLevel(0.3),
     semiTransparent: () => setLevel(0.7),
     solid: () => setLevel(1.0)
@@ -182,8 +195,9 @@ export function useTransparency() {
 
   // Setup and cleanup
   onMounted(() => {
-    // Load saved preferences
-    loadPreferences()
+    // Temporarily disable loading preferences to debug window disappearing issue
+    console.log('🔧 TRANSPARENCY DEBUG: Skipping preference loading to debug window disappearing')
+    // loadPreferences()
     
     // Setup keyboard shortcuts
     document.addEventListener('keydown', handleKeyDown)
