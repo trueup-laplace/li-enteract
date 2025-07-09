@@ -286,12 +286,6 @@ export function useSpeechTranscription() {
       } 
     })
     window.dispatchEvent(event)
-    
-    // Also emit specific chat drawer event
-    if (['transcription-interim', 'transcription-final'].includes(eventType)) {
-      const chatEvent = new CustomEvent('show-chat-drawer', { detail: data })
-      window.dispatchEvent(chatEvent)
-    }
   }
 
   // Silence detection setup

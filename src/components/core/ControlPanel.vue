@@ -320,6 +320,19 @@ const handleClickOutside = (event: Event) => {
   }
 }
 
+// Event handlers for wake word events
+const handleWakeWordOpenChat = async (event: Event) => {
+  console.log('🔔 Wake word detected: Opening Chat Window')
+  const mockEvent = event || new Event('wake-word')
+  await toggleChatWindow(mockEvent)
+}
+
+const handleWakeWordTriggerMic = async (event: Event) => {
+  console.log('🔔 Wake word detected: Triggering Mic')
+  const mockEvent = event || new Event('wake-word')
+  await toggleSpeechTranscription(mockEvent)
+}
+
 onMounted(async () => {
   document.addEventListener('keydown', handleKeydown)
   document.addEventListener('click', handleClickOutside)
@@ -330,7 +343,20 @@ onMounted(async () => {
     document.addEventListener('mouseup', handleDragEnd)
   }
   
-  await store.initializeSpeechTranscription('base')
+  // Add wake word event listeners
+  window.addEventListener('wake-word-open-chat-window', handleWakeWordOpenChat)
+  window.addEventListener('wake-word-trigger-mic', handleWakeWordTriggerMic)
+  
+  await store.initializeSpeechTranscription('small')
+  
+  // Auto-start wake word detection for "Aubrey"
+  try {
+    await wakeWordDetection.startDetection()
+    console.log('🎤 Wake word detection started - listening for "Aubrey"')
+  } catch (error) {
+    console.warn('Wake word detection failed to auto-start:', error)
+  }
+  
   await resizeWindow(false, false, false)
   
   console.log('⌨️ Keyboard Shortcuts:')
@@ -348,6 +374,10 @@ onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
   document.removeEventListener('click', handleClickOutside)
   document.removeEventListener('mouseup', handleDragEnd)
+  
+  // Clean up wake word event listeners
+  window.removeEventListener('wake-word-open-chat-window', handleWakeWordOpenChat)
+  window.removeEventListener('wake-word-trigger-mic', handleWakeWordTriggerMic)
 })
 </script>
 
@@ -399,7 +429,7 @@ onUnmounted(() => {
               'active-warning': wakeWordDetection.isStarting.value || wakeWordDetection.isStopping.value
             }"
             :disabled="wakeWordDetection.isStarting.value || wakeWordDetection.isStopping.value"
-            title="Wake Word Detection"
+            title="Wake Word Detection - Say 'Aubrey' to activate speech"
           >
             <ExclamationTriangleIcon class="w-4 h-4 transition-all" 
               :class="getWakeWordIconClass()" />

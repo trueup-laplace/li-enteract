@@ -241,7 +241,7 @@ export function useWakeWordDetection() {
     lastWakeWordTime = now
     
     try {
-      console.log('🎤 Wake word "Aubrey" detected - starting transcription!')
+      console.log('🎤 Wake word "Aubrey" detected - opening ChatWindow and starting transcription!')
       
       // Provide visual/audio feedback
       await provideFeedback()
@@ -249,21 +249,23 @@ export function useWakeWordDetection() {
       // Temporarily pause wake word detection during transcription
       pauseWakeWordDetection(15000) // 15 seconds
       
-      // Trigger transcription by emitting event for the speech transcription module
-      const transcriptionEvent = new CustomEvent('start-transcription-from-wake-word', {
-        detail: {
-          confidence: detection.confidence,
-          timestamp: detection.timestamp,
-          audioLength: detection.audio_length
-        }
-      })
-      window.dispatchEvent(transcriptionEvent)
-      
-      // Also emit chat drawer show event
-      const chatEvent = new CustomEvent('show-chat-drawer', {
+      // Open the ChatWindow (like clicking the command line button) 
+      const chatWindowEvent = new CustomEvent('wake-word-open-chat-window', {
         detail: { source: 'wake-word', detection }
       })
-      window.dispatchEvent(chatEvent)
+      window.dispatchEvent(chatWindowEvent)
+      
+      // Auto-click the mic button to start transcription
+      setTimeout(() => {
+        const micButtonEvent = new CustomEvent('wake-word-trigger-mic', {
+          detail: {
+            confidence: detection.confidence,
+            timestamp: detection.timestamp,
+            audioLength: detection.audio_length
+          }
+        })
+        window.dispatchEvent(micButtonEvent)
+      }, 500) // Small delay to ensure chat window opens first
       
     } catch (err) {
       console.error('Failed to handle wake word detection:', err)
