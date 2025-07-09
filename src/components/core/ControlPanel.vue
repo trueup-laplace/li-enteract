@@ -163,7 +163,7 @@ const toggleSpeechTranscription = async (event: Event) => {
       await store.stopSpeechTranscription()
     } else {
       if (!store.speechStatus.isInitialized) {
-        await store.initializeSpeechTranscription('base')
+        await store.initializeSpeechTranscription('small')
       }
       await store.startSpeechTranscription()
     }
