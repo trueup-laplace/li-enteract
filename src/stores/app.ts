@@ -142,7 +142,7 @@ export const useAppStore = defineStore('app', () => {
   }
 
   // Speech transcription actions
-  const initializeSpeechTranscription = async (modelSize: 'tiny' | 'base' | 'small' | 'medium' | 'large' = 'base') => {
+  const initializeSpeechTranscription = async (modelSize: 'tiny' | 'base' | 'small' | 'medium' | 'large' = 'small') => {
     try {
       await speechTranscription.initialize({ modelSize })
       isTranscriptionEnabled.value = true

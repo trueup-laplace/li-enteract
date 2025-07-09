@@ -72,7 +72,6 @@ export interface UploadProgress {
 
 export interface AppState {
   micEnabled: boolean
-  chatOpen: boolean
   windowCollapsed: boolean
   isRecording: boolean
 }

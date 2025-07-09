@@ -50,7 +50,7 @@ export function useSpeechTranscription() {
 
   // Configuration
   const defaultWhisperConfig: WhisperConfig = {
-    modelSize: 'base',
+    modelSize: 'small',
     language: 'en',
     enableVAD: true,
     silenceThreshold: 0.01,
@@ -68,7 +68,7 @@ export function useSpeechTranscription() {
     sampleRate: 16000,
     channels: 1,
     bufferSize: 4096,
-    mimeType: 'audio/webm;codecs=opus'
+    mimeType: 'audio/wav'
   }
 
   // Computed
@@ -230,25 +230,28 @@ export function useSpeechTranscription() {
     }
 
     recognition.onerror = (event) => {
-      console.error('Speech recognition error:', event.error)
-      error.value = `Speech recognition error: ${event.error}`
+      console.log('Speech recognition error:', event.error)
       
-      // Handle specific errors
-      if (event.error === 'not-allowed') {
-        error.value = 'Microphone permission denied. Please allow microphone access and try again.'
-      } else if (event.error === 'no-speech') {
-        // Don't show error for no speech, just continue listening
-        error.value = null
-      } else if (event.error === 'network') {
-        error.value = 'Network error. Check your internet connection.'
-      } else if (event.error === 'aborted') {
-        // Don't show error for intentional stops
-        if (isRecording.value) {
-          error.value = null
-        }
+      // Handle different types of errors differently
+      if (event.error === 'aborted') {
+        console.log('Speech recognition was aborted (likely due to wake word detection conflict)')
+        // Don't emit error for aborted - it's usually intentional
+        return
       }
       
-      emitTranscriptionEvent('transcription-error', { error: error.value })
+      if (event.error === 'no-speech') {
+        console.log('No speech detected - continuing...')
+        // Don't emit error for no-speech - it's normal
+        return
+      }
+      
+      // Only emit errors for actual problems
+      if (event.error !== 'network' || isRecording.value) {
+        emitTranscriptionEvent('transcription-error', {
+          error: event.error,
+          message: `Speech recognition error: ${event.error}`
+        })
+      }
     }
 
     recognition.onend = () => {
@@ -286,12 +289,6 @@ export function useSpeechTranscription() {
       } 
     })
     window.dispatchEvent(event)
-    
-    // Also emit specific chat drawer event
-    if (['transcription-interim', 'transcription-final'].includes(eventType)) {
-      const chatEvent = new CustomEvent('show-chat-drawer', { detail: data })
-      window.dispatchEvent(chatEvent)
-    }
   }
 
   // Silence detection setup
@@ -429,6 +426,7 @@ export function useSpeechTranscription() {
       if (recognition && hasWebSpeechSupport.value) {
         try {
           recognition.start()
+          console.log('🗣️ Web Speech API started for interim results')
         } catch (speechError) {
           console.warn('Web Speech API failed to start:', speechError)
           // Continue with audio recording only
@@ -437,8 +435,18 @@ export function useSpeechTranscription() {
 
       // Start audio recording for Whisper processing (if available)
       if (hasWhisperModel.value && audioStream) {
+        // Try to use the best available audio format
+        let mimeType = 'audio/webm;codecs=opus'
+        if (MediaRecorder.isTypeSupported('audio/wav')) {
+          mimeType = 'audio/wav'
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+          mimeType = 'audio/webm'
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4'
+        }
+
         mediaRecorder = new MediaRecorder(audioStream, {
-          mimeType: defaultAudioConfig.mimeType
+          mimeType: mimeType
         })
 
         mediaRecorder.ondataavailable = (event) => {
@@ -455,6 +463,8 @@ export function useSpeechTranscription() {
 
         // Record in chunks for real-time processing
         mediaRecorder.start(1000) // 1 second chunks
+        
+        console.log(`🎤 Started recording with MIME type: ${mimeType}`)
       }
 
       console.log('Recording started with silence detection', {
@@ -544,16 +554,26 @@ export function useSpeechTranscription() {
 
   // Process audio with Whisper
   async function processAudioWithWhisper() {
-    if (audioChunks.length === 0) return
+    if (audioChunks.length === 0) {
+      console.log('⚠️ No audio chunks to process')
+      return
+    }
 
     try {
       isProcessing.value = true
+      console.log(`🔄 Processing ${audioChunks.length} audio chunks with Whisper...`)
 
       // Combine audio chunks
-      const audioBlob = new Blob(audioChunks, { type: defaultAudioConfig.mimeType })
+      const audioBlob = new Blob(audioChunks, { type: mediaRecorder?.mimeType || 'audio/webm' })
+      console.log(`📦 Combined audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`)
+      
+      // Convert audio to WAV format for Whisper
+      const wavBlob = await convertToWav(audioBlob)
+      console.log(`🎵 Converted to WAV: ${wavBlob.size} bytes`)
       
       // Convert to base64
-      const audioBase64 = await blobToBase64(audioBlob)
+      const audioBase64 = await blobToBase64(wavBlob)
+      console.log(`📝 Base64 audio data length: ${audioBase64.length}`)
 
       // Send to Whisper for transcription
       const result = await invoke<{
@@ -573,14 +593,26 @@ export function useSpeechTranscription() {
         }
       })
 
+      console.log('🎯 Whisper result:', result)
+
       if (result.text.trim()) {
-        // Replace interim text with Whisper result
-        finalText.value = result.text
-        interimText.value = ''
+        // Update final text with Whisper result
+        const newText = result.text.trim()
+        
+        // If we have interim text from Web Speech API, replace it
+        if (interimText.value || !finalText.value) {
+          finalText.value = newText
+          interimText.value = ''
+        } else {
+          // Append to existing text
+          finalText.value += (finalText.value ? ' ' : '') + newText
+        }
+        
+        currentTranscript.value = finalText.value
 
         // Add to history
         const transcriptionResult: TranscriptionResult = {
-          text: result.text,
+          text: newText,
           isFinal: true,
           confidence: result.confidence,
           timestamp: Date.now(),
@@ -589,17 +621,114 @@ export function useSpeechTranscription() {
 
         transcriptionHistory.value.push(transcriptionResult)
 
-        console.log('Whisper transcription:', result.text)
+        // Emit final transcription event
+        emitTranscriptionEvent('transcription-final', {
+          text: newText,
+          confidence: result.confidence,
+          timestamp: Date.now()
+        })
+
+        console.log('✅ Whisper transcription:', newText)
+      } else {
+        console.log('ℹ️ Whisper returned empty text')
       }
 
       // Clear processed chunks
       audioChunks = []
     } catch (err) {
-      console.error('Whisper processing error:', err)
+      console.error('❌ Whisper processing error:', err)
       error.value = `Whisper processing failed: ${err}`
     } finally {
       isProcessing.value = false
     }
+  }
+
+  // Convert audio blob to WAV format using Web Audio API
+  async function convertToWav(audioBlob: Blob): Promise<Blob> {
+    try {
+      const arrayBuffer = await audioBlob.arrayBuffer()
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 })
+      
+      let audioBuffer: AudioBuffer
+      try {
+        // Try to decode the audio buffer
+        audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+      } catch (decodeError) {
+        console.warn('Failed to decode audio data, using original blob:', decodeError)
+        audioContext.close()
+        return audioBlob
+      }
+      
+      // Resample to 16kHz mono if needed
+      const sampleRate = 16000
+      const channels = 1
+      const length = Math.floor(audioBuffer.duration * sampleRate)
+      
+      const offlineContext = new OfflineAudioContext(channels, length, sampleRate)
+      const source = offlineContext.createBufferSource()
+      source.buffer = audioBuffer
+      source.connect(offlineContext.destination)
+      source.start()
+      
+      const resampledBuffer = await offlineContext.startRendering()
+      
+      // Convert to WAV format
+      const wavBuffer = createWavBuffer(resampledBuffer)
+      const wavBlob = new Blob([wavBuffer], { type: 'audio/wav' })
+      
+      audioContext.close()
+      return wavBlob
+      
+    } catch (error) {
+      console.warn('Audio conversion failed, using original blob:', error)
+      return audioBlob
+    }
+  }
+
+  // Create WAV buffer from AudioBuffer
+  function createWavBuffer(audioBuffer: AudioBuffer): ArrayBuffer {
+    const length = audioBuffer.length
+    const sampleRate = audioBuffer.sampleRate
+    const arrayBuffer = new ArrayBuffer(44 + length * 2)
+    const view = new DataView(arrayBuffer)
+    const channels = audioBuffer.numberOfChannels
+    
+    // WAV header
+    const writeString = (offset: number, string: string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i))
+      }
+    }
+    
+    // RIFF chunk descriptor
+    writeString(0, 'RIFF')
+    view.setUint32(4, 36 + length * 2, true)
+    writeString(8, 'WAVE')
+    
+    // fmt sub-chunk
+    writeString(12, 'fmt ')
+    view.setUint32(16, 16, true) // sub-chunk size
+    view.setUint16(20, 1, true) // audio format (1 = PCM)
+    view.setUint16(22, 1, true) // number of channels (mono)
+    view.setUint32(24, sampleRate, true) // sample rate
+    view.setUint32(28, sampleRate * 2, true) // byte rate
+    view.setUint16(32, 2, true) // block align
+    view.setUint16(34, 16, true) // bits per sample
+    
+    // data sub-chunk
+    writeString(36, 'data')
+    view.setUint32(40, length * 2, true)
+    
+    // Convert float samples to 16-bit PCM
+    const channelData = audioBuffer.getChannelData(0) // Use first channel for mono
+    let offset = 44
+    for (let i = 0; i < length; i++) {
+      const sample = Math.max(-1, Math.min(1, channelData[i]))
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true)
+      offset += 2
+    }
+    
+    return arrayBuffer
   }
 
   // Clear transcription
