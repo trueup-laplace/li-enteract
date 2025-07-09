@@ -34,9 +34,13 @@ export const useSpeechEvents = (
     const customEvent = event as CustomEvent
     console.log('🎤 Transcription started', customEvent.detail)
     
-    // Auto-open chat window when transcription starts
+    // Auto-open chat window when transcription starts by emitting an event
     if (!showChatWindow.value) {
-      showChatWindow.value = true
+      const openChatEvent = new CustomEvent('speech-open-chat-window', {
+        detail: { source: 'transcription-started' }
+      })
+      window.dispatchEvent(openChatEvent)
+      
       setTimeout(() => {
         scrollChatToBottom()
       }, 150)

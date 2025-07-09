@@ -333,6 +333,12 @@ const handleWakeWordTriggerMic = async (event: Event) => {
   await toggleSpeechTranscription(mockEvent)
 }
 
+const handleSpeechOpenChat = async (event: Event) => {
+  console.log('🔔 Speech detected: Opening Chat Window')
+  const mockEvent = event || new Event('speech')
+  await toggleChatWindow(mockEvent)
+}
+
 onMounted(async () => {
   document.addEventListener('keydown', handleKeydown)
   document.addEventListener('click', handleClickOutside)
@@ -346,6 +352,7 @@ onMounted(async () => {
   // Add wake word event listeners
   window.addEventListener('wake-word-open-chat-window', handleWakeWordOpenChat)
   window.addEventListener('wake-word-trigger-mic', handleWakeWordTriggerMic)
+  window.addEventListener('speech-open-chat-window', handleSpeechOpenChat)
   
   await store.initializeSpeechTranscription('small')
   
@@ -378,6 +385,7 @@ onUnmounted(() => {
   // Clean up wake word event listeners
   window.removeEventListener('wake-word-open-chat-window', handleWakeWordOpenChat)
   window.removeEventListener('wake-word-trigger-mic', handleWakeWordTriggerMic)
+  window.removeEventListener('speech-open-chat-window', handleSpeechOpenChat)
 })
 </script>
 

@@ -257,6 +257,9 @@ export function useWakeWordDetection() {
       
       // Auto-click the mic button to start transcription
       setTimeout(() => {
+        // Pause wake word detection before starting transcription to prevent conflicts
+        pauseWakeWordDetection(30000) // 30 seconds
+        
         const micButtonEvent = new CustomEvent('wake-word-trigger-mic', {
           detail: {
             confidence: detection.confidence,
@@ -407,27 +410,52 @@ export function useWakeWordDetection() {
       }
       
       recognition.onerror = (event) => {
-        console.error('Wake word detection error:', event.error)
-        if (event.error !== 'no-speech' && event.error !== 'aborted') {
-          error.value = `Wake word detection error: ${event.error}`
+        console.log('Wake word detection error:', event.error)
+        
+        // Handle different types of errors differently 
+        if (event.error === 'aborted') {
+          console.log('Wake word detection was aborted (likely due to transcription starting)')
+          // Don't set error for aborted - it's usually intentional
+          return
         }
+        
+        if (event.error === 'no-speech') {
+          console.log('No speech detected in wake word detection - continuing...')
+          // Don't set error for no-speech - it's normal
+          return
+        }
+        
+        // Set error for other problems
+        error.value = `Wake word detection error: ${event.error}`
       }
       
       recognition.onend = () => {
         console.log('Wake word detection: Speech recognition ended')
         isListening.value = false
         
-        // Auto-restart if still active and not paused
+        // Auto-restart if still active and not paused, with improved logic
         if (isActive.value && !isTranscriptionPaused.value) {
+          // Wait longer before restarting to prevent conflicts
           setTimeout(() => {
-            if (speechRecognition && isActive.value) {
+            if (speechRecognition && isActive.value && !isTranscriptionPaused.value) {
               try {
+                console.log('🔄 Restarting wake word detection...')
                 speechRecognition.start()
               } catch (err) {
                 console.warn('Failed to restart wake word detection:', err)
+                // If restart fails, try again after longer delay
+                setTimeout(() => {
+                  if (speechRecognition && isActive.value && !isTranscriptionPaused.value) {
+                    try {
+                      speechRecognition.start()
+                    } catch (secondErr) {
+                      console.error('Failed to restart wake word detection after retry:', secondErr)
+                    }
+                  }
+                }, 3000)
               }
             }
-          }, 1000)
+          }, 2000) // Increased delay to 2 seconds
         }
       }
       
@@ -489,12 +517,38 @@ export function useWakeWordDetection() {
     if (isActive.value) {
       startPolling()
     }
+    
+    // Listen for transcription events to coordinate
+    window.addEventListener('transcription-complete', handleTranscriptionComplete)
+    window.addEventListener('transcription-stopped', handleTranscriptionStopped) 
+    window.addEventListener('transcription-auto-stopped', handleTranscriptionAutoStopped)
   })
 
   // Cleanup on unmount
   onUnmounted(() => {
     stopPolling()
+    
+    // Remove transcription event listeners
+    window.removeEventListener('transcription-complete', handleTranscriptionComplete)
+    window.removeEventListener('transcription-stopped', handleTranscriptionStopped)
+    window.removeEventListener('transcription-auto-stopped', handleTranscriptionAutoStopped)
   })
+  
+  // Handle transcription events to resume wake word detection
+  function handleTranscriptionComplete() {
+    console.log('🔄 Transcription completed - resuming wake word detection')
+    resumeWakeWordDetection()
+  }
+  
+  function handleTranscriptionStopped() {
+    console.log('🔄 Transcription stopped - resuming wake word detection') 
+    resumeWakeWordDetection()
+  }
+  
+  function handleTranscriptionAutoStopped() {
+    console.log('🔄 Transcription auto-stopped - resuming wake word detection')
+    resumeWakeWordDetection()
+  }
 
   return {
     // State

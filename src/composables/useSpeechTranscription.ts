@@ -230,25 +230,28 @@ export function useSpeechTranscription() {
     }
 
     recognition.onerror = (event) => {
-      console.error('Speech recognition error:', event.error)
-      error.value = `Speech recognition error: ${event.error}`
+      console.log('Speech recognition error:', event.error)
       
-      // Handle specific errors
-      if (event.error === 'not-allowed') {
-        error.value = 'Microphone permission denied. Please allow microphone access and try again.'
-      } else if (event.error === 'no-speech') {
-        // Don't show error for no speech, just continue listening
-        error.value = null
-      } else if (event.error === 'network') {
-        error.value = 'Network error. Check your internet connection.'
-      } else if (event.error === 'aborted') {
-        // Don't show error for intentional stops
-        if (isRecording.value) {
-          error.value = null
-        }
+      // Handle different types of errors differently
+      if (event.error === 'aborted') {
+        console.log('Speech recognition was aborted (likely due to wake word detection conflict)')
+        // Don't emit error for aborted - it's usually intentional
+        return
       }
       
-      emitTranscriptionEvent('transcription-error', { error: error.value })
+      if (event.error === 'no-speech') {
+        console.log('No speech detected - continuing...')
+        // Don't emit error for no-speech - it's normal
+        return
+      }
+      
+      // Only emit errors for actual problems
+      if (event.error !== 'network' || isRecording.value) {
+        emitTranscriptionEvent('transcription-error', {
+          error: event.error,
+          message: `Speech recognition error: ${event.error}`
+        })
+      }
     }
 
     recognition.onend = () => {
