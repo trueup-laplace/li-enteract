@@ -14,7 +14,6 @@ import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
 import { useWindowManager } from '../../composables/useWindowManager'
 import { useWakeWordDetection } from '../../composables/useWakeWordDetection'
 import { useWindowResizing } from '../../composables/useWindowResizing'
-import { useSpeechEvents } from '../../composables/useSpeechEvents'
 import { useAIModels } from '../../composables/useAIModels'
 import { getCompatibilityReport } from '../../utils/browserCompat'
 import TransparencyControls from './TransparencyControls.vue'
@@ -51,15 +50,6 @@ const compatibilityReport = ref(getCompatibilityReport())
 // ML Eye tracking with window movement state
 const isGazeControlActive = ref(false)
 
-// Speech events composable
-const { setupSpeechTranscriptionListeners, removeSpeechTranscriptionListeners } = useSpeechEvents(
-  ref([]), // placeholder, will be handled by chat window
-  showChatWindow,
-  () => {}, // placeholder scroll function
-  ref(''), // placeholder chat message
-  async () => {} // placeholder send message
-)
-
 // Watch for window state changes to resize window
 watch(showChatWindow, async (newValue) => {
   await resizeWindow(newValue, showTransparencyControls.value, showAIModelsWindow.value)
@@ -68,7 +58,7 @@ watch(showChatWindow, async (newValue) => {
 watch(showTransparencyControls, async (newValue) => {
   console.log(`🔧 TRANSPARENCY WATCH: newValue=${newValue}, showChat=${showChatWindow.value}, showAI=${showAIModelsWindow.value}`)
   // Temporarily disabled to debug window disappearing issue
-  // await resizeWindow(showChatWindow.value, newValue, showAIModelsWindow.value)
+  await resizeWindow(showChatWindow.value, newValue, showAIModelsWindow.value)
   console.log('🔧 TRANSPARENCY WATCH: Skipping resize to debug issue')
 })
 
@@ -340,8 +330,6 @@ onMounted(async () => {
     document.addEventListener('mouseup', handleDragEnd)
   }
   
-  setupSpeechTranscriptionListeners()
-  
   await store.initializeSpeechTranscription('base')
   await resizeWindow(false, false, false)
   
@@ -360,7 +348,6 @@ onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
   document.removeEventListener('click', handleClickOutside)
   document.removeEventListener('mouseup', handleDragEnd)
-  removeSpeechTranscriptionListeners()
 })
 </script>
 

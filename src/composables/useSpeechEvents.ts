@@ -79,41 +79,32 @@ export const useSpeechEvents = (
     
     const finalText = customEvent.detail.text || ''
     if (finalText.trim()) {
-      // Replace interim message with final one or add new final message
+      // Remove any interim transcription messages first
       const lastMessage = chatHistory.value[chatHistory.value.length - 1]
       if (lastMessage && lastMessage.sender === 'transcription' && lastMessage.isInterim) {
-        // Update interim message to final
-        lastMessage.text = finalText
-        lastMessage.isInterim = false
-        lastMessage.confidence = customEvent.detail.confidence || 0.9
-      } else {
-        // Add new final message
-        chatHistory.value.push({
-          id: messageIdCounter++,
-          sender: 'transcription',
-          text: finalText,
-          timestamp: new Date(),
-          messageType: 'text',
-          isInterim: false,
-          confidence: customEvent.detail.confidence || 0.9
-        })
+        chatHistory.value.pop() // Remove interim message
       }
-      
-      setTimeout(() => {
-        scrollChatToBottom()
-      }, 50)
       
       // Auto-send transcribed text to AI if confidence is high enough
       if ((customEvent.detail.confidence || 0.9) > 0.7) {
-        console.log('🎤 Auto-sending transcription to Enteract Agent:', finalText)
+        console.log('🎤 Converting speech to user message and sending to Gemma:', finalText)
         
-        // Set the transcribed text as the chat message and send it
-        setTimeout(async () => {
-          // Temporarily set the message to trigger sendMessage
-          chatMessage.value = finalText
-          await sendMessage('enteract') // Use Enteract agent for transcriptions
-          // Clear it again since sendMessage already clears it
-        }, 1000) // Small delay to show the transcription first
+        // Set the transcribed text as the chat message and send it as a normal user message
+        chatMessage.value = finalText
+        await sendMessage('enteract') // This will add it as a user message and get AI response
+      } else {
+        // If confidence is low, still add as user message but with a note
+        chatHistory.value.push({
+          id: messageIdCounter++,
+          sender: 'user',
+          text: `${finalText} (transcribed)`,
+          timestamp: new Date(),
+          messageType: 'text'
+        })
+        
+        setTimeout(() => {
+          scrollChatToBottom()
+        }, 50)
       }
     }
   }

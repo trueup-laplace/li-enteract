@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, toRef, onMounted, onUnmounted } from 'vue'
 import {
   CommandLineIcon,
   XMarkIcon,
@@ -8,6 +8,7 @@ import {
 } from '@heroicons/vue/24/outline'
 import { useChatManagement } from '../../composables/useChatManagement'
 import { useWindowResizing } from '../../composables/useWindowResizing'
+import { useSpeechEvents } from '../../composables/useSpeechEvents'
 import AgentActionButtons from './AgentActionButtons.vue'
 
 interface Props {
@@ -49,6 +50,15 @@ const {
   triggerFileUpload,
   handleFileUpload
 } = useChatManagement(props.selectedModel, scrollChatToBottom)
+
+// Set up speech events with real chat management functions
+const { setupSpeechTranscriptionListeners, removeSpeechTranscriptionListeners } = useSpeechEvents(
+  chatHistory,
+  toRef(props, 'showChatWindow'),
+  scrollChatToBottom,
+  chatMessage,
+  sendMessage
+)
 
 // Window resizing composable
 const {
@@ -97,6 +107,18 @@ const handleStartComputerUse = () => {
 const handleFileUploadEvent = (event: Event) => {
   handleFileUpload(event, { value: props.showChatWindow })
 }
+
+// Setup speech events when component mounts
+onMounted(() => {
+  setupSpeechTranscriptionListeners()
+  console.log('🎤 ChatWindow: Speech transcription listeners set up')
+})
+
+// Cleanup speech events when component unmounts
+onUnmounted(() => {
+  removeSpeechTranscriptionListeners()
+  console.log('🎤 ChatWindow: Speech transcription listeners removed')
+})
 </script>
 
 <template>
