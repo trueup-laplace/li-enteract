@@ -865,6 +865,9 @@ export const useChatManagement = (selectedModel: string | null, scrollChatToBott
     loadAllChats,
     saveAllChats,
     
+    // Utility functions
+    estimateTokens,
+    
     // Existing functions
     renderMarkdown,
     takeScreenshotAndAnalyze,

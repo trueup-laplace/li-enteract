@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, toRef, onMounted, onUnmounted } from 'vue'
+import { ref, watch, nextTick, toRef, onMounted, onUnmounted, computed } from 'vue'
 import {
   CommandLineIcon,
   XMarkIcon,
   ArrowsPointingOutIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/vue/24/outline'
 import { useChatManagement } from '../../composables/useChatManagement'
 import { useWindowResizing } from '../../composables/useWindowResizing'
@@ -48,8 +49,21 @@ const {
   sendMessage,
   handleChatKeydown,
   triggerFileUpload,
-  handleFileUpload
+  handleFileUpload,
+  estimateTokens
 } = useChatManagement(props.selectedModel, scrollChatToBottom)
+
+// Context truncation detection
+const MAX_TOKENS = 4000
+const isContextTruncated = computed(() => {
+  if (!chatHistory.value || chatHistory.value.length === 0) return false
+  
+  const totalTokens = chatHistory.value.reduce((sum, message) => {
+    return sum + estimateTokens(message.text)
+  }, 0)
+  
+  return totalTokens > MAX_TOKENS
+})
 
 // Set up speech events with real chat management functions
 const { setupSpeechTranscriptionListeners, removeSpeechTranscriptionListeners } = useSpeechEvents(
@@ -140,6 +154,13 @@ onUnmounted(() => {
             <div class="model-indicator" v-if="selectedModel">
               <span class="text-xs text-green-400">{{ selectedModel.split(':')[0] || selectedModel }}</span>
             </div>
+            
+            <!-- Context Truncation Indicator -->
+            <div v-if="isContextTruncated" class="truncation-indicator" title="Chat history is being truncated to fit AI context limits">
+              <ExclamationTriangleIcon class="w-3 h-3 text-yellow-400" />
+              <span class="text-xs text-yellow-400">History Truncated</span>
+            </div>
+            
             <div class="resize-indicator">
               <ArrowsPointingOutIcon class="w-3 h-3 text-white/50" />
               <span class="text-xs text-white/50">{{ chatWindowSize.width }}×{{ chatWindowSize.height }}</span>
@@ -297,11 +318,15 @@ onUnmounted(() => {
 }
 
 .model-indicator {
-  @apply flex items-center gap-1 ml-2 px-2 py-1 rounded-md bg-green-500/20 border border-green-400/30;
+  @apply flex items-center px-2 py-1 bg-green-500/20 rounded-full border border-green-500/30;
+}
+
+.truncation-indicator {
+  @apply flex items-center gap-1 px-2 py-1 bg-yellow-500/20 rounded-full border border-yellow-500/30;
 }
 
 .resize-indicator {
-  @apply flex items-center gap-1 ml-2 px-2 py-1 rounded-md bg-white/5;
+  @apply flex items-center gap-1;
 }
 
 .chat-close-btn {
