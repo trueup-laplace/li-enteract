@@ -13,6 +13,47 @@ export interface ChatMessage {
   metadata?: MessageMetadata
 }
 
+// Chat Session Management Interfaces
+export interface ChatSession {
+  id: string
+  title: string
+  history: ChatMessage[]
+  createdAt: string
+  updatedAt: string
+  modelId?: string
+}
+
+// Chat file data structures for Rust backend
+export interface ChatMessageFile {
+  id: string
+  type: 'image' | 'document' | 'audio' | 'video'
+  name: string
+  size: number
+  mimeType: string
+  url?: string
+  base64Data?: string
+  thumbnail?: string
+  extractedText?: string
+  dimensions?: FileDimensions
+  uploadProgress?: number
+  uploadStatus?: 'uploading' | 'completed' | 'failed' | 'processing'
+  error?: string
+}
+
+export interface FileDimensions {
+  width: number
+  height: number
+}
+
+// Backend payload interfaces
+export interface SaveChatsPayload {
+  chats: ChatSession[]
+}
+
+export interface LoadChatsResponse {
+  chats: ChatSession[]
+}
+
 export interface MessageAttachment {
   id: string
   type: 'image' | 'document' | 'audio' | 'video'

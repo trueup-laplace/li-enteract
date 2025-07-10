@@ -195,7 +195,7 @@ onUnmounted(() => {
                 <div v-else v-html="renderMarkdown(message.text)"></div>
               </div>
               
-              <span class="message-time">{{ message.timestamp.toLocaleTimeString() }}</span>
+              <span class="message-time">{{ new Date(message.timestamp).toLocaleTimeString() }}</span>
             </div>
           </div>
         </div>
