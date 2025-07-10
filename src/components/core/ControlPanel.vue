@@ -7,8 +7,7 @@ import {
   CpuChipIcon,
   ExclamationTriangleIcon,
   AdjustmentsHorizontalIcon,
-  XMarkIcon,
-  Bars3Icon
+  XMarkIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
@@ -19,8 +18,13 @@ import { useAIModels } from '../../composables/useAIModels'
 import { getCompatibilityReport } from '../../utils/browserCompat'
 import TransparencyControls from './TransparencyControls.vue'
 import ChatWindow from './ChatWindow.vue'
-import ChatSidebar from './ChatSidebar.vue'
 import AIModelsPanel from './AIModelsPanel.vue'
+
+interface Emits {
+  (e: 'toggle-chat-drawer'): void
+}
+
+const emit = defineEmits<Emits>()
 
 const store = useAppStore()
 const mlEyeTracking = useMLEyeTracking()
@@ -41,7 +45,6 @@ const dragStartTime = ref(0)
 const showChatWindow = ref(false)
 const showTransparencyControls = ref(false)
 const showAIModelsWindow = ref(false)
-const showChatSidebar = ref(false)
 
 // Error handling state
 const speechError = ref<string | null>(null)
@@ -69,14 +72,7 @@ watch(showAIModelsWindow, async (newValue) => {
   await resizeWindow(showChatWindow.value, showTransparencyControls.value, newValue)
 })
 
-watch(showChatSidebar, async (newValue) => {
-  // For now, treat chat sidebar like a separate panel - close others when it opens
-  if (newValue) {
-    await resizeWindow(false, false, false)
-  } else {
-    await resizeWindow(showChatWindow.value, showTransparencyControls.value, showAIModelsWindow.value)
-  }
-})
+
 
 // Drag event handlers
 const handleDragStart = () => {
@@ -101,9 +97,6 @@ const toggleTransparencyControls = (event: Event) => {
   if (showAIModelsWindow.value) {
     showAIModelsWindow.value = false
   }
-  if (showChatSidebar.value) {
-    showChatSidebar.value = false
-  }
   
   showTransparencyControls.value = !showTransparencyControls.value
   console.log(`🔍 Transparency controls ${showTransparencyControls.value ? 'opened' : 'closed'}`)
@@ -122,9 +115,6 @@ const toggleAIModelsWindow = async (event: Event) => {
   }
   if (showTransparencyControls.value) {
     showTransparencyControls.value = false
-  }
-  if (showChatSidebar.value) {
-    showChatSidebar.value = false
   }
   
   showAIModelsWindow.value = !showAIModelsWindow.value
@@ -145,9 +135,6 @@ const toggleChatWindow = async (event: Event) => {
   if (showAIModelsWindow.value) {
     showAIModelsWindow.value = false
   }
-  if (showChatSidebar.value) {
-    showChatSidebar.value = false
-  }
   
   showChatWindow.value = !showChatWindow.value
   console.log(`💬 Chat window ${showChatWindow.value ? 'opened' : 'closed'}`)
@@ -156,28 +143,6 @@ const toggleChatWindow = async (event: Event) => {
 const closeChatWindow = async () => {
   showChatWindow.value = false
   console.log('💬 Chat window closed')
-}
-
-const toggleChatSidebar = async (event: Event) => {
-  event.stopPropagation()
-  
-  if (showChatWindow.value) {
-    showChatWindow.value = false
-  }
-  if (showTransparencyControls.value) {
-    showTransparencyControls.value = false
-  }
-  if (showAIModelsWindow.value) {
-    showAIModelsWindow.value = false
-  }
-  
-  showChatSidebar.value = !showChatSidebar.value
-  console.log(`💬 Chat Sidebar ${showChatSidebar.value ? 'opened' : 'closed'}`)
-}
-
-const closeChatSidebar = () => {
-  showChatSidebar.value = false
-  console.log('💬 Chat Sidebar closed')
 }
 
 // Enhanced speech transcription with error handling
@@ -321,12 +286,6 @@ const handleKeydown = async (event: KeyboardEvent) => {
     await toggleAIModelsWindow(event)
     console.log('🤖 Keyboard shortcut: AI Models window toggled')
   }
-
-  if (event.ctrlKey && event.shiftKey && event.key === 'B') {
-    event.preventDefault()
-    await toggleChatSidebar(event)
-    console.log('💬 Keyboard shortcut: Chat Sidebar toggled')
-  }
   
   if (event.key === 'Escape') {
     event.preventDefault()
@@ -339,9 +298,6 @@ const handleKeydown = async (event: KeyboardEvent) => {
     if (showAIModelsWindow.value) {
       closeAIModelsWindow()
     }
-    if (showChatSidebar.value) {
-      closeChatSidebar()
-    }
   }
 }
 
@@ -351,7 +307,6 @@ const handleClickOutside = (event: Event) => {
   const chatWindow = document.querySelector('.chat-window')
   const transparencyPanel = document.querySelector('.transparency-controls-panel')
   const aiModelsPanel = document.querySelector('.ai-models-panel')
-  const chatSidebar = document.querySelector('.chat-sidebar')
   const controlPanel = document.querySelector('.control-panel-glass-bar')
   
   if (chatWindow && controlPanel && showChatWindow.value &&
@@ -370,12 +325,6 @@ const handleClickOutside = (event: Event) => {
       !aiModelsPanel.contains(target) && 
       !controlPanel.contains(target)) {
     closeAIModelsWindow()
-  }
-
-  if (chatSidebar && controlPanel && showChatSidebar.value &&
-      !chatSidebar.contains(target) && 
-      !controlPanel.contains(target)) {
-    closeChatSidebar()
   }
 }
 
@@ -431,7 +380,6 @@ onMounted(async () => {
   console.log('   Ctrl+Shift+C = Toggle Chat Window')
   console.log('   Ctrl+Shift+T = Toggle Transparency Controls')
   console.log('   Ctrl+Shift+A = Toggle AI Models Window')
-  console.log('   Ctrl+Shift+B = Toggle Chat Sidebar')
   console.log('   Escape = Close any open panels')
   console.log('🎯 Control Panel is draggable - click and drag to move!')
   console.log('📐 Chat Window is resizable - drag the resize handles!')
@@ -539,17 +487,6 @@ onUnmounted(() => {
             <CommandLineIcon class="w-4 h-4 transition-all" 
               :class="showChatWindow ? 'text-white' : 'text-white/70 group-hover:text-white'" />
           </button>
-
-          <!-- Chat Sidebar Button -->
-          <button 
-            @click="toggleChatSidebar"
-            class="control-btn group"
-            :class="{ 'active': showChatSidebar }"
-            title="Chat Sidebar"
-          >
-            <Bars3Icon class="w-4 h-4 transition-all" 
-              :class="showChatSidebar ? 'text-white' : 'text-white/70 group-hover:text-white'" />
-          </button>
         </div>
         
         <!-- Drag indicator -->
@@ -596,13 +533,7 @@ onUnmounted(() => {
       :selected-model="selectedModel"
       @close="closeChatWindow"
       @update:show-chat-window="showChatWindow = $event"
-    />
-
-    <!-- Chat Sidebar -->
-    <ChatSidebar 
-      v-if="showChatSidebar"
-      :selected-model="selectedModel"
-      @close="closeChatSidebar"
+      @toggle-chat-drawer="emit('toggle-chat-drawer')"
     />
   </div>
 </template>

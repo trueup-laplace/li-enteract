@@ -264,3 +264,92 @@
     * Display a small, subtle message or icon in the chat window (e.g., "History truncated for AI context") when `isContextTruncated` is true.
 * **Dependencies/Prerequisites:** Phase 2 completed.
 * **Goal:** Inform the user when their full conversation history is not being sent to the AI due to length limits.
+
+Okay, I understand. Let's add a new **Phase 4** to the plan, focusing on a specific UI/UX refinement for accessing chat history and creating new chats. This will replace any existing chat sidebar button with a cleaner, drawer-based approach.
+
+---
+
+### **Comprehensive Plan: Ollama Chat Context & Memory Management (Cursor Focus)**
+
+**(Phases 1-3 remain as previously defined)**
+
+
+### **Phase 4: UI/UX Refinement - Chat History Drawer**
+
+**Goal:** To enhance the accessibility of chat history and the ease of creating new chat sessions by implementing a smooth, minimal, and intuitive left-side drawer in the chat interface.
+
+**Step 4.1: Identify and Remove Old Chat Sidebar Button**
+
+* **File Name:** This will depend on your current UI structure. Common locations include:
+    * `src/App.vue`
+    * `src/components/ChatInterface.vue` (or similar main chat component)
+    * `src/components/ControlPanel.vue` (if a dedicated control panel exists)
+* **Action:** Locate and remove the existing button or UI element that currently triggers the display of the chat sidebar or list.
+* **Implementation Details:**
+    * Identify the `<button>` or `<div>` element associated with toggling the chat sidebar.
+    * Remove this element and any associated click handlers or conditional rendering logic (`v-if`, `v-show`).
+    * Review surrounding CSS to ensure no layout breakage from the removal.
+* **Dependencies/Prerequisites:** Understanding of your current application's main layout and component structure.
+* **Goal:** Clean up the previous UI for the chat history, making way for the new drawer.
+
+**Step 4.2: Implement New Drawer Trigger Button in Chat UI**
+
+* **File Name:** Likely `src/App.vue` or `src/components/ChatInterface.vue`. This button should be visible when the main chat window is open.
+* **Action:** Add a new button element.
+* **Implementation Details:**
+    * Place a new `<button>` in the **top-left corner** of your main chat interface UI.
+    * Give it a visually distinct, minimal icon (e.g., a "hamburger" menu icon `☰` or a "chat bubble" icon).
+    * Add a click event handler to this button (`@click="toggleChatDrawer"`).
+    * Introduce a new reactive state variable, `isChatDrawerOpen = ref(false)`, in the relevant component's setup. The `toggleChatDrawer` method will simply flip this boolean.
+    * Apply Tailwind CSS classes for positioning (e.g., `absolute top-4 left-4`) and basic styling (padding, background, hover effects).
+* **Dependencies/Prerequisites:** Phase 4.1 completed. Vue reactivity basics.
+* **Goal:** Provide a new, clear entry point for users to access their chat history.
+
+**Step 4.3: Create Left-Side Drawer Component and Overlay**
+
+* **File Name:** `src/components/ChatHistoryDrawer.vue` (new file).
+* **Action:** Create a new Vue component for the drawer and integrate it into the main layout.
+* **Implementation Details:**
+    * **Drawer Component (`ChatHistoryDrawer.vue`):**
+        * This component will accept a prop `isOpen: boolean` to control its visibility and animation.
+        * Use CSS transitions (e.g., `transform: translateX()`) or a Vue transition component (`<Transition name="slide-fade">`) for a smooth slide-in/slide-out effect from the left.
+        * Define a fixed `width` for the drawer (e.g., `300px` or `w-80` in Tailwind).
+        * Apply `fixed`, `top-0`, `left-0`, `h-screen`, `z-50` (or appropriate z-index to be above chat but below modals) for positioning.
+        * Include a semi-transparent overlay `div` that covers the rest of the screen when the drawer is open. This overlay should have a click handler to close the drawer (`@click="closeChatDrawer"`), improving UX.
+        * The drawer content should have a distinct background color (e.g., `bg-base-200` from DaisyUI or a custom dark background).
+    * **Integration into Main Layout (e.g., `src/App.vue`):**
+        * Import `ChatHistoryDrawer` and place it in your main template.
+        * Pass the `isChatDrawerOpen` reactive variable as the `isOpen` prop.
+        * Pass a method to close the drawer from the parent to the drawer component (e.g., `@close-drawer="isChatDrawerOpen = false"`).
+* **Dependencies/Prerequisites:** Tailwind CSS configured. Basic Vue component creation and prop handling.
+* **Goal:** Establish the visual and interactive foundation for the new chat history drawer, ensuring smooth transitions and a clear separation from the main content.
+
+**Step 4.4: Integrate Chat List and New Chat Functionality into Drawer**
+
+* **File Name:** `src/components/ChatHistoryDrawer.vue` (continue modifying this component).
+* **Action:** Populate the drawer with the chat management features.
+* **Implementation Details:**
+    * **Import `useChatManagement`**: Bring the composable into the `ChatHistoryDrawer.vue` component.
+    * **Display `chatSessions`**: Iterate through the `chatSessions` computed property from `useChatManagement` to list each `ChatSession`.
+        * Each list item should clearly display `chat.title`.
+        * Add a click handler to each list item that calls `switchChat(chat.id)`. After switching, ensure the drawer closes (`@click="switchChat(chat.id); $emit('close-drawer')"`).
+        * Visually highlight the `currentChatId` using conditional CSS classes.
+    * **Add "New Chat" Button**:
+        * Place a prominent "New Chat" button within the drawer, possibly at the top or bottom of the list.
+        * Attach a click handler that calls `createNewChat()` from `useChatManagement`. After creating a new chat, ensure the drawer closes (`@click="createNewChat(); $emit('close-drawer')"`).
+    * **Implement Renaming/Deletion**: For each chat item, add small, discreet icons (e.g., a pencil for rename, a trash can for delete).
+        * Attach click handlers to these icons that call `renameChat(chat.id, newTitle)` and `deleteChat(chat.id)` respectively.
+        * Implement a simple inline edit or a small modal for renaming.
+        * Ensure a confirmation dialog for deletion.
+* **Dependencies/Prerequisites:** Phase 1 (especially `useChatManagement`) and Phase 4.3 completed.
+* **Goal:** Make it easy for users to see all their chats, switch between them, create new ones, and manage (rename/delete) them directly from the intuitive left-side drawer.
+
+**Success Criteria for Phase 4:**
+* The old chat sidebar button is completely gone.
+* A new, minimal button appears in the top-left of your chat interface.
+* Clicking this new button smoothly slides a drawer open from the left side of the window.
+* The drawer displays a clear list of all your chat sessions, with the currently active chat highlighted.
+* You can click on any chat in the list to switch to it, and the drawer automatically closes.
+* A prominent "New Chat" button is present and, when clicked, creates a new chat and closes the drawer.
+* (Optional but Recommended) Renaming and deleting chats work correctly from within the drawer.
+* The overall UI feels smooth, minimal, and intuitive for chat management.

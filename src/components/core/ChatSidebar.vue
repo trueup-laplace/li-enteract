@@ -13,6 +13,7 @@ import { useChatManagement } from '../../composables/useChatManagement'
 
 interface Props {
   selectedModel: string | null
+  isOpen: boolean
 }
 
 interface Emits {
@@ -51,11 +52,13 @@ const sortedChats = computed(() => {
 // Chat management functions
 const handleCreateNewChat = () => {
   createNewChat()
+  emit('close') // Close drawer after creating new chat
 }
 
 const handleSwitchChat = (chatId: string) => {
   switchChat(chatId)
   showMenuForChat.value = null
+  emit('close') // Close drawer after switching chat
 }
 
 const startRenaming = (chatId: string, currentTitle: string) => {
@@ -112,9 +115,14 @@ const closeWindow = () => {
 </script>
 
 <template>
-  <div class="chat-sidebar">
-    <!-- Sidebar Header -->
-    <div class="sidebar-header">
+  <!-- Overlay Background -->
+  <Transition name="drawer-overlay">
+    <div v-if="isOpen" class="drawer-overlay" @click="closeWindow">
+      <!-- Drawer Content -->
+      <Transition name="drawer-slide">
+        <div v-if="isOpen" class="chat-drawer" @click.stop>
+          <!-- Sidebar Header -->
+          <div class="sidebar-header">
       <div class="sidebar-title">
         <ChatBubbleLeftRightIcon class="w-4 h-4 text-white/80" />
         <span class="text-sm font-medium text-white/90">Chat Sessions</span>
@@ -204,14 +212,43 @@ const closeWindow = () => {
         </div>
       </div>
     </div>
-  </div>
+        </div>
+      </Transition>
+    </div>
+  </Transition>
 </template>
 
 <style scoped>
-.chat-sidebar {
-  @apply bg-black/90 backdrop-blur-xl border border-white/20 rounded-xl;
-  @apply w-80 h-96 flex flex-col;
-  @apply shadow-2xl shadow-black/50;
+/* Drawer Overlay */
+.drawer-overlay {
+  @apply fixed inset-0 z-50 bg-black/50 backdrop-blur-sm;
+}
+
+.drawer-overlay-enter-active,
+.drawer-overlay-leave-active {
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.drawer-overlay-enter-from,
+.drawer-overlay-leave-to {
+  opacity: 0;
+}
+
+/* Drawer Content */
+.chat-drawer {
+  @apply fixed top-0 left-0 h-full w-80 z-50;
+  @apply bg-black/90 backdrop-blur-xl border-r border-white/20;
+  @apply shadow-2xl shadow-black/50 flex flex-col;
+}
+
+.drawer-slide-enter-active,
+.drawer-slide-leave-active {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.drawer-slide-enter-from,
+.drawer-slide-leave-to {
+  transform: translateX(-100%);
 }
 
 .sidebar-header {

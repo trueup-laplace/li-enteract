@@ -5,7 +5,8 @@ import {
   XMarkIcon,
   ArrowsPointingOutIcon,
   ShieldCheckIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  Bars3Icon
 } from '@heroicons/vue/24/outline'
 import { useChatManagement } from '../../composables/useChatManagement'
 import { useWindowResizing } from '../../composables/useWindowResizing'
@@ -20,6 +21,7 @@ interface Props {
 interface Emits {
   (e: 'close'): void
   (e: 'update:showChatWindow', value: boolean): void
+  (e: 'toggle-chat-drawer'): void
 }
 
 const props = defineProps<Props>()
@@ -86,6 +88,11 @@ const closeWindow = () => {
   emit('update:showChatWindow', false)
 }
 
+const toggleChatDrawer = () => {
+  emit('toggle-chat-drawer')
+  console.log('💬 Chat drawer toggle requested')
+}
+
 // Focus input when chat window opens
 watch(() => props.showChatWindow, async (newValue) => {
   if (newValue) {
@@ -146,6 +153,15 @@ onUnmounted(() => {
           height: chatWindowSize.height + 'px' 
         }"
       >
+        <!-- Chat Drawer Trigger Button -->
+        <button 
+          @click="toggleChatDrawer"
+          class="chat-drawer-trigger"
+          title="Chat History"
+        >
+          <Bars3Icon class="w-4 h-4 text-white/70 hover:text-white transition-colors" />
+        </button>
+
         <!-- Chat Header with Resize Indicator -->
         <div class="chat-header">
           <div class="chat-title">
@@ -331,6 +347,12 @@ onUnmounted(() => {
 
 .chat-close-btn {
   @apply rounded-full p-1 hover:bg-white/10 transition-colors;
+}
+
+.chat-drawer-trigger {
+  @apply absolute top-4 left-4 z-10 rounded-full p-2 bg-white/10 hover:bg-white/20 transition-colors;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .chat-messages {
