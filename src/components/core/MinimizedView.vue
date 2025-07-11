@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import { 
-  MicrophoneIcon,
   Squares2X2Icon,
-  EyeIcon,
-  EyeSlashIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 
