@@ -18,6 +18,7 @@ interface Props {
 
 interface Emits {
   (e: 'close'): void
+  (e: 'open-chat-window'): void
 }
 
 const props = defineProps<Props>()
@@ -52,6 +53,7 @@ const sortedChats = computed(() => {
 // Chat management functions
 const handleCreateNewChat = () => {
   createNewChat()
+  emit('open-chat-window') // Open chat window to show the new empty chat
   emit('close') // Close drawer after creating new chat
 }
 
@@ -81,8 +83,14 @@ const cancelRenaming = () => {
 }
 
 const handleDeleteChat = (chatId: string) => {
+  const wasCurrentChat = chatId === currentChatId.value
   deleteChat(chatId)
   showMenuForChat.value = null
+  
+  // If we deleted the current chat, open the chat window to show the result
+  if (wasCurrentChat) {
+    emit('open-chat-window')
+  }
 }
 
 const handleClearChat = () => {

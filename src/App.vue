@@ -14,6 +14,9 @@ const { selectedModel } = useAIModels()
 // Chat drawer state
 const isChatDrawerOpen = ref(false)
 
+// Reference to the ControlPanel component
+const controlPanelRef = ref<InstanceType<typeof ControlPanel>>()
+
 const toggleChatDrawer = () => {
   isChatDrawerOpen.value = !isChatDrawerOpen.value
   console.log(`💬 Chat drawer ${isChatDrawerOpen.value ? 'opened' : 'closed'}`)
@@ -22,6 +25,13 @@ const toggleChatDrawer = () => {
 const closeChatDrawer = () => {
   isChatDrawerOpen.value = false
   console.log('💬 Chat drawer closed')
+}
+
+const handleOpenChatWindow = () => {
+  // Access the ControlPanel's openChatWindow method
+  if (controlPanelRef.value && controlPanelRef.value.openChatWindow) {
+    controlPanelRef.value.openChatWindow()
+  }
 }
 
 onMounted(() => {
@@ -34,13 +44,17 @@ onMounted(() => {
 
 <template>
   <div class="app-root">
-    <ControlPanel @toggle-chat-drawer="toggleChatDrawer" />
+    <ControlPanel 
+      ref="controlPanelRef"
+      @toggle-chat-drawer="toggleChatDrawer" 
+    />
     
     <!-- Chat Drawer -->
     <ChatSidebar 
       :is-open="isChatDrawerOpen"
       :selected-model="selectedModel"
       @close="closeChatDrawer"
+      @open-chat-window="handleOpenChatWindow"
     />
   </div>
 </template>

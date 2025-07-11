@@ -284,8 +284,11 @@ onUnmounted(() => {
 <style scoped>
 .chat-window-section {
   @apply w-full flex justify-center;
-  padding: 0 8px 8px 8px;
+  padding: 8px 8px 8px 8px; /* Ensure top padding for menu button visibility */
   background: transparent;
+  /* Ensure the section doesn't get cut off */
+  min-height: 100%;
+  box-sizing: border-box;
 }
 
 /* Chat Window Styles */
@@ -295,7 +298,7 @@ onUnmounted(() => {
   min-width: 450px;
   min-height: 400px;
   max-width: 800px;
-  max-height: 1200px;
+  max-height: calc(100vh - 80px); /* Ensure it fits within viewport with margin */
   
   /* Same glass effect as control panel with darker background */
   background: linear-gradient(135deg, 
@@ -350,9 +353,18 @@ onUnmounted(() => {
 }
 
 .chat-drawer-trigger {
-  @apply absolute top-4 left-4 z-10 rounded-full p-2 bg-white/10 hover:bg-white/20 transition-colors;
+  @apply absolute z-10 rounded-full p-2 bg-white/10 hover:bg-white/20 transition-colors;
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.2);
+  /* Position it safely within the chat window bounds */
+  top: 8px;
+  left: 8px;
+  /* Ensure it's always visible */
+  min-width: 36px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .chat-messages {

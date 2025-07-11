@@ -145,6 +145,24 @@ const closeChatWindow = async () => {
   console.log('💬 Chat window closed')
 }
 
+const openChatWindow = async () => {
+  // Close other panels first
+  if (showTransparencyControls.value) {
+    showTransparencyControls.value = false
+  }
+  if (showAIModelsWindow.value) {
+    showAIModelsWindow.value = false
+  }
+  
+  showChatWindow.value = true
+  console.log('💬 Chat window opened')
+}
+
+// Expose the openChatWindow method for parent components
+defineExpose({
+  openChatWindow
+})
+
 // Enhanced speech transcription with error handling
 const toggleSpeechTranscription = async (event: Event) => {
   event.stopPropagation()
