@@ -6,19 +6,27 @@ import type { ChatMessage, ChatSession, SaveChatsPayload, LoadChatsResponse } fr
 
 let messageIdCounter = 1
 
+// Create shared singleton state that persists across all component instances
+const sharedChatState = {
+  chatSessions: ref<ChatSession[]>([]),
+  currentChatId: ref<string | null>(null),
+  isInitialized: ref(false)
+}
+
 export const useChatManagement = (selectedModel: string | null, scrollChatToBottom: () => void) => {
   const chatMessage = ref('')
   const fileInput = ref<HTMLInputElement>()
   
-  // Multi-session state
-  const chatSessions = ref<ChatSession[]>([])
-  const currentChatId = ref<string | null>(null)
+  // Use the shared state instead of creating new instances
+  const { chatSessions, currentChatId, isInitialized } = sharedChatState
   
   // Computed property for current chat history
   const currentChatHistory = computed(() => {
     if (!currentChatId.value) return []
     const currentSession = chatSessions.value.find(session => session.id === currentChatId.value)
-    return currentSession?.history || []
+    const history = currentSession?.history || []
+    console.log(`🔍 [SHARED STATE] Current chat history computed: ${history.length} messages for chat ${currentChatId.value}`)
+    return history
   })
   
   // Get current chat session
@@ -52,11 +60,6 @@ export const useChatManagement = (selectedModel: string | null, scrollChatToBott
   
   // Debounced save function (1000ms delay)
   const debouncedSaveChats = debounce(saveAllChats, 1000)
-  
-  // Watch for changes and auto-save
-  watch(chatSessions, () => {
-    debouncedSaveChats()
-  }, { deep: true })
   
   // Load all chats from backend
   const loadAllChats = async () => {
@@ -98,14 +101,24 @@ export const useChatManagement = (selectedModel: string | null, scrollChatToBott
     
     chatSessions.value.unshift(newSession)
     currentChatId.value = newChatId
-    console.log(`📝 Created new chat session: ${newChatId}`)
+    console.log(`📝 [SHARED STATE] Created new chat session: ${newChatId}`)
+    console.log(`📝 [SHARED STATE] Current chat ID updated to: ${newChatId}`)
+    console.log(`📝 [SHARED STATE] Total sessions: ${chatSessions.value.length}`)
   }
   
   const switchChat = (chatId: string) => {
     const chatExists = chatSessions.value.some(session => session.id === chatId)
     if (chatExists) {
+      const oldChatId = currentChatId.value
       currentChatId.value = chatId
-      console.log(`🔄 Switched to chat: ${chatId}`)
+      console.log(`🔄 [SHARED STATE] Switched from chat: ${oldChatId} to chat: ${chatId}`)
+      
+      // Find the session and log its state
+      const session = chatSessions.value.find(s => s.id === chatId)
+      if (session) {
+        console.log(`🔄 [SHARED STATE] New chat has ${session.history.length} messages`)
+      }
+      
       setTimeout(() => {
         scrollChatToBottom()
       }, 100)
@@ -115,23 +128,25 @@ export const useChatManagement = (selectedModel: string | null, scrollChatToBott
   }
   
   const deleteChat = (chatId: string) => {
-    if (confirm('Are you sure you want to delete this chat?')) {
-      const chatIndex = chatSessions.value.findIndex(session => session.id === chatId)
-      if (chatIndex !== -1) {
-        chatSessions.value.splice(chatIndex, 1)
-        
-        // If deleted chat was current, switch to another or create new
-        if (currentChatId.value === chatId) {
-          if (chatSessions.value.length > 0) {
-            currentChatId.value = chatSessions.value[0].id
-          } else {
-            createNewChat()
-          }
+    const chatIndex = chatSessions.value.findIndex(session => session.id === chatId)
+    if (chatIndex !== -1) {
+      const wasCurrentChat = chatId === currentChatId.value
+      chatSessions.value.splice(chatIndex, 1)
+      
+      // If deleted chat was current, switch to another or create new
+      if (wasCurrentChat) {
+        if (chatSessions.value.length > 0) {
+          currentChatId.value = chatSessions.value[0].id
+        } else {
+          createNewChat()
         }
-        
-        // Immediately save after deletion (not debounced)
-        saveAllChats()
-        console.log(`🗑️ Deleted chat: ${chatId}`)
+      }
+      
+      // Immediately save after deletion (not debounced)
+      saveAllChats()
+      console.log(`🗑️ [SHARED STATE] Deleted chat: ${chatId}`)
+      if (wasCurrentChat) {
+        console.log(`🔄 [SHARED STATE] Switched to ${currentChatId.value} after deletion`)
       }
     }
   }
@@ -840,8 +855,19 @@ export const useChatManagement = (selectedModel: string | null, scrollChatToBott
   }
 
   // Initialize chat sessions on mount
-  onMounted(() => {
-    loadAllChats()
+  onMounted(async () => {
+    // Only initialize shared state once
+    if (!isInitialized.value) {
+      await loadAllChats()
+      
+      // Set up watchers after initial load
+      watch(chatSessions, () => {
+        debouncedSaveChats()
+      }, { deep: true })
+      
+      isInitialized.value = true
+      console.log('✅ Chat management initialized')
+    }
   })
 
   return {
