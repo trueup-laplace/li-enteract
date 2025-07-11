@@ -8,6 +8,7 @@ mod speech;
 mod ollama;
 mod screenshot;
 mod file_handler;
+mod data_store;
 
 // Re-export the commands from modules
 use transparency::{set_window_transparency, emergency_restore_window, toggle_transparency};
@@ -35,6 +36,7 @@ use file_handler::{
     upload_file_base64, validate_file_upload, get_file_upload_config,
     process_clipboard_image, cleanup_temp_files
 };
+use data_store::{save_chat_sessions, load_chat_sessions};
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -132,7 +134,11 @@ pub fn run() {
             validate_file_upload,
             get_file_upload_config,
             process_clipboard_image,
-            cleanup_temp_files
+            cleanup_temp_files,
+
+            // Chat session commands
+            save_chat_sessions,
+            load_chat_sessions
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

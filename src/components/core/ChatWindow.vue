@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, toRef, onMounted, onUnmounted } from 'vue'
+import { ref, watch, nextTick, toRef, onMounted, onUnmounted, computed } from 'vue'
 import {
   CommandLineIcon,
   XMarkIcon,
   ArrowsPointingOutIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  ExclamationTriangleIcon,
+  Bars3Icon
 } from '@heroicons/vue/24/outline'
 import { useChatManagement } from '../../composables/useChatManagement'
 import { useWindowResizing } from '../../composables/useWindowResizing'
@@ -19,6 +21,7 @@ interface Props {
 interface Emits {
   (e: 'close'): void
   (e: 'update:showChatWindow', value: boolean): void
+  (e: 'toggle-chat-drawer'): void
 }
 
 const props = defineProps<Props>()
@@ -48,8 +51,21 @@ const {
   sendMessage,
   handleChatKeydown,
   triggerFileUpload,
-  handleFileUpload
+  handleFileUpload,
+  estimateTokens
 } = useChatManagement(props.selectedModel, scrollChatToBottom)
+
+// Context truncation detection
+const MAX_TOKENS = 4000
+const isContextTruncated = computed(() => {
+  if (!chatHistory.value || chatHistory.value.length === 0) return false
+  
+  const totalTokens = chatHistory.value.reduce((sum, message) => {
+    return sum + estimateTokens(message.text)
+  }, 0)
+  
+  return totalTokens > MAX_TOKENS
+})
 
 // Set up speech events with real chat management functions
 const { setupSpeechTranscriptionListeners, removeSpeechTranscriptionListeners } = useSpeechEvents(
@@ -70,6 +86,11 @@ const {
 const closeWindow = () => {
   emit('close')
   emit('update:showChatWindow', false)
+}
+
+const toggleChatDrawer = () => {
+  emit('toggle-chat-drawer')
+  console.log('💬 Chat drawer toggle requested')
 }
 
 // Focus input when chat window opens
@@ -132,6 +153,15 @@ onUnmounted(() => {
           height: chatWindowSize.height + 'px' 
         }"
       >
+        <!-- Chat Drawer Trigger Button -->
+        <button 
+          @click="toggleChatDrawer"
+          class="chat-drawer-trigger"
+          title="Chat History"
+        >
+          <Bars3Icon class="w-4 h-4 text-white/70 hover:text-white transition-colors" />
+        </button>
+
         <!-- Chat Header with Resize Indicator -->
         <div class="chat-header">
           <div class="chat-title">
@@ -140,6 +170,13 @@ onUnmounted(() => {
             <div class="model-indicator" v-if="selectedModel">
               <span class="text-xs text-green-400">{{ selectedModel.split(':')[0] || selectedModel }}</span>
             </div>
+            
+            <!-- Context Truncation Indicator -->
+            <div v-if="isContextTruncated" class="truncation-indicator" title="Chat history is being truncated to fit AI context limits">
+              <ExclamationTriangleIcon class="w-3 h-3 text-yellow-400" />
+              <span class="text-xs text-yellow-400">History Truncated</span>
+            </div>
+            
             <div class="resize-indicator">
               <ArrowsPointingOutIcon class="w-3 h-3 text-white/50" />
               <span class="text-xs text-white/50">{{ chatWindowSize.width }}×{{ chatWindowSize.height }}</span>
@@ -195,7 +232,7 @@ onUnmounted(() => {
                 <div v-else v-html="renderMarkdown(message.text)"></div>
               </div>
               
-              <span class="message-time">{{ message.timestamp.toLocaleTimeString() }}</span>
+              <span class="message-time">{{ new Date(message.timestamp).toLocaleTimeString() }}</span>
             </div>
           </div>
         </div>
@@ -247,8 +284,11 @@ onUnmounted(() => {
 <style scoped>
 .chat-window-section {
   @apply w-full flex justify-center;
-  padding: 0 8px 8px 8px;
+  padding: 8px 8px 8px 8px; /* Ensure top padding for menu button visibility */
   background: transparent;
+  /* Ensure the section doesn't get cut off */
+  min-height: 100%;
+  box-sizing: border-box;
 }
 
 /* Chat Window Styles */
@@ -258,7 +298,7 @@ onUnmounted(() => {
   min-width: 450px;
   min-height: 400px;
   max-width: 800px;
-  max-height: 1200px;
+  max-height: calc(100vh - 80px); /* Ensure it fits within viewport with margin */
   
   /* Same glass effect as control panel with darker background */
   background: linear-gradient(135deg, 
@@ -297,15 +337,34 @@ onUnmounted(() => {
 }
 
 .model-indicator {
-  @apply flex items-center gap-1 ml-2 px-2 py-1 rounded-md bg-green-500/20 border border-green-400/30;
+  @apply flex items-center px-2 py-1 bg-green-500/20 rounded-full border border-green-500/30;
+}
+
+.truncation-indicator {
+  @apply flex items-center gap-1 px-2 py-1 bg-yellow-500/20 rounded-full border border-yellow-500/30;
 }
 
 .resize-indicator {
-  @apply flex items-center gap-1 ml-2 px-2 py-1 rounded-md bg-white/5;
+  @apply flex items-center gap-1;
 }
 
 .chat-close-btn {
   @apply rounded-full p-1 hover:bg-white/10 transition-colors;
+}
+
+.chat-drawer-trigger {
+  @apply absolute z-10 rounded-full p-2 bg-white/10 hover:bg-white/20 transition-colors;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  /* Position it safely within the chat window bounds */
+  top: 8px;
+  left: 8px;
+  /* Ensure it's always visible */
+  min-width: 36px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .chat-messages {

@@ -20,6 +20,12 @@ import TransparencyControls from './TransparencyControls.vue'
 import ChatWindow from './ChatWindow.vue'
 import AIModelsPanel from './AIModelsPanel.vue'
 
+interface Emits {
+  (e: 'toggle-chat-drawer'): void
+}
+
+const emit = defineEmits<Emits>()
+
 const store = useAppStore()
 const mlEyeTracking = useMLEyeTracking()
 const windowManager = useWindowManager()
@@ -65,6 +71,8 @@ watch(showTransparencyControls, async (newValue) => {
 watch(showAIModelsWindow, async (newValue) => {
   await resizeWindow(showChatWindow.value, showTransparencyControls.value, newValue)
 })
+
+
 
 // Drag event handlers
 const handleDragStart = () => {
@@ -136,6 +144,24 @@ const closeChatWindow = async () => {
   showChatWindow.value = false
   console.log('💬 Chat window closed')
 }
+
+const openChatWindow = async () => {
+  // Close other panels first
+  if (showTransparencyControls.value) {
+    showTransparencyControls.value = false
+  }
+  if (showAIModelsWindow.value) {
+    showAIModelsWindow.value = false
+  }
+  
+  showChatWindow.value = true
+  console.log('💬 Chat window opened')
+}
+
+// Expose the openChatWindow method for parent components
+defineExpose({
+  openChatWindow
+})
 
 // Enhanced speech transcription with error handling
 const toggleSpeechTranscription = async (event: Event) => {
@@ -525,6 +551,7 @@ onUnmounted(() => {
       :selected-model="selectedModel"
       @close="closeChatWindow"
       @update:show-chat-window="showChatWindow = $event"
+      @toggle-chat-drawer="emit('toggle-chat-drawer')"
     />
   </div>
 </template>

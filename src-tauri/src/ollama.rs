@@ -40,6 +40,13 @@ pub struct PullRequest {
     pub stream: Option<bool>,
 }
 
+// Chat context structures for frontend communication
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatContextMessage {
+    pub role: String,
+    pub content: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenerateRequest {
     pub model: String,
@@ -113,6 +120,138 @@ After your thinking section, provide a comprehensive response with:
 - Supporting reasoning chains
 
 Use clear markdown formatting and show your complete reasoning process."#;
+
+// Helper function to build prompt with chat context
+fn build_prompt_with_context(current_prompt: String, context: Option<Vec<ChatContextMessage>>) -> String {
+    match context {
+        Some(messages) if !messages.is_empty() => {
+            let mut full_prompt = String::new();
+            full_prompt.push_str("## Conversation History:\n\n");
+            
+            for message in &messages {
+                match message.role.as_str() {
+                    "user" => full_prompt.push_str(&format!("**User:** {}\n\n", message.content)),
+                    "assistant" => full_prompt.push_str(&format!("**Assistant:** {}\n\n", message.content)),
+                    "system" => full_prompt.push_str(&format!("**System:** {}\n\n", message.content)),
+                    _ => full_prompt.push_str(&format!("**{}:** {}\n\n", message.role, message.content)),
+                }
+            }
+            
+            full_prompt.push_str("## Current Request:\n\n");
+            full_prompt.push_str(&current_prompt);
+            
+            println!("📊 Built prompt with {} context messages, total length: {} chars", messages.len(), full_prompt.len());
+            full_prompt
+        }
+        _ => {
+            println!("📊 No context provided, using prompt as-is");
+            current_prompt
+        }
+    }
+}
+
+// Shared streaming logic
+async fn stream_ollama_response(
+    app_handle: AppHandle,
+    client: reqwest::Client,
+    url: String,
+    request: GenerateRequest,
+    session_id: String,
+) -> Result<(), String> {
+    match client.post(&url).json(&request).send().await {
+        Ok(response) => {
+            if response.status().is_success() {
+                let mut stream = response.bytes_stream();
+                let mut buffer = Vec::new();
+                
+                while let Some(chunk_result) = stream.next().await {
+                    match chunk_result {
+                        Ok(chunk) => {
+                            buffer.extend_from_slice(&chunk);
+                            
+                            // Process complete lines from buffer
+                            while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
+                                let line = buffer.drain(..=newline_pos).collect::<Vec<u8>>();
+                                let line_str = String::from_utf8_lossy(&line[..line.len()-1]);
+                                
+                                if line_str.trim().is_empty() {
+                                    continue;
+                                }
+                                
+                                match serde_json::from_str::<GenerateResponse>(&line_str) {
+                                    Ok(response_chunk) => {
+                                        if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                                            "type": "chunk",
+                                            "text": response_chunk.response,
+                                            "done": response_chunk.done
+                                        })) {
+                                            eprintln!("Failed to emit chunk event: {}", e);
+                                        }
+                                        
+                                        if response_chunk.done {
+                                            println!("✅ Agent streaming completed for session: {}", session_id);
+                                            break;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Failed to parse streaming response: {} - Line: {}", e, line_str);
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            let error_msg = format!("Stream error: {}", e);
+                            eprintln!("{}", error_msg);
+                            
+                            if let Err(emit_err) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                                "type": "error",
+                                "error": error_msg
+                            })) {
+                                eprintln!("Failed to emit error event: {}", emit_err);
+                            }
+                            
+                            return Err(error_msg);
+                        }
+                    }
+                }
+                
+                // Emit completion event
+                if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                    "type": "complete"
+                })) {
+                    eprintln!("Failed to emit complete event: {}", e);
+                }
+                
+                Ok(())
+            } else {
+                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                let error_msg = format!("Generation failed: {}", error_text);
+                
+                if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                    "type": "error",
+                    "error": error_msg
+                })) {
+                    eprintln!("Failed to emit error event: {}", e);
+                }
+                
+                Err(error_msg)
+            }
+        }
+        Err(e) => {
+            let error_msg = format!("Failed to connect to Ollama: {}", e);
+            
+            if let Err(emit_err) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                "type": "error",
+                "error": error_msg
+            })) {
+                eprintln!("Failed to emit error event: {}", emit_err);
+            }
+            
+            Err(error_msg)
+        }
+    }
+}
 
 #[tauri::command]
 pub async fn get_ollama_models() -> Result<Vec<OllamaModel>, String> {
@@ -374,10 +513,11 @@ pub async fn generate_ollama_response_stream(
 pub async fn generate_enteract_agent_response(
     app_handle: AppHandle,
     prompt: String,
+    context: Option<Vec<ChatContextMessage>>,
     session_id: String,
 ) -> Result<(), String> {
     let model = "gemma3:1b-it-qat".to_string();
-    generate_agent_response_stream(app_handle, model, prompt, ENTERACT_AGENT_PROMPT.to_string(), session_id, "enteract".to_string()).await
+    generate_agent_response_stream(app_handle, model, prompt, ENTERACT_AGENT_PROMPT.to_string(), context, session_id, "enteract".to_string()).await
 }
 
 #[tauri::command]
@@ -396,6 +536,7 @@ pub async fn generate_vision_analysis(
         full_prompt, 
         VISION_ANALYSIS_PROMPT.to_string(),
         image_base64,
+        None, // Vision analysis doesn't use chat context
         session_id,
         "vision".to_string()
     ).await
@@ -405,13 +546,14 @@ pub async fn generate_vision_analysis(
 pub async fn generate_deep_research(
     app_handle: AppHandle,
     prompt: String,
+    context: Option<Vec<ChatContextMessage>>,
     session_id: String,
 ) -> Result<(), String> {
     let model = "deepseek-r1:1.5b".to_string();
     let full_prompt = format!("Deep Research Query:\n\n{}", prompt);
     
     println!("🧠 DEEP RESEARCH: Using model {} for session {}", model, session_id);
-    generate_agent_response_stream(app_handle, model, full_prompt, DEEP_RESEARCH_PROMPT.to_string(), session_id, "deep_research".to_string()).await
+    generate_agent_response_stream(app_handle, model, full_prompt, DEEP_RESEARCH_PROMPT.to_string(), context, session_id, "deep_research".to_string()).await
 }
 
 // Helper function for streaming with system prompt
@@ -420,15 +562,19 @@ async fn generate_agent_response_stream(
     model: String,
     prompt: String,
     system_prompt: String,
+    context: Option<Vec<ChatContextMessage>>,
     session_id: String,
     agent_type: String,
 ) -> Result<(), String> {
     let client = reqwest::Client::new();
     let url = format!("{}/api/generate", OLLAMA_BASE_URL);
     
+    // Build full prompt with context
+    let full_prompt = build_prompt_with_context(prompt, context);
+    
     let request = GenerateRequest {
         model: model.clone(),
-        prompt,
+        prompt: full_prompt,
         stream: Some(true),
         context: None,
         images: None,
@@ -456,15 +602,19 @@ async fn generate_agent_response_stream_with_image(
     prompt: String,
     system_prompt: String,
     image_base64: String,
+    context: Option<Vec<ChatContextMessage>>,
     session_id: String,
     agent_type: String,
 ) -> Result<(), String> {
     let client = reqwest::Client::new();
     let url = format!("{}/api/generate", OLLAMA_BASE_URL);
     
+    // Build full prompt with context (if provided)
+    let full_prompt = build_prompt_with_context(prompt, context);
+    
     let request = GenerateRequest {
         model: model.clone(),
-        prompt,
+        prompt: full_prompt,
         stream: Some(true),
         context: None,
         images: Some(vec![image_base64]),
@@ -485,109 +635,6 @@ async fn generate_agent_response_stream_with_image(
     stream_ollama_response(app_handle, client, url, request, session_id).await
 }
 
-// Shared streaming logic
-async fn stream_ollama_response(
-    app_handle: AppHandle,
-    client: reqwest::Client,
-    url: String,
-    request: GenerateRequest,
-    session_id: String,
-) -> Result<(), String> {
-    match client.post(&url).json(&request).send().await {
-        Ok(response) => {
-            if response.status().is_success() {
-                let mut stream = response.bytes_stream();
-                let mut buffer = Vec::new();
-                
-                while let Some(chunk_result) = stream.next().await {
-                    match chunk_result {
-                        Ok(chunk) => {
-                            buffer.extend_from_slice(&chunk);
-                            
-                            // Process complete lines from buffer
-                            while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
-                                let line = buffer.drain(..=newline_pos).collect::<Vec<u8>>();
-                                let line_str = String::from_utf8_lossy(&line[..line.len()-1]);
-                                
-                                if line_str.trim().is_empty() {
-                                    continue;
-                                }
-                                
-                                match serde_json::from_str::<GenerateResponse>(&line_str) {
-                                    Ok(response_chunk) => {
-                                        if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                                            "type": "chunk",
-                                            "text": response_chunk.response,
-                                            "done": response_chunk.done
-                                        })) {
-                                            eprintln!("Failed to emit chunk event: {}", e);
-                                        }
-                                        
-                                        if response_chunk.done {
-                                            println!("✅ Agent streaming completed for session: {}", session_id);
-                                            break;
-                                        }
-                                    }
-                                    Err(e) => {
-                                        eprintln!("Failed to parse streaming response: {} - Line: {}", e, line_str);
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            let error_msg = format!("Stream error: {}", e);
-                            eprintln!("{}", error_msg);
-                            
-                            if let Err(emit_err) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                                "type": "error",
-                                "error": error_msg
-                            })) {
-                                eprintln!("Failed to emit error event: {}", emit_err);
-                            }
-                            
-                            return Err(error_msg);
-                        }
-                    }
-                }
-                
-                // Emit completion event
-                if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                    "type": "complete"
-                })) {
-                    eprintln!("Failed to emit complete event: {}", e);
-                }
-                
-                Ok(())
-            } else {
-                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                let error_msg = format!("Generation failed: {}", error_text);
-                
-                if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                    "type": "error",
-                    "error": error_msg
-                })) {
-                    eprintln!("Failed to emit error event: {}", e);
-                }
-                
-                Err(error_msg)
-            }
-        }
-        Err(e) => {
-            let error_msg = format!("Failed to connect to Ollama: {}", e);
-            
-            if let Err(emit_err) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                "type": "error",
-                "error": error_msg
-            })) {
-                eprintln!("Failed to emit error event: {}", emit_err);
-            }
-            
-            Err(error_msg)
-        }
-    }
-}
-
 #[tauri::command]
 pub async fn get_ollama_model_info(model_name: String) -> Result<serde_json::Value, String> {
     let client = reqwest::Client::new();
@@ -602,7 +649,7 @@ pub async fn get_ollama_model_info(model_name: String) -> Result<serde_json::Val
             if response.status().is_success() {
                 match response.json::<serde_json::Value>().await {
                     Ok(model_info) => Ok(model_info),
-                    Err(e) => Err(format!("Failed to parse model info: {}", e)),
+                    Err(e) => Err(format!("Failed to parse model info response: {}", e)),
                 }
             } else {
                 let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
