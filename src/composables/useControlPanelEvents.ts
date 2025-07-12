@@ -131,7 +131,7 @@ export function useControlPanelEvents(
         await store.stopSpeechTranscription()
       } else {
         if (!store.speechStatus.isInitialized) {
-          await store.initializeSpeechTranscription('small')
+          await store.initializeSpeechTranscription('tiny')
         }
         await store.startSpeechTranscription()
       }

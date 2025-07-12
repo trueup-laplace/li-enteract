@@ -143,11 +143,11 @@ export const useAppStore = defineStore('app', () => {
   }
 
   // Speech transcription actions
-  const initializeSpeechTranscription = async (modelSize: 'tiny' | 'base' | 'small' | 'medium' | 'large' = 'small') => {
+  const initializeSpeechTranscription = async (modelSize: 'tiny' | 'base' | 'small' | 'medium' | 'large' = 'tiny') => {
     try {
       await speechTranscription.initialize({ modelSize })
       isTranscriptionEnabled.value = true
-      addMessage("🎤 Speech transcription initialized", "assistant")
+      addMessage("🎤 Speech transcription initialized (tiny model for faster processing)", "assistant")
     } catch (error) {
       console.error('Failed to initialize speech transcription:', error)
       addMessage(`❌ Failed to initialize speech transcription: ${error}`, "assistant")

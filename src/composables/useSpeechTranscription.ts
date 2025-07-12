@@ -45,12 +45,12 @@ export function useSpeechTranscription() {
   let audioContext: AudioContext | null = null
   let analyser: AnalyserNode | null = null
   let silenceThreshold = 0.01
-  let silenceDuration = 2500 // 2.5 seconds
+  let silenceDuration = 3000 // 3 seconds - more reasonable for natural speech patterns
   let lastAudioTime = 0
 
   // Configuration
   const defaultWhisperConfig: WhisperConfig = {
-    modelSize: 'small',
+    modelSize: 'tiny',
     language: 'en',
     enableVAD: true,
     silenceThreshold: 0.01,
@@ -490,9 +490,10 @@ export function useSpeechTranscription() {
     if (!isRecording.value) return
 
     try {
+      // Immediately reset recording state for responsive UX
       isRecording.value = false
-      isProcessing.value = true
-
+      isTranscribing.value = false
+      
       // Clean up silence detection
       resetSilenceTimer()
       if (audioContext && audioContext.state !== 'closed') {
@@ -524,7 +525,7 @@ export function useSpeechTranscription() {
         currentSession.value.endTime = Date.now()
       }
 
-      console.log('Recording stopped')
+      console.log('Recording stopped - button state immediately reset')
       
       // Auto-send the transcribed message if there's content
       if (finalText.value.trim()) {
@@ -550,8 +551,8 @@ export function useSpeechTranscription() {
       console.error('Error stopping recording:', err)
       error.value = `Error stopping recording: ${err}`
     } finally {
+      // Ensure processing state is reset even if there are errors
       isProcessing.value = false
-      isTranscribing.value = false
     }
   }
 
@@ -567,7 +568,7 @@ export function useSpeechTranscription() {
     }
   }
 
-  // Process audio with Whisper
+  // Process audio with Whisper (optimized for tiny model)
   async function processAudioWithWhisper() {
     if (audioChunks.length === 0) {
       console.log('⚠️ No audio chunks to process')
@@ -575,8 +576,9 @@ export function useSpeechTranscription() {
     }
 
     try {
-      isProcessing.value = true
-      console.log(`🔄 Processing ${audioChunks.length} audio chunks with Whisper...`)
+      // Don't set isProcessing to true here - let background processing happen
+      // without blocking the UI state
+      console.log(`🔄 Processing ${audioChunks.length} audio chunks with Whisper (tiny model)...`)
 
       // Combine audio chunks
       const audioBlob = new Blob(audioChunks, { type: mediaRecorder?.mimeType || 'audio/webm' })
@@ -590,23 +592,29 @@ export function useSpeechTranscription() {
       const audioBase64 = await blobToBase64(wavBlob)
       console.log(`📝 Base64 audio data length: ${audioBase64.length}`)
 
-      // Send to Whisper for transcription
-      const result = await invoke<{
-        text: string
-        confidence: number
-        start_time: number
-        end_time: number
-        language?: string
-      }>('transcribe_audio_base64', {
-        audioData: audioBase64,
-        config: {
-          modelSize: defaultWhisperConfig.modelSize,
-          language: defaultWhisperConfig.language,
-          enableVad: defaultWhisperConfig.enableVAD,
-          silenceThreshold: defaultWhisperConfig.silenceThreshold,
-          maxSegmentLength: defaultWhisperConfig.maxSegmentLength
-        }
-      })
+      // Send to Whisper for transcription with timeout for tiny model
+      const result = await Promise.race([
+        invoke<{
+          text: string
+          confidence: number
+          start_time: number
+          end_time: number
+          language?: string
+        }>('transcribe_audio_base64', {
+          audioData: audioBase64,
+          config: {
+            modelSize: defaultWhisperConfig.modelSize,
+            language: defaultWhisperConfig.language,
+            enableVad: defaultWhisperConfig.enableVAD,
+            silenceThreshold: defaultWhisperConfig.silenceThreshold,
+            maxSegmentLength: defaultWhisperConfig.maxSegmentLength
+          }
+        }),
+        // Timeout after 10 seconds for tiny model (faster than small model)
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Whisper processing timeout')), 10000)
+        )
+      ])
 
       console.log('🎯 Whisper result:', result)
 
@@ -643,7 +651,7 @@ export function useSpeechTranscription() {
           timestamp: Date.now()
         })
 
-        console.log('✅ Whisper transcription:', newText)
+        console.log('✅ Whisper transcription (tiny model):', newText)
       } else {
         console.log('ℹ️ Whisper returned empty text')
       }
@@ -653,9 +661,15 @@ export function useSpeechTranscription() {
     } catch (err) {
       console.error('❌ Whisper processing error:', err)
       error.value = `Whisper processing failed: ${err}`
-    } finally {
-      isProcessing.value = false
+      
+      // Emit error event for UI feedback
+      emitTranscriptionEvent('transcription-error', {
+        error: err instanceof Error ? err.message : String(err),
+        timestamp: Date.now()
+      })
     }
+    // Note: No finally block - we don't want to reset isProcessing here
+    // as it should be managed by the recording state, not processing state
   }
 
   // Convert audio blob to WAV format using Web Audio API
