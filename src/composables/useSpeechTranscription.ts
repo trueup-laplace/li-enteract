@@ -45,7 +45,7 @@ export function useSpeechTranscription() {
   let audioContext: AudioContext | null = null
   let analyser: AnalyserNode | null = null
   let silenceThreshold = 0.01
-  let silenceDuration = 3000 // 3 seconds - more reasonable for natural speech patterns
+  let silenceDuration = 2000 // 3 seconds - more reasonable for natural speech patterns
   let lastAudioTime = 0
 
   // Configuration
