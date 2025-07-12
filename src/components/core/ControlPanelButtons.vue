@@ -4,26 +4,22 @@ import {
   Cog6ToothIcon,
   CommandLineIcon,
   CpuChipIcon,
-  ExclamationTriangleIcon,
   AdjustmentsHorizontalIcon
 } from '@heroicons/vue/24/outline'
 
 interface Props {
   store: any
   mlEyeTracking: any
-  wakeWordDetection: any
   showChatWindow: boolean
   showTransparencyControls: boolean
   showAIModelsWindow: boolean
   isGazeControlActive: boolean
   getSpeechIconClass: () => string
-  getWakeWordIconClass: () => string
 }
 
 interface Emits {
   (e: 'toggle-ai-models', event: Event): void
   (e: 'toggle-speech', event: Event): void
-  (e: 'toggle-wake-word', event: Event): void
   (e: 'toggle-eye-tracking', event: Event): void
   (e: 'toggle-transparency', event: Event): void
   (e: 'toggle-chat', event: Event): void
@@ -60,23 +56,6 @@ const emit = defineEmits<Emits>()
     >
       <MicrophoneIcon class="w-4 h-4 transition-all" 
         :class="getSpeechIconClass()" />
-    </button>
-
-    <!-- Wake Word Detection Button -->
-    <button 
-      @click="emit('toggle-wake-word', $event)"
-      class="control-btn group"
-      :class="{ 
-        'active-pulse': wakeWordDetection.hasRecentDetection.value,
-        'active': wakeWordDetection.isActive.value && !wakeWordDetection.hasRecentDetection.value,
-        'active-error': wakeWordDetection.error.value,
-        'active-warning': wakeWordDetection.isStarting.value || wakeWordDetection.isStopping.value
-      }"
-      :disabled="wakeWordDetection.isStarting.value || wakeWordDetection.isStopping.value"
-      title="Wake Word Detection - Say 'Aubrey' to activate speech"
-    >
-      <ExclamationTriangleIcon class="w-4 h-4 transition-all" 
-        :class="getWakeWordIconClass()" />
     </button>
     
     <!-- ML Eye Tracking + Window Movement Button -->

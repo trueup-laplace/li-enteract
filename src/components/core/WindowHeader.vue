@@ -9,7 +9,7 @@ import {
 import { useWindowManager } from '../../composables/useWindowManager'
 import { useAppStore } from '../../stores/app'
 
-const { toggleCollapse, minimizeWindow, closeWindow, startDrag } = useWindowManager()
+const { toggleCollapse, minimizeWindow, closeWindow } = useWindowManager()
 const store = useAppStore()
 
 // Debug handlers with more detailed logging

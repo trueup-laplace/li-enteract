@@ -13,7 +13,6 @@ export function useControlPanelState() {
 
   // Error handling state
   const speechError = ref<string | null>(null)
-  const wakeWordError = ref<string | null>(null)
 
   // Browser compatibility
   const compatibilityReport = ref(getCompatibilityReport())
@@ -31,7 +30,6 @@ export function useControlPanelState() {
     showTransparencyControls,
     showAIModelsWindow,
     speechError,
-    wakeWordError,
     compatibilityReport,
     isGazeControlActive,
     dragIndicatorVisible

@@ -111,23 +111,25 @@ export function useSpeechTranscription() {
       // Check if model exists with proper error handling
       try {
         const modelExists = await invoke<boolean>('check_whisper_model_availability', {
-          model_size: config.modelSize
+          modelSize: config.modelSize
         })
 
         if (!modelExists) {
           console.log(`Downloading Whisper model: ${config.modelSize}`)
           await invoke<string>('download_whisper_model', {
-            model_size: config.modelSize
+            modelSize: config.modelSize
           })
         }
 
         // Initialize the model
         await invoke<string>('initialize_whisper_model', {
-          model_size: config.modelSize,
-          language: config.language,
-          enable_vad: config.enableVAD,
-          silence_threshold: config.silenceThreshold,
-          max_segment_length: config.maxSegmentLength
+          config: {
+            modelSize: config.modelSize,
+            language: config.language,
+            enableVad: config.enableVAD,
+            silenceThreshold: config.silenceThreshold,
+            maxSegmentLength: config.maxSegmentLength
+          }
         })
 
         hasWhisperModel.value = true
@@ -483,7 +485,7 @@ export function useSpeechTranscription() {
     }
   }
 
-  // Enhanced stop recording with cleanup
+  // Enhanced stop recording with cleanup and auto-send
   const stopRecording = async () => {
     if (!isRecording.value) return
 
@@ -524,6 +526,19 @@ export function useSpeechTranscription() {
 
       console.log('Recording stopped')
       
+      // Auto-send the transcribed message if there's content
+      if (finalText.value.trim()) {
+        // Emit event to send the message to chat
+        const sendMessageEvent = new CustomEvent('send-transcribed-message', {
+          detail: {
+            text: finalText.value.trim(),
+            timestamp: Date.now()
+          }
+        })
+        window.dispatchEvent(sendMessageEvent)
+        console.log('📤 Auto-sending transcribed message:', finalText.value.trim())
+      }
+      
       // Emit final state
       emitTranscriptionEvent('transcription-complete', {
         finalText: finalText.value,
@@ -542,12 +557,12 @@ export function useSpeechTranscription() {
 
   // Auto-start transcription (called by wake word detection)
   async function startTranscription() {
-    console.log('🎤 Starting transcription triggered by wake word')
+    console.log('🎤 Starting transcription triggered by mic button')
     try {
       await startRecording()
-      emitTranscriptionEvent('wake-word-triggered')
+      emitTranscriptionEvent('mic-button-triggered')
     } catch (err) {
-      console.error('Failed to start transcription from wake word:', err)
+      console.error('Failed to start transcription from mic button:', err)
       error.value = `Failed to start transcription: ${err}`
     }
   }
@@ -585,11 +600,11 @@ export function useSpeechTranscription() {
       }>('transcribe_audio_base64', {
         audioData: audioBase64,
         config: {
-          model_size: defaultWhisperConfig.modelSize,
+          modelSize: defaultWhisperConfig.modelSize,
           language: defaultWhisperConfig.language,
-          enable_vad: defaultWhisperConfig.enableVAD,
-          silence_threshold: defaultWhisperConfig.silenceThreshold,
-          max_segment_length: defaultWhisperConfig.maxSegmentLength
+          enableVad: defaultWhisperConfig.enableVAD,
+          silenceThreshold: defaultWhisperConfig.silenceThreshold,
+          maxSegmentLength: defaultWhisperConfig.maxSegmentLength
         }
       })
 

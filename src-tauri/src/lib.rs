@@ -21,10 +21,8 @@ use eye_tracking::{
     get_ml_tracking_stats, pause_ml_tracking, resume_ml_tracking, detect_window_drag
 };
 use speech::{
-    start_always_on_speech, stop_always_on_speech, get_speech_state, check_for_wake_word,
-    check_for_transcription, initialize_whisper_model, transcribe_audio_base64, transcribe_audio_file,
-    check_whisper_model_availability, download_whisper_model, list_available_models,
-    start_wake_word_detection, stop_wake_word_detection, check_wake_word_detection, get_wake_word_state, reset_wake_word_stats
+    initialize_whisper_model, transcribe_audio_base64, transcribe_audio_file,
+    check_whisper_model_availability, download_whisper_model, list_available_models
 };
 use ollama::{
     get_ollama_models, get_ollama_status, pull_ollama_model, delete_ollama_model,
@@ -89,27 +87,13 @@ pub fn run() {
             resume_ml_tracking,
             detect_window_drag,
             
-            // Always-on speech commands
-            start_always_on_speech,
-            stop_always_on_speech,
-            get_speech_state,
-            check_for_wake_word,
-            check_for_transcription,
-            
-            // Whisper commands for compatibility
+            // Whisper transcription commands
             initialize_whisper_model,
             transcribe_audio_base64,
             transcribe_audio_file,
             check_whisper_model_availability,
             download_whisper_model,
             list_available_models,
-            
-            // Wake word detection commands
-            start_wake_word_detection,
-            stop_wake_word_detection,
-            check_wake_word_detection,
-            get_wake_word_state,
-            reset_wake_word_stats,
             
             // Ollama commands
             get_ollama_models,

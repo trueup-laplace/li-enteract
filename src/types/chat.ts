@@ -5,6 +5,8 @@ export interface ChatMessage {
     text: string
     timestamp: Date
     messageType: 'text'
+    isInterim?: boolean
+    confidence?: number
   }
   
   export interface ChatSession {

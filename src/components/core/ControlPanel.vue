@@ -3,7 +3,6 @@ import { onMounted, onUnmounted, watch } from 'vue'
 import { useAppStore } from '../../stores/app'
 import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
 import { useWindowManager } from '../../composables/useWindowManager'
-import { useWakeWordDetection } from '../../composables/useWakeWordDetection'
 import { useWindowResizing } from '../../composables/useWindowResizing'
 import { useAIModels } from '../../composables/useAIModels'
 import { useControlPanelState } from '../../composables/useControlPanelState'
@@ -20,7 +19,6 @@ const emit = defineEmits<Emits>()
 const store = useAppStore()
 const mlEyeTracking = useMLEyeTracking()
 const windowManager = useWindowManager()
-const wakeWordDetection = useWakeWordDetection()
 const { resizeWindow } = useWindowResizing()
 const { selectedModel } = useAIModels()
 
@@ -32,7 +30,6 @@ const {
   showTransparencyControls,
   showAIModelsWindow,
   speechError,
-  wakeWordError,
   compatibilityReport,
   isGazeControlActive,
   dragIndicatorVisible
@@ -51,19 +48,14 @@ const {
   openChatWindow,
   toggleSpeechTranscription,
   getSpeechIconClass,
-  toggleWakeWordDetection,
-  getWakeWordIconClass,
   toggleMLEyeTrackingWithMovement,
   handleKeydown,
-  handleClickOutside,
-  handleWakeWordOpenChat,
-  handleWakeWordTriggerMic,
-  handleSpeechOpenChat
+  handleClickOutside
 } = useControlPanelEvents(
   store,
   mlEyeTracking,
   windowManager,
-  wakeWordDetection,
+  null, // Remove wake word detection
   {
     isDragging,
     dragStartTime,
@@ -71,9 +63,9 @@ const {
     showTransparencyControls,
     showAIModelsWindow,
     speechError,
-    wakeWordError,
     compatibilityReport,
-    isGazeControlActive
+    isGazeControlActive,
+    dragIndicatorVisible
   }
 )
 
@@ -107,20 +99,7 @@ onMounted(async () => {
     document.addEventListener('mouseup', handleDragEnd)
   }
   
-  // Add wake word event listeners
-  window.addEventListener('wake-word-open-chat-window', handleWakeWordOpenChat)
-  window.addEventListener('wake-word-trigger-mic', handleWakeWordTriggerMic)
-  window.addEventListener('speech-open-chat-window', handleSpeechOpenChat)
-  
   await store.initializeSpeechTranscription('small')
-  
-  // Auto-start wake word detection for "Aubrey"
-  try {
-    await wakeWordDetection.startDetection()
-    console.log('🎤 Wake word detection started - listening for "Aubrey"')
-  } catch (error) {
-    console.warn('Wake word detection failed to auto-start:', error)
-  }
   
   await resizeWindow(false, false, false)
   
@@ -139,11 +118,6 @@ onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
   document.removeEventListener('click', handleClickOutside)
   document.removeEventListener('mouseup', handleDragEnd)
-  
-  // Clean up wake word event listeners
-  window.removeEventListener('wake-word-open-chat-window', handleWakeWordOpenChat)
-  window.removeEventListener('wake-word-trigger-mic', handleWakeWordTriggerMic)
-  window.removeEventListener('speech-open-chat-window', handleSpeechOpenChat)
 })
 </script>
 
@@ -159,16 +133,13 @@ onUnmounted(() => {
         <ControlPanelButtons
           :store="store"
           :mlEyeTracking="mlEyeTracking"
-          :wakeWordDetection="wakeWordDetection"
           :showChatWindow="showChatWindow"
           :showTransparencyControls="showTransparencyControls"
           :showAIModelsWindow="showAIModelsWindow"
           :isGazeControlActive="isGazeControlActive"
           :getSpeechIconClass="getSpeechIconClass"
-          :getWakeWordIconClass="getWakeWordIconClass"
           @toggle-ai-models="toggleAIModelsWindow"
           @toggle-speech="toggleSpeechTranscription"
-          @toggle-wake-word="toggleWakeWordDetection"
           @toggle-eye-tracking="toggleMLEyeTrackingWithMovement"
           @toggle-transparency="toggleTransparencyControls"
           @toggle-chat="toggleChatWindow"

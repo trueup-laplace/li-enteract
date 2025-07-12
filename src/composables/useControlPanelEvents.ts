@@ -8,9 +8,9 @@ interface StateRefs {
   showTransparencyControls: Ref<boolean>
   showAIModelsWindow: Ref<boolean>
   speechError: Ref<string | null>
-  wakeWordError: Ref<string | null>
   compatibilityReport: Ref<any>
   isGazeControlActive: Ref<boolean>
+  dragIndicatorVisible: Ref<boolean>
 }
 
 export function useControlPanelEvents(
@@ -27,7 +27,6 @@ export function useControlPanelEvents(
     showTransparencyControls,
     showAIModelsWindow,
     speechError,
-    wakeWordError,
     compatibilityReport,
     isGazeControlActive
   } = stateRefs
@@ -147,33 +146,6 @@ export function useControlPanelEvents(
     if (store.speechStatus.isRecording) return 'text-red-400 animate-pulse'
     if (store.speechStatus.isProcessing) return 'text-yellow-400 animate-pulse'
     if (store.isTranscriptionEnabled) return 'text-green-400'
-    return 'text-white/80 group-hover:text-white'
-  }
-
-  // Enhanced wake word detection with error handling
-  const toggleWakeWordDetection = async (event: Event) => {
-    event.stopPropagation()
-    
-    try {
-      wakeWordError.value = null
-      
-      if (!compatibilityReport.value.ready) {
-        wakeWordError.value = 'Browser not compatible with speech features. ' + compatibilityReport.value.issues.join(', ')
-        return
-      }
-      
-      await wakeWordDetection.toggleDetection()
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      wakeWordError.value = message
-      console.error('Wake word detection error:', error)
-    }
-  }
-
-  const getWakeWordIconClass = () => {
-    if (wakeWordDetection.hasRecentDetection.value) return 'text-green-400 animate-pulse'
-    if (wakeWordDetection.isActive.value) return 'text-blue-400'
-    if (wakeWordDetection.error.value) return 'text-red-400'
     return 'text-white/80 group-hover:text-white'
   }
 
@@ -299,25 +271,6 @@ export function useControlPanelEvents(
     }
   }
 
-  // Event handlers for wake word events
-  const handleWakeWordOpenChat = async (event: Event) => {
-    console.log('🔔 Wake word detected: Opening Chat Window')
-    const mockEvent = event || new Event('wake-word')
-    await toggleChatWindow(mockEvent)
-  }
-
-  const handleWakeWordTriggerMic = async (event: Event) => {
-    console.log('🔔 Wake word detected: Triggering Mic')
-    const mockEvent = event || new Event('wake-word')
-    await toggleSpeechTranscription(mockEvent)
-  }
-
-  const handleSpeechOpenChat = async (event: Event) => {
-    console.log('🔔 Speech detected: Opening Chat Window')
-    const mockEvent = event || new Event('speech')
-    await toggleChatWindow(mockEvent)
-  }
-
   return {
     handleDragStart,
     handleDragEnd,
@@ -330,13 +283,8 @@ export function useControlPanelEvents(
     openChatWindow,
     toggleSpeechTranscription,
     getSpeechIconClass,
-    toggleWakeWordDetection,
-    getWakeWordIconClass,
     toggleMLEyeTrackingWithMovement,
     handleKeydown,
-    handleClickOutside,
-    handleWakeWordOpenChat,
-    handleWakeWordTriggerMic,
-    handleSpeechOpenChat
+    handleClickOutside
   }
 }
