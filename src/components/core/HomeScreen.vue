@@ -2,8 +2,7 @@
 import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { 
   PaperAirplaneIcon,
-  MicrophoneIcon,
-  ExclamationTriangleIcon
+  MicrophoneIcon
 } from '@heroicons/vue/24/outline'
 import { useAppStore } from '../../stores/app'
 import type { ChatMessage } from '../../types'
@@ -21,7 +20,6 @@ const isTranscribing = ref(false)
 const currentTranscript = ref('')
 const transcriptionStatus = ref<'idle' | 'listening' | 'processing' | 'error'>('idle')
 const transcriptionError = ref<string | null>(null)
-const showWakeWordFeedback = ref(false)
 
 onMounted(() => {
   appStore.initializeSpeechTranscription()
@@ -34,10 +32,6 @@ onUnmounted(() => {
 
 // Setup event listeners for speech transcription
 function setupEventListeners() {
-  // Wake word detection events
-  window.addEventListener('wake-word-detected', handleWakeWordDetected)
-  window.addEventListener('wake-word-feedback', handleWakeWordFeedback)
-  
   // Speech transcription events
   window.addEventListener('transcription-started', handleTranscriptionStarted)
   window.addEventListener('transcription-interim', handleTranscriptionInterim)
@@ -46,12 +40,10 @@ function setupEventListeners() {
   window.addEventListener('transcription-stopped', handleTranscriptionStopped)
   window.addEventListener('transcription-complete', handleTranscriptionComplete)
   window.addEventListener('transcription-auto-stopped', handleTranscriptionAutoStopped)
-  window.addEventListener('start-transcription-from-wake-word', handleStartTranscriptionFromWakeWord)
+  window.addEventListener('send-transcribed-message', handleSendTranscribedMessage)
 }
 
 function removeEventListeners() {
-  window.removeEventListener('wake-word-detected', handleWakeWordDetected)
-  window.removeEventListener('wake-word-feedback', handleWakeWordFeedback)
   window.removeEventListener('transcription-started', handleTranscriptionStarted)
   window.removeEventListener('transcription-interim', handleTranscriptionInterim)
   window.removeEventListener('transcription-final', handleTranscriptionFinal)
@@ -59,42 +51,10 @@ function removeEventListeners() {
   window.removeEventListener('transcription-stopped', handleTranscriptionStopped)
   window.removeEventListener('transcription-complete', handleTranscriptionComplete)
   window.removeEventListener('transcription-auto-stopped', handleTranscriptionAutoStopped)
-  window.removeEventListener('start-transcription-from-wake-word', handleStartTranscriptionFromWakeWord)
+  window.removeEventListener('send-transcribed-message', handleSendTranscribedMessage)
 }
 
 // Event handlers
-function handleWakeWordDetected(event: Event) {
-  const customEvent = event as CustomEvent
-  console.log('HomeScreen: Wake word detected!', customEvent.detail)
-  showWakeWordFeedback.value = true
-  setTimeout(() => {
-    showWakeWordFeedback.value = false
-  }, 3000)
-}
-
-function handleWakeWordFeedback(event: Event) {
-  const customEvent = event as CustomEvent
-  console.log('HomeScreen: Wake word feedback', customEvent.detail)
-  showWakeWordFeedback.value = true
-  setTimeout(() => {
-    showWakeWordFeedback.value = false
-  }, 2000)
-}
-
-function handleStartTranscriptionFromWakeWord(event: Event) {
-  const customEvent = event as CustomEvent
-  console.log('HomeScreen: Starting transcription from wake word', customEvent.detail)
-  transcriptionStatus.value = 'listening'
-  isTranscribing.value = true
-  currentTranscript.value = ''
-  transcriptionError.value = null
-  
-  scrollToBottom()
-  
-  // Start transcription via app store
-  appStore.startSpeechTranscription()
-}
-
 function handleTranscriptionStarted(event: Event) {
   const customEvent = event as CustomEvent
   console.log('HomeScreen: Transcription started', customEvent.detail)
@@ -185,6 +145,17 @@ function handleTranscriptionAutoStopped(event: Event) {
   scrollToBottom()
 }
 
+function handleSendTranscribedMessage(event: Event) {
+  const customEvent = event as CustomEvent
+  console.log('HomeScreen: Auto-sending transcribed message', customEvent.detail)
+  
+  const messageText = customEvent.detail.text
+  if (messageText && messageText.trim()) {
+    appStore.addMessage(messageText.trim(), 'user', { source: 'whisper' })
+    scrollToBottom()
+  }
+}
+
 const sendMessage = () => {
   if (newMessage.value.trim()) {
     appStore.addMessage(newMessage.value, 'user', { source: 'typed' })
@@ -245,9 +216,6 @@ watch(() => appStore.chatMessages.length, scrollToBottom)
         <div class="flex items-center gap-3">
           <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
           <h3 class="text-lg font-medium text-white/90">Assistant Chat</h3>
-        </div>
-        <div v-if="showWakeWordFeedback" class="wake-word-feedback">
-          <span class="text-green-400">🎤 Wake word detected!</span>
         </div>
       </div>
       
@@ -394,10 +362,6 @@ watch(() => appStore.chatMessages.length, scrollToBottom)
 
 .chat-header {
   @apply flex items-center justify-between p-4 border-b border-white/10;
-}
-
-.wake-word-feedback {
-  @apply text-sm animate-pulse;
 }
 
 .chat-messages {

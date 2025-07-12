@@ -1,0 +1,333 @@
+// agentService.ts - Handles different AI agent modes and messaging
+import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
+import { SessionManager } from './sessionManager'
+import { ContextManager } from './contextManager'
+
+let messageIdCounter = 1
+
+export class AgentService {
+  private static scrollChatToBottom: () => void
+
+  static init(scrollCallback: () => void) {
+    AgentService.scrollChatToBottom = scrollCallback
+  }
+
+  // Agent activation functions
+  static async startDeepResearch(showChatWindow: any) {
+    // Auto-open chat window if not open
+    if (!showChatWindow.value) {
+      showChatWindow.value = true
+      console.log('💬 Chat window auto-opened for deep research')
+      setTimeout(() => {
+        AgentService.scrollChatToBottom()
+      }, 150)
+    }
+    
+    // Add deep research message to current chat
+    SessionManager.addMessageToCurrentChat({
+      id: messageIdCounter++,
+      sender: 'user',
+      text: '🧠 Deep Research Mode activated - I will thoroughly research your next question.',
+      timestamp: new Date(),
+      messageType: 'text'
+    })
+    
+    setTimeout(() => {
+      AgentService.scrollChatToBottom()
+    }, 50)
+  }
+
+  static async startConversationalAgent(showChatWindow: any) {
+    // Auto-open chat window if not open
+    if (!showChatWindow.value) {
+      showChatWindow.value = true
+      console.log('💬 Chat window auto-opened for conversational agent')
+      setTimeout(() => {
+        AgentService.scrollChatToBottom()
+      }, 150)
+    }
+    
+    // Add conversational agent message to current chat
+    SessionManager.addMessageToCurrentChat({
+      id: messageIdCounter++,
+      sender: 'user',
+      text: '🤖 Conversational AI Agent activated - Ready for natural conversation.',
+      timestamp: new Date(),
+      messageType: 'text'
+    })
+    
+    setTimeout(() => {
+      AgentService.scrollChatToBottom()
+    }, 50)
+  }
+
+  static async startCodingAgent(showChatWindow: any) {
+    // Auto-open chat window if not open
+    if (!showChatWindow.value) {
+      showChatWindow.value = true
+      console.log('💬 Chat window auto-opened for coding agent')
+      setTimeout(() => {
+        AgentService.scrollChatToBottom()
+      }, 150)
+    }
+    
+    // Add coding agent message to current chat
+    SessionManager.addMessageToCurrentChat({
+      id: messageIdCounter++,
+      sender: 'user',
+      text: '💻 Coding Agent activated - Ready to help with programming tasks.',
+      timestamp: new Date(),
+      messageType: 'text'
+    })
+    
+    setTimeout(() => {
+      AgentService.scrollChatToBottom()
+    }, 50)
+  }
+
+  static async startComputerUseAgent(showChatWindow: any) {
+    // Auto-open chat window if not open
+    if (!showChatWindow.value) {
+      showChatWindow.value = true
+      console.log('💬 Chat window auto-opened for computer use agent')
+      setTimeout(() => {
+        AgentService.scrollChatToBottom()
+      }, 150)
+    }
+    
+    // Add computer use agent message to current chat
+    SessionManager.addMessageToCurrentChat({
+      id: messageIdCounter++,
+      sender: 'user',
+      text: '🖥️ Computer Use Agent activated - Ready to assist with computer tasks.',
+      timestamp: new Date(),
+      messageType: 'text'
+    })
+    
+    setTimeout(() => {
+      AgentService.scrollChatToBottom()
+    }, 50)
+  }
+
+  // Send message function
+  static async sendMessage(userMessage: string, selectedModel: string | null, agentType: string = 'enteract') {
+    // Ensure we have an active chat session
+    const currentChatSession = SessionManager.getCurrentChatSession().value
+    if (!currentChatSession) {
+      SessionManager.createNewChat(selectedModel)
+    }
+    
+    console.log(`🤖 Sending message with ${agentType} agent:`, userMessage)
+    
+    // Add user message to current chat
+    SessionManager.addMessageToCurrentChat({
+      id: messageIdCounter++,
+      sender: 'user',
+      text: userMessage,
+      timestamp: new Date(),
+      messageType: 'text'
+    })
+    
+    try {
+      // Generate unique session ID for streaming
+      const sessionId = `chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      
+      // Get appropriate model and agent name
+      let modelToUse = selectedModel || 'gemma3:1b-it-qat'
+      let agentName = 'Enteract AI'
+      
+      if (agentType === 'deep_research') {
+        modelToUse = 'deepseek-r1:1.5b'
+        agentName = 'Deep Research AI'
+      }
+      
+      // Add streaming response placeholder
+      const currentHistory = SessionManager.getCurrentChatHistory().value
+      const streamingMessageIndex = currentHistory.length
+      SessionManager.addMessageToCurrentChat({
+        id: messageIdCounter++,
+        sender: 'assistant',
+        text: `🤖 ${agentName} is thinking▋`,
+        timestamp: new Date(),
+        messageType: 'text'
+      })
+      
+      setTimeout(() => {
+        AgentService.scrollChatToBottom()
+      }, 50)
+      
+      // Track streaming state
+      let fullResponse = ''
+      let actualResponse = ''
+      let thinkingContent = ''
+      let isTyping = true
+      let hasStarted = false
+      let isInThinking = false
+      
+      // Set up streaming listener
+      const unlisten = await listen(`ollama-stream-${sessionId}`, (event: any) => {
+        const data = event.payload
+        const currentHistory = SessionManager.getCurrentChatHistory().value
+        
+        switch (data.type) {
+          case 'start':
+            hasStarted = true
+            console.log(`🤖 Started ${agentType} response with ${data.model}`)
+            if (currentHistory[streamingMessageIndex]) {
+              currentHistory[streamingMessageIndex].text = `🤖 ${agentName} (${data.model})▋`
+            }
+            setTimeout(() => {
+              AgentService.scrollChatToBottom()
+            }, 10)
+            break
+            
+          case 'chunk':
+            if (data.text) {
+              fullResponse += data.text
+              
+              // For deep research, handle thinking vs response separately
+              if (agentType === 'deep_research') {
+                // Check for thinking tags
+                if (data.text.includes('<think>')) {
+                  isInThinking = true
+                } else if (data.text.includes('</think>')) {
+                  isInThinking = false
+                }
+                
+                if (isInThinking || (fullResponse.includes('<think>') && !fullResponse.includes('</think>'))) {
+                  // We're in thinking mode
+                  thinkingContent += data.text.replace(/<\/?think>/g, '')
+                } else {
+                  // We're in response mode
+                  actualResponse += data.text.replace(/<\/?think>/g, '')
+                }
+              } else {
+                // For other agents, just accumulate normally
+                actualResponse += data.text
+              }
+              
+              // Update the message in real-time
+              if (currentHistory[streamingMessageIndex]) {
+                const displayText = agentType === 'deep_research' 
+                  ? `🧠 Deep Research AI:\n\n${actualResponse}${isTyping ? '▋' : ''}`
+                  : `🤖 ${agentName}:\n\n${actualResponse}${isTyping ? '▋' : ''}`
+                currentHistory[streamingMessageIndex].text = displayText
+              }
+              
+              setTimeout(() => {
+                AgentService.scrollChatToBottom()
+              }, 10)
+            }
+            
+            if (data.done) {
+              isTyping = false
+              if (currentHistory[streamingMessageIndex]) {
+                if (agentType === 'deep_research' && thinkingContent) {
+                  const thinkingDisplay = `<details style="margin: 10px 0; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 10px;">
+<summary style="cursor: pointer; font-weight: bold; color: #a855f7;">🤔 Show thinking process</summary>
+<div style="margin-top: 10px; padding: 10px; background: rgba(168,85,247,0.1); border-radius: 6px; font-family: monospace; white-space: pre-wrap;">${thinkingContent}</div>
+</details>`
+                  currentHistory[streamingMessageIndex].text = `🧠 Deep Research Analysis:\n\n${thinkingDisplay}\n\n${actualResponse}`
+                } else {
+                  currentHistory[streamingMessageIndex].text = agentType === 'deep_research' 
+                    ? `🧠 Deep Research Analysis:\n\n${actualResponse}`
+                    : currentHistory[streamingMessageIndex].text.replace('▋', '')
+                }
+              }
+              console.log(`✅ ${agentType} streaming completed. Full response: ${actualResponse}`)
+            }
+            break
+            
+          case 'error':
+            isTyping = false
+            console.error(`${agentType} streaming error:`, data.error)
+            // Update message to show error
+            if (currentHistory[streamingMessageIndex]) {
+              let errorMessage = `❌ Error: ${data.error}`
+              if (data.error.includes('deepseek-r1:1.5b') && agentType === 'deep_research') {
+                errorMessage = `❌ DeepSeek R1 model not found. Please install it first:\n\n\`\`\`bash\nollama pull deepseek-r1:1.5b\n\`\`\``
+              } else if (data.error.includes('connection refused') || data.error.includes('ECONNREFUSED')) {
+                errorMessage = `❌ Cannot connect to Ollama. Please make sure Ollama is running:\n\n\`\`\`bash\nollama serve\n\`\`\``
+              }
+              currentHistory[streamingMessageIndex].text = errorMessage
+            }
+            break
+            
+          case 'complete':
+            isTyping = false
+            console.log(`🎉 ${agentType} streaming session completed`)
+            // Clean up listener
+            unlisten()
+            break
+        }
+      })
+      
+      // Add a timeout to show model loading if it takes too long
+      const loadingTimeout = setTimeout(() => {
+        const currentHistory = SessionManager.getCurrentChatHistory().value
+        if (!hasStarted && currentHistory[streamingMessageIndex]) {
+          currentHistory[streamingMessageIndex].text = `🔄 Loading ${agentName} model (this may take a moment for the first run)▋`
+          setTimeout(() => {
+            AgentService.scrollChatToBottom()
+          }, 10)
+        }
+      }, 2000)
+      
+      // Generate truncated context for AI (max 4000 tokens)
+      const maxTokens = 4000
+      const truncatedContext = ContextManager.getLimitedContext(SessionManager.getCurrentChatHistory().value, maxTokens)
+      
+      console.log(`📊 Context prepared: ${truncatedContext.length} messages, estimated ~${truncatedContext.reduce((sum, msg) => sum + ContextManager.estimateTokens(msg.content), 0)} tokens`)
+      
+      // Route to appropriate agent based on type
+      if (agentType === 'deep_research') {
+        console.log('🧠 FRONTEND: Calling generate_deep_research (should use deepseek-r1:1.5b)')
+        await invoke('generate_deep_research', {
+          prompt: userMessage,
+          context: truncatedContext,
+          sessionId: sessionId
+        })
+      } else {
+        console.log('🛡️ FRONTEND: Calling generate_enteract_agent_response (should use gemma3:1b-it-qat)')
+        // Default to Enteract agent (gemma with security focus)
+        await invoke('generate_enteract_agent_response', {
+          prompt: userMessage,
+          context: truncatedContext,
+          sessionId: sessionId
+        })
+      }
+      
+      // Clear the loading timeout
+      clearTimeout(loadingTimeout)
+      
+      console.log(`🤖 Started streaming AI response from ${modelToUse}`)
+      
+    } catch (error) {
+      const errorString = error instanceof Error ? error.message : String(error)
+      console.error('Failed to start AI response streaming:', error)
+      
+      // Enhanced error messages
+      let errorMessage = `❌ Failed to get AI response: ${errorString}. Make sure Ollama is running and the model "${selectedModel || 'gemma3:1b-it-qat'}" is available.`
+      if (errorString.includes('connection refused') || errorString.includes('ECONNREFUSED')) {
+        errorMessage = `❌ Cannot connect to Ollama. Please make sure Ollama is running:\n\n\`\`\`bash\nollama serve\n\`\`\``
+      } else if (errorString.includes('model') && errorString.includes('not found')) {
+        errorMessage = `❌ Model not available. Install with:\n\n\`\`\`bash\nollama pull ${selectedModel || 'gemma3:1b-it-qat'}\n\`\`\``
+      }
+      
+      // Add error message to current chat
+      SessionManager.addMessageToCurrentChat({
+        id: messageIdCounter++,
+        sender: 'assistant',
+        text: errorMessage,
+        timestamp: new Date(),
+        messageType: 'text'
+      })
+    }
+    
+    // Auto-scroll to bottom
+    setTimeout(() => {
+      AgentService.scrollChatToBottom()
+    }, 50)
+  }
+}

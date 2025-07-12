@@ -125,101 +125,101 @@ const closeWindow = () => {
 <template>
   <!-- Overlay Background -->
   <Transition name="drawer-overlay">
-    <div v-if="isOpen" class="drawer-overlay" @click="closeWindow">
+    <div v-if="isOpen" class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" @click="closeWindow">
       <!-- Drawer Content -->
       <Transition name="drawer-slide">
-        <div v-if="isOpen" class="chat-drawer" @click.stop>
+        <div v-if="isOpen" class="fixed top-0 left-0 h-full w-80 z-50 bg-black/90 backdrop-blur-xl border-r border-white/20 shadow-2xl shadow-black/50 flex flex-col" @click.stop>
           <!-- Sidebar Header -->
-          <div class="sidebar-header">
-      <div class="sidebar-title">
-        <ChatBubbleLeftRightIcon class="w-4 h-4 text-white/80" />
-        <span class="text-sm font-medium text-white/90">Chat Sessions</span>
-      </div>
-      <button @click="closeWindow" class="close-btn">
-        <XMarkIcon class="w-4 h-4 text-white/70 hover:text-white transition-colors" />
-      </button>
-    </div>
-
-    <!-- New Chat Button -->
-    <div class="new-chat-section">
-      <button @click="handleCreateNewChat" class="new-chat-btn">
-        <PlusIcon class="w-4 h-4" />
-        <span>New Chat</span>
-      </button>
-    </div>
-
-    <!-- Chat List -->
-    <div class="chat-list">
-      <div v-if="sortedChats.length === 0" class="empty-state">
-        <ChatBubbleLeftRightIcon class="w-8 h-8 text-white/30 mb-2" />
-        <p class="text-white/50 text-sm">No chat sessions yet</p>
-        <p class="text-white/40 text-xs">Create your first chat to get started</p>
-      </div>
-
-      <div 
-        v-for="chat in sortedChats" 
-        :key="chat.id"
-        class="chat-item"
-        :class="{ 'active': chat.id === currentChatId }"
-        @click="handleSwitchChat(chat.id)"
-      >
-        <div class="chat-info">
-          <!-- Chat title (editable) -->
-          <div v-if="renamingChatId === chat.id" class="rename-input-container">
-            <input
-              v-model="newChatTitle"
-              @keyup.enter="finishRenaming"
-              @keyup.escape="cancelRenaming"
-              @blur="finishRenaming"
-              class="rename-input"
-              autofocus
-            />
-          </div>
-          <div v-else class="chat-title">
-            {{ chat.title }}
-          </div>
-          
-          <!-- Chat metadata -->
-          <div class="chat-meta">
-            <ClockIcon class="w-3 h-3 text-white/40" />
-            <span class="text-xs text-white/40">{{ formatRelativeTime(chat.updatedAt) }}</span>
-            <span class="text-xs text-white/30">•</span>
-            <span class="text-xs text-white/40">{{ chat.history.length }} messages</span>
-          </div>
-        </div>
-
-        <!-- Chat actions menu -->
-        <div class="chat-actions" @click.stop>
-          <button 
-            @click="toggleChatMenu(chat.id)" 
-            class="menu-trigger"
-            :class="{ 'active': showMenuForChat === chat.id }"
-          >
-            <EllipsisVerticalIcon class="w-4 h-4" />
-          </button>
-
-          <!-- Dropdown menu -->
-          <div v-if="showMenuForChat === chat.id" class="chat-menu">
-            <button @click="startRenaming(chat.id, chat.title)" class="menu-item">
-              <PencilIcon class="w-3 h-3" />
-              <span>Rename</span>
+          <div class="flex items-center justify-between p-4 border-b border-white/10">
+            <div class="flex items-center gap-2">
+              <ChatBubbleLeftRightIcon class="w-4 h-4 text-white/80" />
+              <span class="text-sm font-medium text-white/90">Chat Sessions</span>
+            </div>
+            <button @click="closeWindow" class="p-1 rounded-md hover:bg-white/10 transition-colors">
+              <XMarkIcon class="w-4 h-4 text-white/70 hover:text-white transition-colors" />
             </button>
-            <button 
-              v-if="chat.id === currentChatId && chat.history.length > 0"
-              @click="handleClearChat" 
-              class="menu-item"
+          </div>
+
+          <!-- New Chat Button -->
+          <div class="p-3 border-b border-white/10">
+            <button @click="handleCreateNewChat" class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 rounded-lg transition-colors text-sm font-medium text-white/90">
+              <PlusIcon class="w-4 h-4" />
+              <span>New Chat</span>
+            </button>
+          </div>
+
+          <!-- Chat List -->
+          <div class="flex-1 overflow-y-auto p-2" style="scrollbar-width: thin;">
+            <div v-if="sortedChats.length === 0" class="flex flex-col items-center justify-center h-full text-center px-6">
+              <ChatBubbleLeftRightIcon class="w-8 h-8 text-white/30 mb-2" />
+              <p class="text-white/50 text-sm">No chat sessions yet</p>
+              <p class="text-white/40 text-xs">Create your first chat to get started</p>
+            </div>
+
+            <div 
+              v-for="chat in sortedChats" 
+              :key="chat.id"
+              class="flex items-center gap-3 p-3 mx-1 mb-1 rounded-lg hover:bg-white/5 cursor-pointer transition-colors border border-transparent"
+              :class="{ 'bg-blue-600/20 border-blue-500/30': chat.id === currentChatId }"
+              @click="handleSwitchChat(chat.id)"
             >
-              <TrashIcon class="w-3 h-3" />
-              <span>Clear History</span>
-            </button>
-            <button @click="handleDeleteChat(chat.id)" class="menu-item danger">
-              <TrashIcon class="w-3 h-3" />
-              <span>Delete Chat</span>
-            </button>
+              <div class="flex-1 min-w-0">
+                <!-- Chat title (editable) -->
+                <div v-if="renamingChatId === chat.id" class="w-full">
+                  <input
+                    v-model="newChatTitle"
+                    @keyup.enter="finishRenaming"
+                    @keyup.escape="cancelRenaming"
+                    @blur="finishRenaming"
+                    class="w-full px-2 py-1 text-sm bg-white/10 border border-white/20 rounded text-white/90 focus:outline-none focus:border-blue-500/50"
+                    autofocus
+                  />
+                </div>
+                <div v-else class="text-sm font-medium text-white/90 truncate">
+                  {{ chat.title }}
+                </div>
+                
+                <!-- Chat metadata -->
+                <div class="flex items-center gap-1 mt-1">
+                  <ClockIcon class="w-3 h-3 text-white/40" />
+                  <span class="text-xs text-white/40">{{ formatRelativeTime(chat.updatedAt) }}</span>
+                  <span class="text-xs text-white/30">•</span>
+                  <span class="text-xs text-white/40">{{ chat.history.length }} messages</span>
+                </div>
+              </div>
+
+              <!-- Chat actions menu -->
+              <div class="relative" @click.stop>
+                <button 
+                  @click="toggleChatMenu(chat.id)" 
+                  class="p-1 rounded hover:bg-white/10 transition-colors text-white/60 hover:text-white/90"
+                  :class="{ 'bg-white/10 text-white/90': showMenuForChat === chat.id }"
+                >
+                  <EllipsisVerticalIcon class="w-4 h-4" />
+                </button>
+
+                <!-- Dropdown menu -->
+                <div v-if="showMenuForChat === chat.id" class="absolute right-0 top-8 bg-black/95 border border-white/20 rounded-lg shadow-xl z-50 py-1 min-w-32">
+                  <button @click="startRenaming(chat.id, chat.title)" class="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-white/10 transition-colors text-white/80 hover:text-white/90">
+                    <PencilIcon class="w-3 h-3" />
+                    <span>Rename</span>
+                  </button>
+                  <button 
+                    v-if="chat.id === currentChatId && chat.history.length > 0"
+                    @click="handleClearChat" 
+                    class="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-white/10 transition-colors text-white/80 hover:text-white/90"
+                  >
+                    <TrashIcon class="w-3 h-3" />
+                    <span>Clear History</span>
+                  </button>
+                  <button @click="handleDeleteChat(chat.id)" class="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-white/10 transition-colors text-red-400 hover:text-red-300 hover:bg-red-500/10">
+                    <TrashIcon class="w-3 h-3" />
+                    <span>Delete Chat</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
         </div>
       </Transition>
     </div>
@@ -227,11 +227,7 @@ const closeWindow = () => {
 </template>
 
 <style scoped>
-/* Drawer Overlay */
-.drawer-overlay {
-  @apply fixed inset-0 z-50 bg-black/50 backdrop-blur-sm;
-}
-
+/* Transitions */
 .drawer-overlay-enter-active,
 .drawer-overlay-leave-active {
   transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -240,13 +236,6 @@ const closeWindow = () => {
 .drawer-overlay-enter-from,
 .drawer-overlay-leave-to {
   opacity: 0;
-}
-
-/* Drawer Content */
-.chat-drawer {
-  @apply fixed top-0 left-0 h-full w-80 z-50;
-  @apply bg-black/90 backdrop-blur-xl border-r border-white/20;
-  @apply shadow-2xl shadow-black/50 flex flex-col;
 }
 
 .drawer-slide-enter-active,
@@ -259,110 +248,21 @@ const closeWindow = () => {
   transform: translateX(-100%);
 }
 
-.sidebar-header {
-  @apply flex items-center justify-between p-4 border-b border-white/10;
-}
-
-.sidebar-title {
-  @apply flex items-center gap-2;
-}
-
-.close-btn {
-  @apply p-1 rounded-md hover:bg-white/10 transition-colors;
-}
-
-.new-chat-section {
-  @apply p-3 border-b border-white/10;
-}
-
-.new-chat-btn {
-  @apply w-full flex items-center justify-center gap-2 px-3 py-2;
-  @apply bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30;
-  @apply rounded-lg transition-colors text-sm font-medium text-white/90;
-}
-
-.chat-list {
-  @apply flex-1 overflow-y-auto p-2;
-}
-
-.empty-state {
-  @apply flex flex-col items-center justify-center h-full text-center px-6;
-}
-
-.chat-item {
-  @apply flex items-center gap-3 p-3 mx-1 mb-1 rounded-lg;
-  @apply hover:bg-white/5 cursor-pointer transition-colors;
-  @apply border border-transparent;
-}
-
-.chat-item.active {
-  @apply bg-blue-600/20 border-blue-500/30;
-}
-
-.chat-info {
-  @apply flex-1 min-w-0;
-}
-
-.chat-title {
-  @apply text-sm font-medium text-white/90 truncate;
-}
-
-.rename-input-container {
-  @apply w-full;
-}
-
-.rename-input {
-  @apply w-full px-2 py-1 text-sm bg-white/10 border border-white/20;
-  @apply rounded text-white/90 focus:outline-none focus:border-blue-500/50;
-}
-
-.chat-meta {
-  @apply flex items-center gap-1 mt-1;
-}
-
-.chat-actions {
-  @apply relative;
-}
-
-.menu-trigger {
-  @apply p-1 rounded hover:bg-white/10 transition-colors text-white/60;
-  @apply hover:text-white/90;
-}
-
-.menu-trigger.active {
-  @apply bg-white/10 text-white/90;
-}
-
-.chat-menu {
-  @apply absolute right-0 top-8 bg-black/95 border border-white/20;
-  @apply rounded-lg shadow-xl z-50 py-1 min-w-32;
-}
-
-.menu-item {
-  @apply w-full flex items-center gap-2 px-3 py-2 text-sm;
-  @apply hover:bg-white/10 transition-colors text-white/80;
-  @apply hover:text-white/90;
-}
-
-.menu-item.danger {
-  @apply text-red-400 hover:text-red-300 hover:bg-red-500/10;
-}
-
-/* Custom scrollbar */
-.chat-list::-webkit-scrollbar {
+/* Custom scrollbar for webkit browsers */
+.flex-1.overflow-y-auto::-webkit-scrollbar {
   width: 4px;
 }
 
-.chat-list::-webkit-scrollbar-track {
+.flex-1.overflow-y-auto::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.chat-list::-webkit-scrollbar-thumb {
+.flex-1.overflow-y-auto::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
 }
 
-.chat-list::-webkit-scrollbar-thumb:hover {
+.flex-1.overflow-y-auto::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
-</style> 
+</style>

@@ -20,6 +20,7 @@ export const useAppStore = defineStore('app', () => {
   const speechTranscription = useSpeechTranscription()
   const currentTranscriptionId = ref<number | null>(null)
   const isTranscriptionEnabled = ref(false)
+  const transcriptionCleanup = ref<(() => void) | null>(null)
   
   const chatMessages = ref<ChatMessage[]>([
     { id: 1, text: "Welcome to your agentic assistant", sender: "assistant", timestamp: new Date() },
@@ -142,11 +143,11 @@ export const useAppStore = defineStore('app', () => {
   }
 
   // Speech transcription actions
-  const initializeSpeechTranscription = async (modelSize: 'tiny' | 'base' | 'small' | 'medium' | 'large' = 'small') => {
+  const initializeSpeechTranscription = async (modelSize: 'tiny' | 'base' | 'small' | 'medium' | 'large' = 'tiny') => {
     try {
       await speechTranscription.initialize({ modelSize })
       isTranscriptionEnabled.value = true
-      addMessage("🎤 Speech transcription initialized", "assistant")
+      addMessage("🎤 Speech transcription initialized (tiny model for faster processing)", "assistant")
     } catch (error) {
       console.error('Failed to initialize speech transcription:', error)
       addMessage(`❌ Failed to initialize speech transcription: ${error}`, "assistant")
@@ -163,8 +164,8 @@ export const useAppStore = defineStore('app', () => {
       addMessage("🎙️ Started listening...", "assistant")
       currentTranscriptionId.value = null
       
-      // Watch for transcription updates
-      watchTranscriptionUpdates()
+      // Set up event listeners for transcription updates
+      transcriptionCleanup.value = setupTranscriptionEventListeners()
     } catch (error) {
       console.error('Failed to start speech transcription:', error)
       addMessage(`❌ Failed to start recording: ${error}`, "assistant")
@@ -176,49 +177,96 @@ export const useAppStore = defineStore('app', () => {
       await speechTranscription.stopRecording()
       addMessage("⏹️ Stopped listening", "assistant")
       currentTranscriptionId.value = null
+      
+      // Clean up event listeners
+      if (transcriptionCleanup.value) {
+        transcriptionCleanup.value()
+        transcriptionCleanup.value = null
+      }
     } catch (error) {
       console.error('Failed to stop speech transcription:', error)
       addMessage(`❌ Failed to stop recording: ${error}`, "assistant")
     }
   }
 
-  const watchTranscriptionUpdates = () => {
-    // Watch for interim results from Web Speech API - show as thought stream
-    watch(() => speechTranscription.interimText.value, (newText: string) => {
-      if (newText && newText.trim()) {
-        addMessage(newText, 'transcription', {
+  const setupTranscriptionEventListeners = () => {
+    // Handle interim transcription events
+    const handleInterim = (event: Event) => {
+      const customEvent = event as CustomEvent
+      const text = customEvent.detail.text || ''
+      if (text && text.trim()) {
+        addMessage(text, 'transcription', {
           isInterim: true,
-          source: 'web-speech'
+          source: 'web-speech',
+          confidence: customEvent.detail.confidence || 0.5
         })
       }
-    })
+    }
 
-    // Watch for final results from Web Speech API
-    watch(() => speechTranscription.finalText.value, (newText: string) => {
-      if (newText && newText.trim()) {
-        addMessage(newText, 'transcription', {
+    // Handle final transcription events
+    const handleFinal = (event: Event) => {
+      const customEvent = event as CustomEvent
+      const text = customEvent.detail.text || ''
+      if (text && text.trim()) {
+        addMessage(text, 'transcription', {
           isInterim: false,
           source: 'web-speech',
-          confidence: 0.9
-        })
-        // Don't clear currentTranscriptionId yet - wait for Whisper to potentially improve it
-      }
-    })
-
-    // Watch for Whisper results - these should replace/improve the Web Speech results
-    watch(() => speechTranscription.transcriptionHistory.value, (history: any[]) => {
-      const latestWhisperResult = history[history.length - 1]
-      if (latestWhisperResult && latestWhisperResult.source === 'whisper') {
-        // Replace current transcription with improved Whisper result
-        addMessage(latestWhisperResult.text, 'transcription', {
-          isInterim: false,
-          confidence: latestWhisperResult.confidence,
-          source: 'whisper'
+          confidence: customEvent.detail.confidence || 0.9
         })
         // Finalize this transcription
         finalizeTranscription()
       }
-    })
+    }
+
+    // Handle transcription errors
+    const handleError = (event: Event) => {
+      const customEvent = event as CustomEvent
+      addMessage(`❌ Transcription error: ${customEvent.detail.error}`, 'assistant')
+    }
+
+    // Handle transcription completion
+    const handleComplete = (event: Event) => {
+      const customEvent = event as CustomEvent
+      if (customEvent.detail.finalText && customEvent.detail.finalText.trim()) {
+        addMessage(customEvent.detail.finalText, 'transcription', {
+          isInterim: false,
+          source: 'whisper',
+          confidence: 0.9
+        })
+        finalizeTranscription()
+      }
+    }
+
+    // Handle auto-send transcribed message
+    const handleSendTranscribedMessage = (event: Event) => {
+      const customEvent = event as CustomEvent
+      const text = customEvent.detail.text || ''
+      if (text && text.trim()) {
+        addMessage(text, 'user', {
+          source: 'whisper'
+        })
+        console.log('📤 Auto-sent transcribed message to chat:', text)
+      }
+    }
+
+    // Add event listeners
+    window.addEventListener('transcription-interim', handleInterim)
+    window.addEventListener('transcription-final', handleFinal)
+    window.addEventListener('transcription-error', handleError)
+    window.addEventListener('transcription-complete', handleComplete)
+    window.addEventListener('send-transcribed-message', handleSendTranscribedMessage)
+
+    // Store cleanup function
+    const cleanup = () => {
+      window.removeEventListener('transcription-interim', handleInterim)
+      window.removeEventListener('transcription-final', handleFinal)
+      window.removeEventListener('transcription-error', handleError)
+      window.removeEventListener('transcription-complete', handleComplete)
+      window.removeEventListener('send-transcribed-message', handleSendTranscribedMessage)
+    }
+
+    // Return cleanup function for later use
+    return cleanup
   }
 
   const clearTranscription = () => {

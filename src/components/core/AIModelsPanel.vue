@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, onMounted } from 'vue'
+import { watch } from 'vue'
 import {
   Cog6ToothIcon,
   XMarkIcon,

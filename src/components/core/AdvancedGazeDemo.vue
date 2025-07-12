@@ -27,7 +27,6 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
 import { useAdvancedGazeTracking } from '../../composables/useAdvancedGazeTracking'
 
 const gazeTracking = useAdvancedGazeTracking()
