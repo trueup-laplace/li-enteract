@@ -34,10 +34,10 @@ export const useWindowResizing = () => {
         console.log(`🔧 Added transparency panel height: ${height}px`)
       }
       
-      // Add AI models window height if shown
+      // Add AI models/settings drawer height if shown (new drawer design)
       if (showAIModels) {
-        height += 550 // AI models window height (increased to show all content)
-        console.log(`🔧 Added AI models height: ${height}px`)
+        height += 650 // Settings drawer height (drawer design is more compact)
+        console.log(`🔧 Added settings drawer height: ${height}px`)
       }
       
       // Add chat window height if shown
@@ -46,7 +46,12 @@ export const useWindowResizing = () => {
         console.log(`🔧 Added chat window height: ${height}px`)
       }
       
-      const width = Math.max(320, chatWindowSize.value.width + 40)
+      let width = Math.max(320, chatWindowSize.value.width + 40)
+      
+      // Increase width for settings drawer to accommodate side navigation
+      if (showAIModels) {
+        width = Math.max(950, width) // Wider for drawer layout
+      }
       
       // Validate dimensions before setting
       if (width <= 0 || height <= 0) {

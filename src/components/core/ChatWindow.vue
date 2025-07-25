@@ -11,7 +11,9 @@ import {
 import { useChatManagement } from '../../composables/useChatManagement'
 import { useWindowResizing } from '../../composables/useWindowResizing'
 import { useSpeechEvents } from '../../composables/useSpeechEvents'
+import { useAudioLoopback } from '../../composables/useAudioLoopback'
 import AgentActionButtons from './AgentActionButtons.vue'
+import AudioLoopbackControl from './AudioLoopbackControl.vue'
 
 interface Props {
   showChatWindow: boolean
@@ -83,6 +85,10 @@ const {
   startResize
 } = useWindowResizing()
 
+// Audio loopback for real-time transcription
+const { enumerateDevices } = useAudioLoopback()
+const audioLoopbackEnabled = ref(false)
+
 const closeWindow = () => {
   emit('close')
   emit('update:showChatWindow', false)
@@ -129,10 +135,30 @@ const handleFileUploadEvent = (event: Event) => {
   handleFileUpload(event, { value: props.showChatWindow })
 }
 
+// Audio loopback handlers
+const handleAudioTranscription = (text: string) => {
+  if (text.trim().length > 0) {
+    // Add transcription to chat and auto-send if it looks like a complete sentence
+    chatMessage.value = text
+    
+    // Auto-send if it ends with punctuation (sentence completion)
+    if (text.match(/[.!?]$/)) {
+      sendMessage()
+    }
+  }
+}
+
+const handleAudioLoopbackToggle = (enabled: boolean) => {
+  audioLoopbackEnabled.value = enabled
+}
+
 // Setup speech events when component mounts
-onMounted(() => {
+onMounted(async () => {
   setupSpeechTranscriptionListeners()
   console.log('🎤 ChatWindow: Speech transcription listeners set up')
+  
+  // Initialize audio devices
+  await enumerateDevices()
 })
 
 // Cleanup speech events when component unmounts
@@ -248,6 +274,15 @@ onUnmounted(() => {
           @trigger-file-upload="triggerFileUpload"
           @handle-file-upload="handleFileUploadEvent"
         />
+        
+        <!-- Audio Loopback Control -->
+        <div class="audio-loopback-container">
+          <AudioLoopbackControl
+            :enabled="audioLoopbackEnabled"
+            @transcription="handleAudioTranscription"
+            @update:enabled="handleAudioLoopbackToggle"
+          />
+        </div>
         
         <div class="chat-input-container">
           <input 
@@ -634,5 +669,10 @@ onUnmounted(() => {
 
 .chat-window.resizing * {
   user-select: none;
+}
+
+/* Audio Loopback Container */
+.audio-loopback-container {
+  @apply px-4 py-2 border-t border-white/10 bg-white/5;
 }
 </style> 

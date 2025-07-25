@@ -80,7 +80,14 @@ const generalSettings = ref({
   theme: 'dark',
   autoStartOllama: false,
   enableNotifications: true,
-  logLevel: 'info'
+  logLevel: 'info',
+  startMinimized: false,
+  startWithSystem: false,
+  saveWindowPosition: true,
+  enableKeyboardShortcuts: true,
+  transcriptionLanguage: 'en',
+  enableAutoSave: true,
+  autoSaveInterval: 5
 })
 
 // Audio device enumeration functions
@@ -258,67 +265,92 @@ onMounted(() => {
 </script>
 
 <template>
-  <Transition name="settings-panel">
-    <div v-if="showSettingsPanel" class="settings-section">
-      <div class="settings-panel">
-        <!-- Settings Header -->
-        <div class="panel-header">
-          <div class="panel-title">
-            <Cog6ToothIcon class="w-4 h-4 text-white/80" />
-            <span class="text-sm font-medium text-white/90">Settings</span>
+  <Transition name="settings-drawer">
+    <div v-if="showSettingsPanel" class="settings-overlay" @click="closePanel">
+      <div class="settings-drawer" @click.stop>
+        <!-- Drawer Header -->
+        <div class="drawer-header">
+          <div class="drawer-title">
+            <Cog6ToothIcon class="w-5 h-5 text-white/90" />
+            <span class="text-lg font-semibold text-white">Settings</span>
           </div>
-          <button @click="closePanel" class="panel-close-btn">
-            <XMarkIcon class="w-4 h-4 text-white/70 hover:text-white transition-colors" />
+          <button @click="closePanel" class="drawer-close-btn">
+            <XMarkIcon class="w-5 h-5 text-white/70 hover:text-white transition-colors" />
           </button>
         </div>
         
-        <!-- Settings Tabs -->
-        <div class="settings-tabs">
-          <button
-            @click="activeTab = 'models'"
-            :class="{ 'active': activeTab === 'models' }"
-            class="tab-btn"
-          >
-            <Cog6ToothIcon class="w-4 h-4" />
-            <span>AI Models</span>
-            <div class="status-indicator" v-if="activeTab === 'models'" :class="{
-              'text-green-400': ollamaStatus.status === 'running',
-              'text-red-400': ollamaStatus.status === 'not_running',
-              'text-yellow-400': ollamaStatus.status === 'checking' || ollamaStatus.status === 'error'
-            }">
-              {{ ollamaStatus.status === 'running' ? '●' : ollamaStatus.status === 'not_running' ? '●' : '●' }}
-            </div>
-          </button>
+        <!-- Drawer Body -->
+        <div class="drawer-body">
+          <!-- Settings Navigation -->
+          <div class="settings-nav">
+            <button
+              @click="activeTab = 'models'"
+              :class="{ 'nav-active': activeTab === 'models' }"
+              class="nav-item"
+            >
+              <div class="nav-icon">
+                <Cog6ToothIcon class="w-5 h-5" />
+              </div>
+              <div class="nav-content">
+                <div class="nav-title">AI Models</div>
+                <div class="nav-subtitle">Manage Ollama models</div>
+              </div>
+              <div class="nav-status" :class="{
+                'status-success': ollamaStatus.status === 'running',
+                'status-error': ollamaStatus.status === 'not_running',
+                'status-warning': ollamaStatus.status === 'checking' || ollamaStatus.status === 'error'
+              }">
+                <div class="status-dot"></div>
+              </div>
+            </button>
+            
+            <button
+              @click="activeTab = 'audio'"
+              :class="{ 'nav-active': activeTab === 'audio' }"
+              class="nav-item"
+            >
+              <div class="nav-icon">
+                <SpeakerWaveIcon class="w-5 h-5" />
+              </div>
+              <div class="nav-content">
+                <div class="nav-title">Audio Loopback</div>
+                <div class="nav-subtitle">System audio capture</div>
+              </div>
+              <div class="nav-status" :class="{
+                'status-success': audioSettings.loopbackEnabled && audioSettings.selectedLoopbackDevice,
+                'status-error': !audioSettings.loopbackEnabled || !audioSettings.selectedLoopbackDevice,
+                'status-warning': isLoadingAudioDevices
+              }">
+                <div class="status-dot"></div>
+              </div>
+            </button>
+            
+            <button
+              @click="activeTab = 'general'"
+              :class="{ 'nav-active': activeTab === 'general' }"
+              class="nav-item"
+            >
+              <div class="nav-icon">
+                <ComputerDesktopIcon class="w-5 h-5" />
+              </div>
+              <div class="nav-content">
+                <div class="nav-title">General</div>
+                <div class="nav-subtitle">App preferences</div>
+              </div>
+            </button>
+          </div>
           
-          <button
-            @click="activeTab = 'audio'"
-            :class="{ 'active': activeTab === 'audio' }"
-            class="tab-btn"
-          >
-            <SpeakerWaveIcon class="w-4 h-4" />
-            <span>Audio Loopback</span>
-            <div class="status-indicator" v-if="activeTab === 'audio'" :class="{
-              'text-green-400': audioSettings.loopbackEnabled && audioSettings.selectedLoopbackDevice,
-              'text-red-400': !audioSettings.loopbackEnabled || !audioSettings.selectedLoopbackDevice,
-              'text-yellow-400': isLoadingAudioDevices
-            }">
-              {{ audioSettings.loopbackEnabled && audioSettings.selectedLoopbackDevice ? '●' : '●' }}
+          <!-- Settings Content -->
+          <div class="settings-content">
+            <!-- AI Models Tab -->
+            <div v-if="activeTab === 'models'" class="settings-section">
+            <div class="section-header">
+              <h2 class="section-title">AI Models</h2>
+              <p class="section-description">
+                Manage AI models for transcription analysis and intelligent responses. Enteract uses Ollama to run models locally for privacy and performance.
+              </p>
             </div>
-          </button>
-          
-          <button
-            @click="activeTab = 'general'"
-            :class="{ 'active': activeTab === 'general' }"
-            class="tab-btn"
-          >
-            <ComputerDesktopIcon class="w-4 h-4" />
-            <span>General</span>
-          </button>
-        </div>
-        
-        <div class="panel-content">
-          <!-- AI Models Tab -->
-          <div v-if="activeTab === 'models'" class="tab-content">
+            
             <!-- Ollama Status -->
             <div class="ollama-status">
               <div v-if="ollamaStatus.status === 'running'" class="status-good">
@@ -433,7 +465,14 @@ onMounted(() => {
           </div>
           
           <!-- Audio Loopback Tab -->
-          <div v-if="activeTab === 'audio'" class="tab-content">
+          <div v-if="activeTab === 'audio'" class="settings-section">
+            <div class="section-header">
+              <h2 class="section-title">Audio Loopback</h2>
+              <p class="section-description">
+                Configure audio loopback to capture system audio for transcription. Perfect for meetings, videos, and any audio playing on your computer.
+              </p>
+            </div>
+            
             <!-- Audio Settings Header -->
             <div class="audio-settings-header">
               <div class="flex items-center justify-between mb-4">
@@ -470,7 +509,7 @@ onMounted(() => {
             
             <!-- Loading State -->
             <div v-if="isLoadingAudioDevices" class="loading-state">
-              <div class="animate-pulse text-white/60">Scanning audio devices...</div>
+              <div class="animate-pulse text-white/60">Scanning WASAPI audio devices...</div>
             </div>
             
             <!-- Audio Devices List -->
@@ -548,8 +587,13 @@ onMounted(() => {
           </div>
           
           <!-- General Settings Tab -->
-          <div v-if="activeTab === 'general'" class="tab-content">
-            <h3 class="text-white/90 font-medium mb-4">General Settings</h3>
+          <div v-if="activeTab === 'general'" class="settings-section">
+            <div class="section-header">
+              <h2 class="section-title">General Settings</h2>
+              <p class="section-description">
+                Customize Enteract's behavior and appearance to match your workflow preferences.
+              </p>
+            </div>
             
             <div class="settings-group">
               <div class="setting-item">
@@ -598,85 +642,254 @@ onMounted(() => {
                   </select>
                 </label>
               </div>
+              
+              <div class="setting-separator"></div>
+              
+              <h4 class="text-white/80 text-sm font-medium mb-3">Startup & Window</h4>
+              
+              <div class="setting-item">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.startWithSystem"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Start with System</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Launch Enteract when your computer starts</p>
+              </div>
+              
+              <div class="setting-item">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.startMinimized"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Start Minimized</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Start in the system tray instead of showing the window</p>
+              </div>
+              
+              <div class="setting-item">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.saveWindowPosition"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Remember Window Position</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Restore window size and position on startup</p>
+              </div>
+              
+              <div class="setting-separator"></div>
+              
+              <h4 class="text-white/80 text-sm font-medium mb-3">Transcription</h4>
+              
+              <div class="setting-item">
+                <label class="setting-label-full">
+                  <span class="text-white/90">Default Language</span>
+                  <select v-model="generalSettings.transcriptionLanguage" class="setting-select">
+                    <option value="en">English</option>
+                    <option value="es">Spanish</option>
+                    <option value="fr">French</option>
+                    <option value="de">German</option>
+                    <option value="it">Italian</option>
+                    <option value="pt">Portuguese</option>
+                    <option value="ru">Russian</option>
+                    <option value="ja">Japanese</option>
+                    <option value="ko">Korean</option>
+                    <option value="zh">Chinese</option>
+                  </select>
+                </label>
+              </div>
+              
+              <div class="setting-item">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.enableKeyboardShortcuts"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Enable Keyboard Shortcuts</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Use global keyboard shortcuts for quick actions</p>
+              </div>
+              
+              <div class="setting-separator"></div>
+              
+              <h4 class="text-white/80 text-sm font-medium mb-3">Auto-save</h4>
+              
+              <div class="setting-item">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.enableAutoSave"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Enable Auto-save</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Automatically save chat sessions</p>
+              </div>
+              
+              <div class="setting-item" v-if="generalSettings.enableAutoSave">
+                <label class="setting-label-full">
+                  <span class="text-white/90">Auto-save Interval: {{ generalSettings.autoSaveInterval }} minutes</span>
+                  <input 
+                    type="range" 
+                    v-model.number="generalSettings.autoSaveInterval"
+                    min="1"
+                    max="30"
+                    step="1"
+                    class="setting-range"
+                  >
+                </label>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
+  </div>
   </Transition>
 </template>
 
 <style scoped>
-.settings-section {
-  @apply w-full flex justify-center;
-  padding: 0 8px 8px 8px;
-  background: transparent;
+/* Drawer Overlay */
+.settings-overlay {
+  @apply fixed inset-0 bg-black/30 backdrop-blur-sm z-50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.settings-panel {
-  @apply rounded-2xl overflow-hidden;
-  width: 480px;
-  max-height: 600px;
-  pointer-events: auto;
+/* Main Drawer */
+.settings-drawer {
+  @apply bg-gray-900/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-xl;
+  width: 900px;
+  height: 600px;
+  max-height: 90vh;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
   
-  /* Enhanced glass effect for larger panel */
   background: linear-gradient(135deg, 
-    rgba(17, 17, 21, 0.85) 0%,
-    rgba(17, 17, 21, 0.75) 25%,
-    rgba(17, 17, 21, 0.70) 50%,
-    rgba(17, 17, 21, 0.75) 75%,
-    rgba(17, 17, 21, 0.85) 100%
+    rgba(17, 17, 21, 0.98) 0%,
+    rgba(23, 23, 28, 0.96) 50%,
+    rgba(17, 17, 21, 0.98) 100%
   );
-  backdrop-filter: blur(60px) saturate(180%) brightness(1.1);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(80px) saturate(180%);
   box-shadow: 
-    0 20px 60px rgba(0, 0, 0, 0.4),
-    0 8px 24px rgba(0, 0, 0, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+    0 25px 80px rgba(0, 0, 0, 0.6),
+    0 10px 30px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
-.panel-header {
-  @apply flex items-center justify-between px-4 py-3 border-b border-white/10;
+/* Drawer Header */
+.drawer-header {
+  @apply flex items-center justify-between px-6 py-4 border-b border-white/10;
+  flex-shrink: 0;
 }
 
-.panel-title {
-  @apply flex items-center gap-2;
+.drawer-title {
+  @apply flex items-center gap-3;
 }
 
-.panel-close-btn {
-  @apply rounded-full p-1 hover:bg-white/10 transition-colors;
+.drawer-close-btn {
+  @apply rounded-full p-2 hover:bg-white/10 transition-colors;
 }
 
-.settings-tabs {
-  @apply flex border-b border-white/10;
+/* Drawer Body */
+.drawer-body {
+  @apply flex flex-1;
+  min-height: 0;
 }
 
-.tab-btn {
-  @apply flex items-center gap-2 px-4 py-3 text-sm font-medium text-white/60 hover:text-white/90 hover:bg-white/5 transition-colors relative;
-  flex: 1;
+/* Settings Navigation (Left Sidebar) */
+.settings-nav {
+  @apply border-r border-white/10 bg-white/5;
+  width: 280px;
+  flex-shrink: 0;
+  padding: 20px 0;
 }
 
-.tab-btn.active {
-  @apply text-white bg-white/10;
+.nav-item {
+  @apply flex items-center gap-4 px-6 py-4 text-left hover:bg-white/10 transition-all duration-200 border-l-2 border-transparent;
+  width: 100%;
 }
 
-.tab-btn.active::after {
-  content: '';
-  @apply absolute bottom-0 left-0 right-0 h-0.5 bg-white/50;
+.nav-item.nav-active {
+  @apply bg-white/15 border-l-blue-500;
 }
 
-.status-indicator {
-  @apply text-xs;
+.nav-item:hover {
+  @apply bg-white/20;
 }
 
-.panel-content {
-  @apply overflow-y-auto;
-  max-height: 480px;
+.nav-icon {
+  @apply text-white/70;
+  flex-shrink: 0;
 }
 
-.tab-content {
-  @apply p-4;
+.nav-item.nav-active .nav-icon {
+  @apply text-blue-400;
+}
+
+.nav-content {
+  @apply flex-1;
+}
+
+.nav-title {
+  @apply text-white/90 font-medium text-sm;
+}
+
+.nav-subtitle {
+  @apply text-white/60 text-xs mt-0.5;
+}
+
+.nav-status {
+  @apply flex items-center;
+  flex-shrink: 0;
+}
+
+.status-dot {
+  @apply w-2.5 h-2.5 rounded-full;
+}
+
+.status-success .status-dot {
+  @apply bg-green-400;
+}
+
+.status-error .status-dot {
+  @apply bg-red-400;
+}
+
+.status-warning .status-dot {
+  @apply bg-yellow-400;
+}
+
+/* Settings Content Area */
+.settings-content {
+  @apply flex-1 overflow-y-auto;
+  min-height: 0;
+}
+
+.settings-section {
+  @apply p-8;
+  min-height: 100%;
+}
+
+.section-header {
+  @apply mb-8;
+}
+
+.section-title {
+  @apply text-2xl font-bold text-white mb-2;
+}
+
+.section-description {
+  @apply text-white/70 text-sm leading-relaxed;
 }
 
 /* AI Models Styles (inherited from AIModelsPanel) */
@@ -705,13 +918,14 @@ onMounted(() => {
 }
 
 .models-list {
-  @apply space-y-2 mb-4 max-h-48 overflow-y-auto;
+  @apply space-y-3 mb-6 max-h-64 overflow-y-auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 
 .model-item {
-  @apply flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-colors;
+  @apply flex items-center justify-between p-4 bg-white/10 rounded-xl border border-white/20 hover:bg-white/15 hover:border-white/30 transition-all duration-200;
+  backdrop-filter: blur(10px);
 }
 
 .model-info {
@@ -804,13 +1018,14 @@ onMounted(() => {
 }
 
 .audio-devices-list {
-  @apply space-y-3 mb-4 max-h-48 overflow-y-auto;
+  @apply space-y-4 mb-6 max-h-64 overflow-y-auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 
 .audio-device-item {
-  @apply flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-colors;
+  @apply flex items-center justify-between p-4 bg-white/10 rounded-xl border border-white/20 hover:bg-white/15 hover:border-white/30 transition-all duration-200;
+  backdrop-filter: blur(10px);
 }
 
 .device-info {
@@ -871,11 +1086,11 @@ onMounted(() => {
 }
 
 .setting-checkbox {
-  @apply w-4 h-4 rounded border-white/30 bg-white/10 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 focus:ring-2;
+  @apply w-5 h-5 rounded-md border-white/30 bg-white/10 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 focus:ring-2;
 }
 
 .setting-select {
-  @apply w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white/90 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+  @apply w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white/90 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 backdrop-blur-sm;
 }
 
 .setting-select option {
@@ -894,39 +1109,57 @@ onMounted(() => {
   @apply w-4 h-4 bg-blue-500 rounded-full cursor-pointer border-0;
 }
 
+/* Tab Description */
+.tab-description {
+  @apply mb-4 pb-4 border-b border-white/10;
+}
+
+/* Settings Separator */
+.setting-separator {
+  @apply my-4 border-t border-white/10;
+}
+
 /* Transitions */
-.settings-panel-enter-active,
-.settings-panel-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+.settings-drawer-enter-active,
+.settings-drawer-leave-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.settings-panel-enter-from {
+.settings-drawer-enter-from {
   opacity: 0;
-  transform: translateY(-10px) scale(0.95);
+  transform: scale(0.9);
 }
 
-.settings-panel-leave-to {
+.settings-drawer-leave-to {
   opacity: 0;
-  transform: translateY(-10px) scale(0.95);
+  transform: scale(0.9);
 }
 
 /* Scrollbar Styles */
 .models-list::-webkit-scrollbar,
 .audio-devices-list::-webkit-scrollbar,
-.panel-content::-webkit-scrollbar {
+.panel-content::-webkit-scrollbar,
+.tab-content::-webkit-scrollbar {
   width: 4px;
 }
 
 .models-list::-webkit-scrollbar-track,
 .audio-devices-list::-webkit-scrollbar-track,
-.panel-content::-webkit-scrollbar-track {
+.panel-content::-webkit-scrollbar-track,
+.tab-content::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .models-list::-webkit-scrollbar-thumb,
 .audio-devices-list::-webkit-scrollbar-thumb,
-.panel-content::-webkit-scrollbar-thumb {
+.panel-content::-webkit-scrollbar-thumb,
+.tab-content::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
+}
+
+.tab-content {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 </style>

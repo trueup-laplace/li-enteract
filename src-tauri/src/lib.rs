@@ -66,10 +66,7 @@ pub fn run() {
                 // For now, we'll rely on window-level keyboard shortcuts
             }
             
-            // Initialize audio loopback functionality
-            if let Err(e) = audio_loopback::integrate_device_enumeration() {
-                eprintln!("Warning: Failed to initialize audio loopback: {}", e);
-            }
+            // Audio loopback functionality is initialized on-demand
             
             Ok(())
         })
