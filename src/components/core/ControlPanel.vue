@@ -158,17 +158,17 @@ onUnmounted(() => {
 
     <!-- Panel Windows -->
     <PanelWindows
-      :showTransparencyControls="showTransparencyControls"
-      :showAIModelsWindow="showAIModelsWindow"
-      :showChatWindow="showChatWindow"
-      :selectedModel="selectedModel"
-      @close-transparency="closeTransparencyControls"
-      @close-ai-models="closeAIModelsWindow"
-      @close-chat="closeChatWindow"
-      @update:show-ai-models-window="showAIModelsWindow = $event"
-      @update:show-chat-window="showChatWindow = $event"
-      @toggle-chat-drawer="emit('toggle-chat-drawer')"
-    />
+  :showTransparencyControls="showTransparencyControls"
+  :showSettingsPanel="showAIModelsWindow"
+  :showChatWindow="showChatWindow"
+  :selectedModel="selectedModel"
+  @close-transparency="closeTransparencyControls"
+  @close-settings="closeAIModelsWindow"
+  @close-chat="closeChatWindow"
+  @update:show-settings-panel="showAIModelsWindow = $event"
+  @update:show-chat-window="showChatWindow = $event"
+  @toggle-chat-drawer="emit('toggle-chat-drawer')"
+/>
   </div>
 </template>
 

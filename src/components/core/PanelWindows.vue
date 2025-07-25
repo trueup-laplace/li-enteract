@@ -2,20 +2,20 @@
 import { AdjustmentsHorizontalIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import TransparencyControls from './TransparencyControls.vue'
 import ChatWindow from './ChatWindow.vue'
-import AIModelsPanel from './AIModelsPanel.vue'
+import SettingsPanel from './SettingsPanel.vue' // Updated import
 
 interface Props {
   showTransparencyControls: boolean
-  showAIModelsWindow: boolean
+  showSettingsPanel: boolean  // Renamed from showAIModelsWindow
   showChatWindow: boolean
   selectedModel: any
 }
 
 interface Emits {
   (e: 'close-transparency'): void
-  (e: 'close-ai-models'): void
+  (e: 'close-settings'): void  // Renamed from close-ai-models
   (e: 'close-chat'): void
-  (e: 'update:show-ai-models-window', value: boolean): void
+  (e: 'update:show-settings-panel', value: boolean): void  // Renamed
   (e: 'update:show-chat-window', value: boolean): void
   (e: 'toggle-chat-drawer'): void
 }
@@ -45,11 +45,11 @@ const emit = defineEmits<Emits>()
     </div>
   </Transition>
 
-  <!-- AI Models Panel -->
-  <AIModelsPanel 
-    :show-a-i-models-window="showAIModelsWindow"
-    @close="emit('close-ai-models')"
-    @update:show-a-i-models-window="emit('update:show-ai-models-window', $event)"
+  <!-- Settings Panel (Enhanced) -->
+  <SettingsPanel 
+    :show-settings-panel="showSettingsPanel"
+    @close="emit('close-settings')"
+    @update:show-settings-panel="emit('update:show-settings-panel', $event)"
   />
 
   <!-- Chat Window -->
@@ -108,7 +108,7 @@ const emit = defineEmits<Emits>()
   @apply p-4;
 }
 
-/* Transparency Panel Transitions */
+/* Panel Transitions */
 .transparency-panel-enter-active,
 .transparency-panel-leave-active {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
