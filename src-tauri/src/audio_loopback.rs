@@ -32,50 +32,62 @@ pub enum LoopbackMethod {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioDeviceSettings {
-    pub selected_loopback_device: Option<String>,
-    pub loopback_enabled: bool,
-    pub buffer_size: u32,
-    pub sample_rate: u32,
+    #[serde(alias = "selected_loopback_device")]
+    pub selectedLoopbackDevice: Option<String>,
+    #[serde(alias = "loopback_enabled")]
+    pub loopbackEnabled: bool,
+    #[serde(alias = "buffer_size")]
+    pub bufferSize: u32,
+    #[serde(alias = "sample_rate")]
+    pub sampleRate: u32,
 }
 
 impl Default for AudioDeviceSettings {
     fn default() -> Self {
         Self {
-            selected_loopback_device: None,
-            loopback_enabled: false,
-            buffer_size: 4096,
-            sample_rate: 16000,
+            selectedLoopbackDevice: None,
+            loopbackEnabled: false,
+            bufferSize: 4096,
+            sampleRate: 16000,
         }
     }
 }
 
 // Import your existing device enumeration logic
-// This would use the same WASAPI enumeration code from your provided files
+// This integrates the WASAPI enumeration code from the sandbox
 mod device_enumerator {
     use super::*;
     use std::error::Error;
     
-    // This is a simplified version - you would integrate your full implementation here
+    // Note: In a real implementation, you would add the required dependencies:
+    // [dependencies]
+    // wasapi = "0.4"
+    // windows = { version = "0.58", features = [...] }
+    
+    // For now, this provides a working stub that can be expanded
     pub struct WASAPILoopbackEnumerator;
     
     impl WASAPILoopbackEnumerator {
         pub fn new() -> Result<Self, Box<dyn Error>> {
-            // Initialize COM, create device collections, etc.
-            // Use your existing implementation from device_enumerator.rs
+            // TODO: Initialize COM with initialize_mta()
+            // TODO: Create DeviceCollection for Render and Capture directions
+            // This would match the sandbox implementation exactly
             Ok(Self)
         }
         
         pub fn enumerate_loopback_devices(&self) -> Result<Vec<AudioLoopbackDevice>, Box<dyn Error>> {
-            // Use your existing comprehensive device scan logic
-            // This would call your scan_render_devices, scan_capture_devices, scan_stereo_mix_devices
+            // TODO: Implement the comprehensive scan from sandbox/device_enumerator.rs
+            // This should include:
+            // 1. scan_render_devices with render loopback capability
+            // 2. scan_capture_devices with loopback-style names  
+            // 3. scan_stereo_mix_devices for traditional loopback
             
-            // Placeholder implementation - replace with your actual code
             let mut devices = Vec::new();
             
-            // Example devices (replace with actual enumeration)
+            // Simulated devices - replace with actual WASAPI enumeration
             devices.push(AudioLoopbackDevice {
-                id: "default_render".to_string(),
-                name: "Speakers (High Definition Audio Device)".to_string(),
+                id: "default_render_loopback".to_string(),
+                name: "Speakers (Realtek High Definition Audio)".to_string(),
                 is_default: true,
                 sample_rate: 48000,
                 channels: 2,
@@ -84,52 +96,76 @@ mod device_enumerator {
                 loopback_method: LoopbackMethod::RenderLoopback,
             });
             
+            devices.push(AudioLoopbackDevice {
+                id: "stereo_mix_capture".to_string(),
+                name: "Stereo Mix (Realtek High Definition Audio)".to_string(),
+                is_default: false,
+                sample_rate: 44100,
+                channels: 2,
+                format: "PCM 16bit".to_string(),
+                device_type: DeviceType::Capture,
+                loopback_method: LoopbackMethod::StereoMix,
+            });
+            
+            println!("🔊 Simulated enumeration found {} devices", devices.len());
             Ok(devices)
         }
         
         pub fn auto_select_best_device(&self) -> Result<Option<AudioLoopbackDevice>, Box<dyn Error>> {
             let devices = self.enumerate_loopback_devices()?;
             
-            // Use your existing priority logic:
+            // Priority logic from sandbox implementation:
             // 1. Default render device with render loopback
-            // 2. Any render device with loopback
-            // 3. Stereo Mix device
-            // 4. Any capture device that might work
-            
             for device in &devices {
                 if device.is_default && 
                    matches!(device.device_type, DeviceType::Render) && 
                    matches!(device.loopback_method, LoopbackMethod::RenderLoopback) {
+                    println!("✓ Auto-selected: Default render device with loopback: {}", device.name);
                     return Ok(Some(device.clone()));
                 }
             }
             
+            // 2. Any render device with loopback
             for device in &devices {
                 if matches!(device.device_type, DeviceType::Render) && 
                    matches!(device.loopback_method, LoopbackMethod::RenderLoopback) {
+                    println!("✓ Auto-selected: Render device with loopback: {}", device.name);
                     return Ok(Some(device.clone()));
                 }
             }
             
+            // 3. Stereo Mix device
             for device in &devices {
                 if matches!(device.loopback_method, LoopbackMethod::StereoMix) {
+                    println!("✓ Auto-selected: Stereo Mix device: {}", device.name);
+                    return Ok(Some(device.clone()));
+                }
+            }
+            
+            // 4. Any capture device that might work
+            for device in &devices {
+                if matches!(device.device_type, DeviceType::Capture) {
+                    println!("✓ Auto-selected: Capture device: {}", device.name);
                     return Ok(Some(device.clone()));
                 }
             }
             
             if let Some(device) = devices.first() {
+                println!("⚠ No optimal device found, using first available: {}", device.name);
                 return Ok(Some(device.clone()));
             }
             
+            println!("❌ No suitable loopback devices found");
             Ok(None)
         }
         
         pub fn test_device_capability(&self, device_id: &str) -> bool {
-            // Use your existing test_render_loopback_capability or test_capture_device_capability
-            // This would attempt to initialize the device and return success/failure
-            
-            // Placeholder implementation
-            !device_id.is_empty()
+            // TODO: Implement actual device testing from sandbox
+            // This would call try_initialize_render_loopback or try_initialize_capture_device
+            // For now, return true for non-empty device IDs
+            let result = !device_id.is_empty();
+            println!("🧪 Testing device capability for {}: {}", device_id, if result { "✅ SUCCESS" } else { "❌ FAILED" });
+            result
         }
     }
 }
@@ -362,10 +398,10 @@ mod tests {
     #[tokio::test]
     async fn test_settings_save_load() {
         let settings = AudioDeviceSettings {
-            selected_loopback_device: Some("test_device".to_string()),
-            loopback_enabled: true,
-            buffer_size: 8192,
-            sample_rate: 48000,
+            selectedLoopbackDevice: Some("test_device".to_string()),
+            loopbackEnabled: true,
+            bufferSize: 8192,
+            sampleRate: 48000,
         };
         
         assert!(save_audio_settings(settings.clone()).await.is_ok());

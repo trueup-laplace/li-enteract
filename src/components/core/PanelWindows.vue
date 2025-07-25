@@ -3,11 +3,13 @@ import { AdjustmentsHorizontalIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import TransparencyControls from './TransparencyControls.vue'
 import ChatWindow from './ChatWindow.vue'
 import SettingsPanel from './SettingsPanel.vue' // Updated import
+import ConversationalWindow from './ConversationalWindow.vue'
 
 interface Props {
   showTransparencyControls: boolean
   showSettingsPanel: boolean  // Renamed from showAIModelsWindow
   showChatWindow: boolean
+  showConversationalWindow: boolean
   selectedModel: any
 }
 
@@ -15,8 +17,10 @@ interface Emits {
   (e: 'close-transparency'): void
   (e: 'close-settings'): void  // Renamed from close-ai-models
   (e: 'close-chat'): void
+  (e: 'close-conversational'): void
   (e: 'update:show-settings-panel', value: boolean): void  // Renamed
   (e: 'update:show-chat-window', value: boolean): void
+  (e: 'update:show-conversational-window', value: boolean): void
   (e: 'toggle-chat-drawer'): void
 }
 
@@ -50,6 +54,13 @@ const emit = defineEmits<Emits>()
     :show-settings-panel="showSettingsPanel"
     @close="emit('close-settings')"
     @update:show-settings-panel="emit('update:show-settings-panel', $event)"
+  />
+
+  <!-- Conversational Window -->
+  <ConversationalWindow 
+    :show-conversational-window="showConversationalWindow"
+    @close="emit('close-conversational')"
+    @update:show-conversational-window="emit('update:show-conversational-window', $event)"
   />
 
   <!-- Chat Window -->

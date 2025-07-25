@@ -7,6 +7,7 @@ interface StateRefs {
   showChatWindow: Ref<boolean>
   showTransparencyControls: Ref<boolean>
   showAIModelsWindow: Ref<boolean>
+  showConversationalWindow: Ref<boolean>
   speechError: Ref<string | null>
   compatibilityReport: Ref<any>
   isGazeControlActive: Ref<boolean>
@@ -26,6 +27,7 @@ export function useControlPanelEvents(
     showChatWindow,
     showTransparencyControls,
     showAIModelsWindow,
+    showConversationalWindow,
     speechError,
     compatibilityReport,
     isGazeControlActive
@@ -244,10 +246,35 @@ export function useControlPanelEvents(
     }
   }
 
+  // Conversational window handlers
+  const toggleConversationalWindow = async (event: Event) => {
+    event.stopPropagation()
+    
+    // Close other panels first
+    if (showTransparencyControls.value) {
+      showTransparencyControls.value = false
+    }
+    if (showAIModelsWindow.value) {
+      showAIModelsWindow.value = false
+    }
+    if (showChatWindow.value) {
+      showChatWindow.value = false
+    }
+    
+    showConversationalWindow.value = !showConversationalWindow.value
+    console.log(`💬 Conversational window ${showConversationalWindow.value ? 'opened' : 'closed'}`)
+  }
+
+  const closeConversationalWindow = async () => {
+    showConversationalWindow.value = false
+    console.log('💬 Conversational window closed')
+  }
+
   // Click outside to close panels
   const handleClickOutside = (event: Event) => {
     const target = event.target as HTMLElement
     const chatWindow = document.querySelector('.chat-window')
+    const conversationalWindow = document.querySelector('.conversational-window')
     const transparencyPanel = document.querySelector('.transparency-controls-panel')
     const aiModelsPanel = document.querySelector('.ai-models-panel')
     const controlPanel = document.querySelector('.control-panel-glass-bar')
@@ -256,6 +283,12 @@ export function useControlPanelEvents(
         !chatWindow.contains(target) && 
         !controlPanel.contains(target)) {
       closeChatWindow()
+    }
+    
+    if (conversationalWindow && controlPanel && showConversationalWindow.value &&
+        !conversationalWindow.contains(target) && 
+        !controlPanel.contains(target)) {
+      closeConversationalWindow()
     }
     
     if (transparencyPanel && controlPanel && showTransparencyControls.value &&
@@ -281,6 +314,8 @@ export function useControlPanelEvents(
     toggleChatWindow,
     closeChatWindow,
     openChatWindow,
+    toggleConversationalWindow,
+    closeConversationalWindow,
     toggleSpeechTranscription,
     getSpeechIconClass,
     toggleMLEyeTrackingWithMovement,

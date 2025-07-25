@@ -10,6 +10,7 @@ export function useControlPanelState() {
   const showChatWindow = ref(false)
   const showTransparencyControls = ref(false)
   const showAIModelsWindow = ref(false)
+  const showConversationalWindow = ref(false)
 
   // Error handling state
   const speechError = ref<string | null>(null)
@@ -29,6 +30,7 @@ export function useControlPanelState() {
     showChatWindow,
     showTransparencyControls,
     showAIModelsWindow,
+    showConversationalWindow,
     speechError,
     compatibilityReport,
     isGazeControlActive,

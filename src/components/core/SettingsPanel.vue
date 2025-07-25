@@ -69,10 +69,10 @@ const audioDevices = ref<AudioLoopbackDevice[]>([])
 const isLoadingAudioDevices = ref(false)
 const audioDevicesError = ref<string | null>(null)
 const audioSettings = ref<AudioDeviceSettings>({
-  selected_loopback_device: null,
-  loopback_enabled: false,
-  buffer_size: 4096,
-  sample_rate: 16000
+  selectedLoopbackDevice: null,
+  loopbackEnabled: false,
+  bufferSize: 4096,
+  sampleRate: 16000
 })
 
 // General Settings
@@ -671,8 +671,8 @@ onMounted(() => {
 }
 
 .panel-content {
-  /* @apply overflow-y-auto;
-  max-height: 480px; */
+  @apply overflow-y-auto;
+  max-height: 480px;
 }
 
 .tab-content {

@@ -29,6 +29,7 @@ const {
   showChatWindow,
   showTransparencyControls,
   showAIModelsWindow,
+  showConversationalWindow,
   speechError,
   compatibilityReport,
   isGazeControlActive,
@@ -46,6 +47,8 @@ const {
   toggleChatWindow,
   closeChatWindow,
   openChatWindow,
+  toggleConversationalWindow,
+  closeConversationalWindow,
   toggleSpeechTranscription,
   getSpeechIconClass,
   toggleMLEyeTrackingWithMovement,
@@ -62,6 +65,7 @@ const {
     showChatWindow,
     showTransparencyControls,
     showAIModelsWindow,
+    showConversationalWindow,
     speechError,
     compatibilityReport,
     isGazeControlActive,
@@ -136,12 +140,14 @@ onUnmounted(() => {
           :showChatWindow="showChatWindow"
           :showTransparencyControls="showTransparencyControls"
           :showAIModelsWindow="showAIModelsWindow"
+          :showConversationalWindow="showConversationalWindow"
           :isGazeControlActive="isGazeControlActive"
           :getSpeechIconClass="getSpeechIconClass"
           @toggle-ai-models="toggleAIModelsWindow"
           @toggle-speech="toggleSpeechTranscription"
           @toggle-eye-tracking="toggleMLEyeTrackingWithMovement"
           @toggle-transparency="toggleTransparencyControls"
+          @toggle-conversational="toggleConversationalWindow"
           @toggle-chat="toggleChatWindow"
         />
         
@@ -158,17 +164,20 @@ onUnmounted(() => {
 
     <!-- Panel Windows -->
     <PanelWindows
-  :showTransparencyControls="showTransparencyControls"
-  :showSettingsPanel="showAIModelsWindow"
-  :showChatWindow="showChatWindow"
-  :selectedModel="selectedModel"
-  @close-transparency="closeTransparencyControls"
-  @close-settings="closeAIModelsWindow"
-  @close-chat="closeChatWindow"
-  @update:show-settings-panel="showAIModelsWindow = $event"
-  @update:show-chat-window="showChatWindow = $event"
-  @toggle-chat-drawer="emit('toggle-chat-drawer')"
-/>
+      :showTransparencyControls="showTransparencyControls"
+      :showSettingsPanel="showAIModelsWindow"
+      :showChatWindow="showChatWindow"
+      :showConversationalWindow="showConversationalWindow"
+      :selectedModel="selectedModel"
+      @close-transparency="closeTransparencyControls"
+      @close-settings="closeAIModelsWindow"
+      @close-chat="closeChatWindow"
+      @close-conversational="closeConversationalWindow"
+      @update:show-settings-panel="showAIModelsWindow = $event"
+      @update:show-chat-window="showChatWindow = $event"
+      @update:show-conversational-window="showConversationalWindow = $event"
+      @toggle-chat-drawer="emit('toggle-chat-drawer')"
+    />
   </div>
 </template>
 
