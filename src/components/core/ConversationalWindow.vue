@@ -89,6 +89,10 @@ const startAudioLoopbackCapture = async () => {
   if (!audioLoopbackDeviceId.value) return
   
   try {
+    // TEMPORARY: Disable audio loopback due to memory safety issue
+    console.log('⚠️ Audio loopback temporarily disabled due to buffer safety issue')
+    return
+    
     await invoke('start_audio_loopback_capture', {
       deviceId: audioLoopbackDeviceId.value
     })

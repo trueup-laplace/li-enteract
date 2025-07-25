@@ -711,6 +711,23 @@ fn run_audio_capture_loop_sync(
              format.get_nchannels(),
              format.get_bitspersample());
     
+    // Validate audio format before starting
+    let bits_per_sample = format.get_bitspersample();
+    let channels = format.get_nchannels();
+    let sample_rate = format.get_samplespersec();
+    
+    if bits_per_sample != 16 && bits_per_sample != 32 {
+        return Err(anyhow::anyhow!("Unsupported bits per sample: {}. Only 16 and 32 bit formats are supported.", bits_per_sample));
+    }
+    
+    if channels == 0 || channels > 8 {
+        return Err(anyhow::anyhow!("Invalid channel count: {}. Must be between 1 and 8.", channels));
+    }
+    
+    if sample_rate < 8000 || sample_rate > 192000 {
+        return Err(anyhow::anyhow!("Invalid sample rate: {} Hz. Must be between 8kHz and 192kHz.", sample_rate));
+    }
+    
     // Start the stream
     audio_client.start_stream()
         .map_err(|e| anyhow::anyhow!("Failed to start stream: {:?}", e))?;
@@ -750,12 +767,27 @@ fn run_audio_capture_loop_sync(
         let bytes_per_sample = bits_per_sample / 8;
         let bytes_per_frame = bytes_per_sample * channels as u16;
         
+        // Safety checks for buffer calculations
+        if frames_available == 0 || bytes_per_frame == 0 {
+            std::thread::sleep(Duration::from_millis(10));
+            continue;
+        }
+        
         let buffer_size = frames_available as usize * bytes_per_frame as usize;
+        
+        // Sanity check: prevent excessive buffer sizes
+        if buffer_size > 1_048_576 { // 1MB limit
+            eprintln!("⚠️ Audio buffer size too large: {} bytes, skipping", buffer_size);
+            std::thread::sleep(Duration::from_millis(10));
+            continue;
+        }
+        
         let mut buffer = vec![0u8; buffer_size];
         
         let (frames_read, _flags) = match capture_client.read_from_device(bytes_per_frame as usize, &mut buffer) {
             Ok(result) => result,
-            Err(_) => {
+            Err(e) => {
+                eprintln!("❌ Failed to read from audio device: {:?}", e);
                 std::thread::sleep(Duration::from_millis(10));
                 continue;
             }
@@ -765,8 +797,17 @@ fn run_audio_capture_loop_sync(
             continue;
         }
         
-        // Process audio data
+        // Process audio data with bounds checking
         let actual_bytes = frames_read as usize * bytes_per_frame as usize;
+        
+        // Safety check: ensure actual_bytes doesn't exceed buffer size
+        let actual_bytes = if actual_bytes > buffer.len() {
+            eprintln!("⚠️ Audio data size ({}) exceeds buffer size ({}), truncating", actual_bytes, buffer.len());
+            buffer.len()
+        } else {
+            actual_bytes
+        };
+        
         let audio_data = &buffer[..actual_bytes];
         
         // Convert to f32 and process (mono conversion, resampling)
@@ -852,34 +893,50 @@ fn process_audio_chunk(
     input_sample_rate: u32,
     output_sample_rate: u32
 ) -> Vec<f32> {
+    // Safety check: ensure audio_data is not empty
+    if audio_data.is_empty() {
+        return Vec::new();
+    }
+    
     // Convert bytes to f32 samples
     let mut f32_samples = Vec::new();
     
     match bits_per_sample {
         32 => {
+            // Safety check: ensure data length is multiple of 4
+            if audio_data.len() % 4 != 0 {
+                eprintln!("⚠️ Audio data length ({}) not multiple of 4 for 32-bit samples", audio_data.len());
+                return Vec::new();
+            }
+            
             for chunk in audio_data.chunks_exact(4) {
-                if chunk.len() == 4 {
-                    let bytes = [chunk[0], chunk[1], chunk[2], chunk[3]];
-                    let sample = f32::from_le_bytes(bytes);
-                    if sample.is_finite() && sample.abs() <= 2.0 {
-                        f32_samples.push(sample);
-                    } else {
-                        f32_samples.push(0.0);
-                    }
+                let bytes = [chunk[0], chunk[1], chunk[2], chunk[3]];
+                let sample = f32::from_le_bytes(bytes);
+                if sample.is_finite() && sample.abs() <= 2.0 {
+                    f32_samples.push(sample);
+                } else {
+                    f32_samples.push(0.0);
                 }
             }
         },
         16 => {
+            // Safety check: ensure data length is multiple of 2
+            if audio_data.len() % 2 != 0 {
+                eprintln!("⚠️ Audio data length ({}) not multiple of 2 for 16-bit samples", audio_data.len());
+                return Vec::new();
+            }
+            
             for chunk in audio_data.chunks_exact(2) {
-                if chunk.len() == 2 {
-                    let bytes = [chunk[0], chunk[1]];
-                    let sample_i16 = i16::from_le_bytes(bytes);
-                    let sample_f32 = sample_i16 as f32 / 32768.0;
-                    f32_samples.push(sample_f32);
-                }
+                let bytes = [chunk[0], chunk[1]];
+                let sample_i16 = i16::from_le_bytes(bytes);
+                let sample_f32 = sample_i16 as f32 / 32768.0;
+                f32_samples.push(sample_f32);
             }
         },
-        _ => return Vec::new()
+        _ => {
+            eprintln!("⚠️ Unsupported bits per sample: {}", bits_per_sample);
+            return Vec::new();
+        }
     }
     
     // Convert stereo to mono if needed
