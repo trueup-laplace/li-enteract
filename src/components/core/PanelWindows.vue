@@ -49,19 +49,27 @@ const emit = defineEmits<Emits>()
     </div>
   </Transition>
 
-  <!-- Settings Panel (Enhanced) -->
-  <SettingsPanel 
-    :show-settings-panel="showSettingsPanel"
-    @close="emit('close-settings')"
-    @update:show-settings-panel="emit('update:show-settings-panel', $event)"
-  />
+  <!-- Settings Panel Section -->
+  <Transition name="settings-panel">
+    <div v-if="showSettingsPanel" class="settings-panel-section">
+      <SettingsPanel 
+        :show-settings-panel="showSettingsPanel"
+        @close="emit('close-settings')"
+        @update:show-settings-panel="emit('update:show-settings-panel', $event)"
+      />
+    </div>
+  </Transition>
 
-  <!-- Conversational Window -->
-  <ConversationalWindow 
-    :show-conversational-window="showConversationalWindow"
-    @close="emit('close-conversational')"
-    @update:show-conversational-window="emit('update:show-conversational-window', $event)"
-  />
+  <!-- Conversational Window Section -->
+  <Transition name="conversational-panel">
+    <div v-if="showConversationalWindow" class="conversational-panel-section">
+      <ConversationalWindow 
+        :show-conversational-window="showConversationalWindow"
+        @close="emit('close-conversational')"
+        @update:show-conversational-window="emit('update:show-conversational-window', $event)"
+      />
+    </div>
+  </Transition>
 
   <!-- Chat Window -->
   <ChatWindow 
@@ -131,6 +139,52 @@ const emit = defineEmits<Emits>()
 }
 
 .transparency-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+/* Settings Panel Section */
+.settings-panel-section {
+  @apply w-full flex justify-center;
+  padding: 0 8px 8px 8px;
+  background: transparent;
+}
+
+/* Conversational Panel Section */
+.conversational-panel-section {
+  @apply w-full flex justify-center;
+  padding: 0 8px 8px 8px;
+  background: transparent;
+}
+
+/* Settings Panel Transitions */
+.settings-panel-enter-active,
+.settings-panel-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.settings-panel-enter-from {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+.settings-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+/* Conversational Panel Transitions */
+.conversational-panel-enter-active,
+.conversational-panel-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.conversational-panel-enter-from {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+.conversational-panel-leave-to {
   opacity: 0;
   transform: translateY(-10px) scale(0.95);
 }

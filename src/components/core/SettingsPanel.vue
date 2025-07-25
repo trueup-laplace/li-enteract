@@ -266,8 +266,7 @@ onMounted(() => {
 
 <template>
   <Transition name="settings-drawer">
-    <div v-if="showSettingsPanel" class="settings-overlay" @click="closePanel">
-      <div class="settings-drawer" @click.stop>
+    <div v-if="showSettingsPanel" class="settings-drawer">
         <!-- Drawer Header -->
         <div class="drawer-header">
           <div class="drawer-title">
@@ -751,34 +750,25 @@ onMounted(() => {
         </div>
       </div>
     </div>
-  </div>
   </Transition>
 </template>
 
 <style scoped>
-/* Drawer Overlay */
-.settings-overlay {
-  @apply fixed inset-0 bg-black/30 backdrop-blur-sm z-50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Main Drawer */
+/* Settings Drawer - Standalone Window */
 .settings-drawer {
-  @apply bg-gray-900/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-xl;
+  @apply backdrop-blur-xl border border-white/15 rounded-2xl;
+  background: linear-gradient(to bottom, 
+    rgba(0, 0, 0, 0.8) 0%, 
+    rgba(0, 0, 0, 0.9) 100%
+  );
   width: 900px;
   height: 600px;
-  max-height: 90vh;
-  max-width: 90vw;
+  max-width: 95vw;
+  max-height: 95vh;
   display: flex;
   flex-direction: column;
   
-  background: linear-gradient(135deg, 
-    rgba(17, 17, 21, 0.98) 0%,
-    rgba(23, 23, 28, 0.96) 50%,
-    rgba(17, 17, 21, 0.98) 100%
-  );
+  /* Enhanced glass effect similar to transparency controls */
   backdrop-filter: blur(80px) saturate(180%);
   box-shadow: 
     0 25px 80px rgba(0, 0, 0, 0.6),
@@ -1122,17 +1112,17 @@ onMounted(() => {
 /* Transitions */
 .settings-drawer-enter-active,
 .settings-drawer-leave-active {
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .settings-drawer-enter-from {
   opacity: 0;
-  transform: scale(0.9);
+  transform: translateY(-10px);
 }
 
 .settings-drawer-leave-to {
   opacity: 0;
-  transform: scale(0.9);
+  transform: translateY(-10px);
 }
 
 /* Scrollbar Styles */

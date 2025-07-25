@@ -241,8 +241,7 @@ onUnmounted(async () => {
 
 <template>
   <Transition name="conversational-window">
-    <div v-if="showConversationalWindow" class="conversational-section">
-      <div class="conversational-window">
+    <div v-if="showConversationalWindow" class="conversational-window">
         <!-- Window Header -->
         <div class="window-header">
           <div class="header-title">
@@ -378,43 +377,30 @@ onUnmounted(async () => {
             </div>
           </div>
         </div>
-      </div>
     </div>
   </Transition>
 </template>
 
 <style scoped>
-.conversational-section {
-  @apply fixed inset-0 flex items-center justify-center p-4;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(8px);
-  z-index: 1000;
-}
-
 .conversational-window {
-  @apply rounded-2xl overflow-hidden;
+  @apply backdrop-blur-xl border border-white/15 rounded-2xl overflow-hidden;
+  background: linear-gradient(to bottom, 
+    rgba(0, 0, 0, 0.8) 0%, 
+    rgba(0, 0, 0, 0.9) 100%
+  );
   width: 600px;
   height: 700px;
-  max-height: 90vh;
-  
-  /* Enhanced glass effect */
-  background: linear-gradient(135deg, 
-    rgba(17, 17, 21, 0.9) 0%,
-    rgba(17, 17, 21, 0.8) 25%,
-    rgba(17, 17, 21, 0.75) 50%,
-    rgba(17, 17, 21, 0.8) 75%,
-    rgba(17, 17, 21, 0.9) 100%
-  );
-  backdrop-filter: blur(60px) saturate(180%) brightness(1.1);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 
-    0 20px 60px rgba(0, 0, 0, 0.4),
-    0 8px 24px rgba(0, 0, 0, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
-  
+  max-width: 95vw;
+  max-height: 95vh;
   display: flex;
   flex-direction: column;
+  
+  /* Enhanced glass effect similar to transparency controls */
+  backdrop-filter: blur(80px) saturate(180%);
+  box-shadow: 
+    0 25px 80px rgba(0, 0, 0, 0.6),
+    0 10px 30px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .window-header {
@@ -579,12 +565,12 @@ onUnmounted(async () => {
 
 .conversational-window-enter-from {
   opacity: 0;
-  transform: scale(0.9) translateY(-20px);
+  transform: translateY(-10px);
 }
 
 .conversational-window-leave-to {
   opacity: 0;
-  transform: scale(0.9) translateY(-20px);
+  transform: translateY(-10px);
 }
 
 /* Scrollbar */
