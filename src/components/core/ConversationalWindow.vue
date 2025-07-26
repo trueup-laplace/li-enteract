@@ -219,6 +219,8 @@ const setupEventListeners = async () => {
   // IMPORTANT: Create isolated event handlers for conversational UI only
   // These should NOT interfere with main chat transcription
   
+  console.log('🔧 Setting up conversational window event listeners')
+  
   // Listen for transcription events but handle them separately
   window.addEventListener('transcription-final', handleConversationalUserSpeech)
   window.addEventListener('transcription-interim', handleConversationalUserInterim)
@@ -463,25 +465,28 @@ const handleMicrophoneToggle = async () => {
       // Always try to stop audio loopback when stopping recording
       await stopAudioLoopbackCapture()
       
-      // Save the current session when recording stops, but keep it active
+      // Complete the current session when recording stops (keeps window open)
       if (conversationStore.currentSession && conversationStore.currentSession.messages.length > 0) {
-        // Mark the session as ended but don't set currentSession to null
-        // This keeps the window open while preserving the conversation
-        conversationStore.currentSession.isActive = false
-        conversationStore.currentSession.endTime = Date.now()
-        console.log('💾 Recording stopped - conversation saved but session remains accessible')
+        // Use completeSession instead of endSession to keep the window open
+        conversationStore.completeSession()
+        console.log('💾 Recording stopped - conversation completed but window remains open')
       } else {
         console.log('🎤 Recording stopped - no messages to save')
       }
     } else {
-      // Create a new session when starting recording, or reactivate the current one
-      if (!conversationStore.currentSession || conversationStore.currentSession.messages.length === 0) {
+      // Create a new session ONLY when:
+      // 1. No current session exists, OR
+      // 2. Current session is completed (has endTime)
+      if (!conversationStore.currentSession || conversationStore.currentSession.endTime) {
+        // Create a brand new session for a new recording
         conversationStore.createSession()
+        console.log('🎤 Created new conversation session for new recording')
       } else {
-        // Reactivate existing session for continued recording
+        // If we have an active session without endTime, just reactivate it
         conversationStore.currentSession.isActive = true
-        conversationStore.currentSession.endTime = undefined
+        console.log('🎤 Using existing active conversation session')
       }
+      // This ensures one recording session = one conversation entry
       
       // Start both microphone and audio loopback
       conversationStore.setRecordingState(true)
@@ -490,7 +495,7 @@ const handleMicrophoneToggle = async () => {
         await startAudioLoopbackCapture()
       }
       
-      console.log('🎤 Recording started - conversation session ready')
+      console.log('🎤 Recording started - using session:', conversationStore.currentSession?.id)
     }
   } catch (error) {
     console.error('Microphone toggle error:', error)
@@ -500,6 +505,7 @@ const handleMicrophoneToggle = async () => {
 
 // Close window
 const closeWindow = () => {
+  console.error('🚨 WINDOW CLOSING - Stack trace:', new Error().stack)
   emit('close')
   emit('update:showConversationalWindow', false)
 }

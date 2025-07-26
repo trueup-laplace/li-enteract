@@ -126,6 +126,23 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
+  // New function to pause/complete a session without clearing currentSession
+  // This keeps the session accessible for continued use while marking it as complete
+  const completeSession = (sessionId?: string) => {
+    const targetSession = sessionId 
+      ? sessions.value.find(s => s.id === sessionId)
+      : currentSession.value
+
+    if (targetSession) {
+      targetSession.isActive = false
+      targetSession.endTime = Date.now()
+      
+      // DON'T clear currentSession - this keeps the window open
+      // and allows for continued interaction with the completed session
+      console.log(`🏁 Session completed but remains accessible: ${targetSession.id}`)
+    }
+  }
+
   const switchToSession = (sessionId: string) => {
     const session = sessions.value.find(s => s.id === sessionId)
     if (session) {
@@ -147,8 +164,23 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   const addMessage = (messageData: Omit<ConversationMessage, 'id'>) => {
+    // Don't automatically create sessions - require explicit session management
     if (!currentSession.value) {
-      createSession()
+      console.error('❌ Attempting to add message without active session:', messageData)
+      return null
+    }
+
+    // Add deduplication check to prevent duplicate messages
+    const existingMessages = currentSession.value.messages || []
+    const isDuplicate = existingMessages.some(msg => 
+      msg.content === messageData.content && 
+      msg.source === messageData.source &&
+      Math.abs(msg.timestamp - (messageData.timestamp || Date.now())) < 1000 // Within 1 second
+    )
+
+    if (isDuplicate) {
+      console.log('🚫 Skipping duplicate message:', messageData.content)
+      return null
     }
 
     const message: ConversationMessage = {
@@ -156,7 +188,8 @@ export const useConversationStore = defineStore('conversation', () => {
       ...messageData
     }
 
-    currentSession.value!.messages.push(message)
+    currentSession.value.messages.push(message)
+    console.log(`📝 Added message to session ${currentSession.value.id}:`, message.content.substring(0, 50))
     return message
   }
 
@@ -350,6 +383,7 @@ export const useConversationStore = defineStore('conversation', () => {
     // Actions
     createSession,
     endSession,
+    completeSession,
     switchToSession,
     addMessage,
     updateMessage,

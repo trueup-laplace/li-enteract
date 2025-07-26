@@ -273,6 +273,7 @@ export function useControlPanelEvents(
   }
 
   const closeConversationalWindow = async () => {
+    console.error('🚨 CONTROL PANEL - Conversational window closing from:', new Error().stack)
     showConversationalWindow.value = false
     console.log('💬 Conversational window closed')
   }
