@@ -12,7 +12,12 @@
       "Bash(find:*)",
       "Bash(dir:*)",
       "Bash(npx vue-tsc:*)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(mkdir:*)",
+      "Bash(move \"C:\\_dev\\enteract\\src\\components\\core\\ConversationalWindow.vue\" \"C:\\_dev\\enteract\\src\\components\\core\\ConversationalWindow.vue.backup\")",
+      "Bash(mv:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(npm run:*)"
     ],
     "deny": []
   }
