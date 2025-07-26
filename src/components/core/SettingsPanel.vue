@@ -373,7 +373,7 @@ onMounted(() => {
               <div class="models-header">
                 <h3 class="text-white/90 font-medium">Available Models</h3>
                 <button 
-                  @click="fetchOllamaModels" 
+                  @click="() => fetchOllamaModels(true)" 
                   :disabled="isLoadingModels"
                   class="refresh-btn"
                   title="Refresh Models"
@@ -758,8 +758,8 @@ onMounted(() => {
 .settings-drawer {
   @apply backdrop-blur-xl border border-white/15 rounded-2xl;
   background: linear-gradient(to bottom, 
-    rgba(0, 0, 0, 0.8) 0%, 
-    rgba(0, 0, 0, 0.9) 100%
+    rgba(10, 10, 12, 0.9) 0%, 
+    rgba(5, 5, 7, 0.95) 100%
   );
   width: 900px;
   height: 600px;
@@ -798,23 +798,32 @@ onMounted(() => {
 
 /* Settings Navigation (Left Sidebar) */
 .settings-nav {
-  @apply border-r border-white/10 bg-white/5;
+  @apply border-r border-white/10;
+  background: rgba(0, 0, 0, 0.4);
   width: 280px;
   flex-shrink: 0;
   padding: 20px 0;
 }
 
 .nav-item {
-  @apply flex items-center gap-4 px-6 py-4 text-left hover:bg-white/10 transition-all duration-200 border-l-2 border-transparent;
+  @apply flex items-center gap-4 px-6 py-4 text-left transition-all duration-200 border-l-2 border-transparent;
   width: 100%;
+  background: rgba(255, 255, 255, 0.03);
+  margin: 0 12px;
+  border-radius: 12px;
+  margin-bottom: 4px;
 }
 
 .nav-item.nav-active {
-  @apply bg-white/15 border-l-blue-500;
+  @apply border-l-blue-500;
+  background: rgba(59, 130, 246, 0.15);
+  border-left: none;
+  box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.2);
 }
 
 .nav-item:hover {
-  @apply bg-white/20;
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateX(2px);
 }
 
 .nav-icon {
@@ -896,7 +905,13 @@ onMounted(() => {
 }
 
 .refresh-btn {
-  @apply p-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-white/70 hover:text-white;
+  @apply p-1 rounded-lg transition-all duration-200 text-white/70 hover:text-white;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: rotate(90deg);
 }
 
 .error-message {
@@ -914,8 +929,15 @@ onMounted(() => {
 }
 
 .model-item {
-  @apply flex items-center justify-between p-4 bg-white/10 rounded-xl border border-white/20 hover:bg-white/15 hover:border-white/30 transition-all duration-200;
+  @apply flex items-center justify-between p-4 rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200;
+  background: rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(10px);
+}
+
+.model-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .model-info {
@@ -959,7 +981,8 @@ onMounted(() => {
 }
 
 .no-models {
-  @apply text-center p-4 bg-white/5 rounded-lg border border-white/10;
+  @apply text-center p-4 rounded-lg border border-white/10;
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .pull-model-section {
@@ -971,7 +994,15 @@ onMounted(() => {
 }
 
 .model-pull-btn {
-  @apply flex items-center gap-2 p-2 bg-blue-500/20 hover:bg-blue-500/40 rounded-lg border border-blue-400/30 text-blue-300 hover:text-blue-200 transition-colors text-sm;
+  @apply flex items-center gap-2 p-2 rounded-lg border border-blue-400/20 text-blue-300 hover:text-blue-200 transition-all duration-200 text-sm;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.model-pull-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
 }
 
 .model-pull-btn:disabled {
@@ -979,7 +1010,13 @@ onMounted(() => {
 }
 
 .model-pull-btn.recommended {
-  @apply bg-green-500/30 border-green-400/50 text-green-200;
+  @apply border-green-400/30 text-green-200;
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.model-pull-btn.recommended:hover {
+  background: rgba(34, 197, 94, 0.25);
+  border-color: rgba(34, 197, 94, 0.5);
 }
 
 .recommended-badge {
@@ -995,11 +1032,23 @@ onMounted(() => {
 }
 
 .model-pull-btn.vision-model {
-  @apply bg-purple-500/30 border-purple-400/50 text-purple-200;
+  @apply border-purple-400/30 text-purple-200;
+  background: rgba(168, 85, 247, 0.15);
+}
+
+.model-pull-btn.vision-model:hover {
+  background: rgba(168, 85, 247, 0.25);
+  border-color: rgba(168, 85, 247, 0.5);
 }
 
 .model-pull-btn.research-model {
-  @apply bg-blue-500/30 border-blue-400/50 text-blue-200;
+  @apply border-blue-400/30 text-blue-200;
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.model-pull-btn.research-model:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: rgba(59, 130, 246, 0.5);
 }
 
 /* Audio Device Styles */
@@ -1014,8 +1063,15 @@ onMounted(() => {
 }
 
 .audio-device-item {
-  @apply flex items-center justify-between p-4 bg-white/10 rounded-xl border border-white/20 hover:bg-white/15 hover:border-white/30 transition-all duration-200;
+  @apply flex items-center justify-between p-4 rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200;
+  background: rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(10px);
+}
+
+.audio-device-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .device-info {
@@ -1051,7 +1107,8 @@ onMounted(() => {
 }
 
 .no-devices {
-  @apply text-center p-4 bg-white/5 rounded-lg border border-white/10;
+  @apply text-center p-4 rounded-lg border border-white/10;
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .audio-buffer-settings {
@@ -1076,11 +1133,23 @@ onMounted(() => {
 }
 
 .setting-checkbox {
-  @apply w-5 h-5 rounded-md border-white/30 bg-white/10 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 focus:ring-2;
+  @apply w-5 h-5 rounded-md border-white/20 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 focus:ring-2;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.setting-checkbox:checked {
+  background: rgba(59, 130, 246, 0.8);
+  border-color: rgba(59, 130, 246, 0.6);
 }
 
 .setting-select {
-  @apply w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white/90 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 backdrop-blur-sm;
+  @apply w-full px-4 py-3 border border-white/10 rounded-xl text-white/90 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 backdrop-blur-sm transition-all duration-200;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.setting-select:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .setting-select option {
@@ -1088,7 +1157,8 @@ onMounted(() => {
 }
 
 .setting-range {
-  @apply w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer;
+  @apply w-full h-2 rounded-lg appearance-none cursor-pointer;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .setting-range::-webkit-slider-thumb {

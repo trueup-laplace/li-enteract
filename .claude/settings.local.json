@@ -10,7 +10,9 @@
       "Bash(timeout:*)",
       "Bash(rm:*)",
       "Bash(find:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(npx vite:*)"
     ],
     "deny": []
   }

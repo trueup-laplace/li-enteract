@@ -33,6 +33,8 @@ export function useSpeechTranscription() {
   const transcriptionHistory = ref<TranscriptionResult[]>([])
   const currentSession = ref<TranscriptionSession | null>(null)
   const error = ref<string | null>(null)
+  const autoSendToChat = ref(true) // Control whether to auto-send to main chat
+  const continuousMode = ref(false) // Keep mic open during conversations
 
   // Audio recording
   let mediaRecorder: MediaRecorder | null = null
@@ -45,7 +47,7 @@ export function useSpeechTranscription() {
   let audioContext: AudioContext | null = null
   let analyser: AnalyserNode | null = null
   let silenceThreshold = 0.01
-  let silenceDuration = 2000 // 3 seconds - more reasonable for natural speech patterns
+  let silenceDuration = 5000 // 5 seconds - more reasonable for natural speech patterns in conversational UI
   let lastAudioTime = 0
 
   // Configuration
@@ -347,9 +349,12 @@ export function useSpeechTranscription() {
   function startSilenceTimer() {
     if (silenceTimer) return
     
+    // Don't auto-stop in continuous mode (for conversations)
+    if (continuousMode.value) return
+    
     silenceTimer = window.setTimeout(() => {
       const timeSinceLastAudio = Date.now() - lastAudioTime
-      if (timeSinceLastAudio >= silenceDuration && isRecording.value) {
+      if (timeSinceLastAudio >= silenceDuration && isRecording.value && !continuousMode.value) {
         console.log('Auto-stopping transcription due to silence')
         stopRecording()
         emitTranscriptionEvent('transcription-auto-stopped', { reason: 'silence' })
@@ -527,8 +532,8 @@ export function useSpeechTranscription() {
 
       console.log('Recording stopped - button state immediately reset')
       
-      // Auto-send the transcribed message if there's content
-      if (finalText.value.trim()) {
+      // Auto-send the transcribed message if there's content and auto-send is enabled
+      if (finalText.value.trim() && autoSendToChat.value) {
         // Emit event to send the message to chat
         const sendMessageEvent = new CustomEvent('send-transcribed-message', {
           detail: {
@@ -768,6 +773,18 @@ export function useSpeechTranscription() {
     error.value = null
   }
 
+  // Control auto-send to chat
+  function setAutoSendToChat(enabled: boolean) {
+    autoSendToChat.value = enabled
+    console.log(`📤 Auto-send to chat ${enabled ? 'enabled' : 'disabled'}`)
+  }
+
+  // Control continuous mode (keeps mic open during conversations)
+  function setContinuousMode(enabled: boolean) {
+    continuousMode.value = enabled
+    console.log(`🎤 Continuous mode ${enabled ? 'enabled' : 'disabled'}`)
+  }
+
   // Get available models
   async function getAvailableModels() {
     try {
@@ -817,6 +834,8 @@ export function useSpeechTranscription() {
     currentSession,
     error,
     status,
+    autoSendToChat,
+    continuousMode,
 
     // Methods
     initialize,
@@ -824,6 +843,8 @@ export function useSpeechTranscription() {
     stopRecording,
     clearTranscription,
     getAvailableModels,
-    startTranscription
+    startTranscription,
+    setAutoSendToChat,
+    setContinuousMode
   }
 } 

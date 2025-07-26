@@ -197,8 +197,8 @@ const handleSliderChange = (event: Event) => {
   @apply p-4 space-y-3;
   @apply backdrop-blur-xl border border-white/15 rounded-2xl;
   background: linear-gradient(to bottom, 
-    rgba(0, 0, 0, 0.8) 0%, 
-    rgba(0, 0, 0, 0.9) 100%
+    rgba(10, 10, 12, 0.9) 0%, 
+    rgba(5, 5, 7, 0.95) 100%
   );
   min-width: 320px;
   max-width: 360px;
@@ -268,12 +268,19 @@ const handleSliderChange = (event: Event) => {
 
 .toggle-btn {
   @apply flex-1 flex items-center justify-center gap-2 p-3 rounded-lg;
-  @apply bg-white/5 border border-white/15;
-  @apply hover:bg-white/10 hover:border-white/30;
+  @apply border border-white/10;
+  @apply hover:border-white/20;
   @apply transition-all duration-200;
   @apply text-white/90 hover:text-white;
   @apply font-medium text-sm;
+  background: rgba(255, 255, 255, 0.03);
   position: relative;
+}
+
+.toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .toggle-btn.active {
@@ -303,7 +310,7 @@ const handleSliderChange = (event: Event) => {
 
 .transparency-slider {
   @apply w-full h-2 rounded-lg appearance-none cursor-pointer;
-  @apply bg-white/10;
+  background: rgba(255, 255, 255, 0.05);
   background-image: linear-gradient(
     to right,
     rgba(255, 0, 0, 0.3) 0%,
@@ -339,10 +346,16 @@ const handleSliderChange = (event: Event) => {
 
 .preset-btn {
   @apply px-2 py-1.5 text-xs rounded-lg;
-  @apply bg-white/5 border border-white/15;
-  @apply hover:bg-white/10 hover:border-white/30;
+  @apply border border-white/10;
+  @apply hover:border-white/20;
   @apply transition-all duration-200;
   @apply text-white/80 hover:text-white;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.preset-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
 }
 
 .preset-btn.danger {

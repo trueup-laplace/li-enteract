@@ -96,11 +96,11 @@ const emit = defineEmits<Emits>()
   
   /* Same glass effect as other panels with darker background */
   background: linear-gradient(135deg, 
-    rgba(17, 17, 21, 0.85) 0%,
-    rgba(17, 17, 21, 0.75) 25%,
-    rgba(17, 17, 21, 0.70) 50%,
-    rgba(17, 17, 21, 0.75) 75%,
-    rgba(17, 17, 21, 0.85) 100%
+    rgba(10, 10, 12, 0.90) 0%,
+    rgba(10, 10, 12, 0.80) 25%,
+    rgba(10, 10, 12, 0.75) 50%,
+    rgba(10, 10, 12, 0.80) 75%,
+    rgba(10, 10, 12, 0.90) 100%
   );
   backdrop-filter: blur(60px) saturate(180%) brightness(1.1);
   border: 1px solid rgba(255, 255, 255, 0.25);
@@ -153,8 +153,9 @@ const emit = defineEmits<Emits>()
 /* Conversational Panel Section */
 .conversational-panel-section {
   @apply w-full flex justify-center;
-  padding: 0 8px 8px 8px;
+  padding: 8px;
   background: transparent;
+  position: relative;
 }
 
 /* Settings Panel Transitions */

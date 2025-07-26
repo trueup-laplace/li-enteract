@@ -1,5 +1,6 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { useOllamaCache } from '../stores/ollamaCache'
 
 // Types for Ollama
 interface OllamaModel {
@@ -21,33 +22,52 @@ interface OllamaStatus {
 }
 
 export const useAIModels = () => {
-  const ollamaModels = ref<OllamaModel[]>([])
-  const ollamaStatus = ref<OllamaStatus>({ status: 'checking' })
+  const cache = useOllamaCache()
+  const cachedData = cache.getCache()
+  
+  const ollamaModels = computed(() => cachedData.models)
+  const ollamaStatus = computed(() => cachedData.status)
+  const selectedModel = computed({
+    get: () => cachedData.selectedModel,
+    set: (value) => cache.setSelectedModel(value)
+  })
+  
   const isLoadingModels = ref(false)
   const modelsError = ref<string | null>(null)
-  const selectedModel = ref<string | null>(null)
   const pullingModel = ref<string | null>(null)
   const deletingModel = ref<string | null>(null)
 
-  const fetchOllamaStatus = async () => {
+  const fetchOllamaStatus = async (forceRefresh = false) => {
+    // Return cached status if still valid and not forcing refresh
+    if (!forceRefresh && cache.isCacheValid() && cachedData.status.status !== 'checking') {
+      console.log('📋 Using cached Ollama status')
+      return cachedData.status
+    }
+    
     try {
       const status = await invoke<OllamaStatus>('get_ollama_status')
-      ollamaStatus.value = status
+      cache.setStatus(status)
       return status
     } catch (error) {
       console.error('Failed to get Ollama status:', error)
-      ollamaStatus.value = { status: 'error' }
+      cache.setStatus({ status: 'error' })
       return { status: 'error' }
     }
   }
 
-  const fetchOllamaModels = async () => {
+  const fetchOllamaModels = async (forceRefresh = false) => {
+    // Return cached models if still valid and not forcing refresh
+    if (!forceRefresh && cache.isCacheValid() && cachedData.models.length > 0) {
+      console.log('📋 Using cached Ollama models')
+      return
+    }
+    
     isLoadingModels.value = true
     modelsError.value = null
     
     try {
       const models = await invoke<OllamaModel[]>('get_ollama_models')
-      ollamaModels.value = models
+      cache.setModels(models)
       console.log('📋 Fetched Ollama models:', models)
       
       // Auto-select gemma3:1b-it-qat if available and no model is selected
@@ -83,9 +103,10 @@ export const useAIModels = () => {
     try {
       const result = await invoke<string>('pull_ollama_model', { modelName })
       console.log('📥 Pull result:', result)
-      // Refresh models list after pulling
+      // Refresh models list after pulling (force refresh)
       setTimeout(() => {
-        fetchOllamaModels()
+        cache.clearCache()
+        fetchOllamaModels(true)
       }, 2000)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -106,8 +127,9 @@ export const useAIModels = () => {
     try {
       const result = await invoke<string>('delete_ollama_model', { modelName })
       console.log('🗑️ Delete result:', result)
-      // Refresh models list after deletion
-      await fetchOllamaModels()
+      // Refresh models list after deletion (force refresh)
+      cache.clearCache()
+      await fetchOllamaModels(true)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       console.error('Failed to delete model:', error)

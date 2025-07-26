@@ -104,6 +104,12 @@ watch(() => props.showChatWindow, async (newValue) => {
   }
 })
 
+// Auto-scroll when chat history changes
+watch(chatHistory, async () => {
+  await nextTick()
+  scrollChatToBottom()
+}, { deep: true })
+
 // Agent action handlers
 const handleTakeScreenshot = () => {
   takeScreenshotAndAnalyze({ value: props.showChatWindow })
@@ -136,6 +142,11 @@ onMounted(async () => {
   setupSpeechTranscriptionListeners()
   console.log('🎤 ChatWindow: Speech transcription listeners set up')
   
+  // Scroll to bottom on mount if there are messages
+  if (chatHistory.value.length > 0) {
+    await nextTick()
+    scrollChatToBottom()
+  }
 })
 
 // Cleanup speech events when component unmounts
@@ -288,29 +299,31 @@ onUnmounted(() => {
 <style scoped>
 .chat-window-section {
   @apply w-full flex justify-center;
-  padding: 8px 8px 8px 8px; /* Ensure top padding for menu button visibility */
+  padding: 8px; /* Normal padding since button is inside the window */
   background: transparent;
   /* Ensure the section doesn't get cut off */
   min-height: 100%;
   box-sizing: border-box;
+  position: relative;
 }
 
 /* Chat Window Styles */
 .chat-window {
-  @apply rounded-2xl overflow-hidden relative;
+  @apply rounded-2xl relative;
   pointer-events: auto;
   min-width: 450px;
-  min-height: 400px;
+  min-height: 500px;
   max-width: 800px;
-  max-height: calc(100vh - 80px); /* Ensure it fits within viewport with margin */
+  max-height: calc(100vh - 100px); /* Ensure it fits within viewport with margin */
+  overflow: visible; /* Allow menu button to be visible */
   
   /* Same glass effect as control panel with darker background */
   background: linear-gradient(135deg, 
-    rgba(17, 17, 21, 0.85) 0%,
-    rgba(17, 17, 21, 0.75) 25%,
-    rgba(17, 17, 21, 0.70) 50%,
-    rgba(17, 17, 21, 0.75) 75%,
-    rgba(17, 17, 21, 0.85) 100%
+    rgba(10, 10, 12, 0.90) 0%,
+    rgba(10, 10, 12, 0.80) 25%,
+    rgba(10, 10, 12, 0.75) 50%,
+    rgba(10, 10, 12, 0.80) 75%,
+    rgba(10, 10, 12, 0.90) 100%
   );
   backdrop-filter: blur(60px) saturate(180%) brightness(1.1);
   border: 1px solid rgba(255, 255, 255, 0.25);
@@ -333,7 +346,11 @@ onUnmounted(() => {
 }
 
 .chat-header {
-  @apply flex items-center justify-between px-4 py-3 border-b border-white/10;
+  @apply flex items-center justify-between py-3 border-b border-white/10;
+  padding-left: 56px; /* Space for drawer button */
+  padding-right: 16px;
+  border-radius: 16px 16px 0 0;
+  overflow: hidden;
 }
 
 .chat-title {
@@ -357,18 +374,26 @@ onUnmounted(() => {
 }
 
 .chat-drawer-trigger {
-  @apply absolute z-10 rounded-full p-2 bg-white/10 hover:bg-white/20 transition-colors;
+  @apply absolute z-20 rounded-full p-2 transition-all duration-200;
+  background: rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  /* Position it safely within the chat window bounds */
-  top: 8px;
-  left: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  /* Position it inside the chat window header */
+  top: 12px;
+  left: 12px;
   /* Ensure it's always visible */
   min-width: 36px;
   min-height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.chat-drawer-trigger:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .chat-messages {
@@ -431,7 +456,8 @@ onUnmounted(() => {
 }
 
 .chat-message.assistant .message-bubble {
-  @apply bg-white/15 text-white/90;
+  @apply text-white/90;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .chat-message.transcription .message-bubble {
@@ -491,7 +517,13 @@ onUnmounted(() => {
 }
 
 .chat-input {
-  @apply flex-1 bg-white/10 border border-white/20 rounded-full px-4 py-2 text-white placeholder-white/50 focus:outline-none focus:border-white/40 transition-colors;
+  @apply flex-1 border border-white/10 rounded-full px-4 py-2 text-white placeholder-white/50 focus:outline-none focus:border-white/30 transition-all duration-200;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chat-input:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .chat-send-btn {
