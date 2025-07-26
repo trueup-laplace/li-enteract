@@ -49,8 +49,6 @@ const {
   openChatWindow,
   toggleConversationalWindow,
   closeConversationalWindow,
-  toggleSpeechTranscription,
-  getSpeechIconClass,
   toggleMLEyeTrackingWithMovement,
   handleKeydown,
   handleClickOutside
@@ -147,9 +145,7 @@ onUnmounted(() => {
           :showAIModelsWindow="showAIModelsWindow"
           :showConversationalWindow="showConversationalWindow"
           :isGazeControlActive="isGazeControlActive"
-          :getSpeechIconClass="getSpeechIconClass"
           @toggle-ai-models="toggleAIModelsWindow"
-          @toggle-speech="toggleSpeechTranscription"
           @toggle-eye-tracking="toggleMLEyeTrackingWithMovement"
           @toggle-transparency="toggleTransparencyControls"
           @toggle-conversational="toggleConversationalWindow"

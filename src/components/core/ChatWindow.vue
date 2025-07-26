@@ -12,11 +12,14 @@ import {
   PencilIcon,
   TrashIcon,
   EllipsisVerticalIcon,
-  ClockIcon
+  ClockIcon,
+  MicrophoneIcon,
+  StopIcon
 } from '@heroicons/vue/24/outline'
 import { useChatManagement } from '../../composables/useChatManagement'
 import { useWindowResizing } from '../../composables/useWindowResizing'
 import { useSpeechEvents } from '../../composables/useSpeechEvents'
+import { useSpeechTranscription } from '../../composables/useSpeechTranscription'
 import AgentActionButtons from './AgentActionButtons.vue'
 
 interface Props {
@@ -109,6 +112,19 @@ const {
   startResize
 } = useWindowResizing()
 
+// Speech transcription for microphone button
+const {
+  initialize: initializeSpeech,
+  startRecording: startSpeechRecording,
+  stopRecording: stopSpeechRecording,
+  isRecording: isSpeechRecording,
+  isInitialized: isSpeechInitialized,
+  currentTranscript: speechCurrentTranscript,
+  error: speechError,
+  setAutoSendToChat,
+  setContinuousMode
+} = useSpeechTranscription()
+
 const closeWindow = () => {
   emit('close')
   emit('update:showChatWindow', false)
@@ -159,6 +175,24 @@ const handleStartComputerUse = () => {
 
 const handleFileUploadEvent = (event: Event) => {
   handleFileUpload(event, { value: props.showChatWindow })
+}
+
+// Microphone functionality for chat interface
+const handleMicrophoneToggle = async () => {
+  try {
+    if (isSpeechRecording.value) {
+      await stopSpeechRecording()
+      console.log('🎤 Chat: Speech recording stopped')
+    } else {
+      if (!isSpeechInitialized.value) {
+        await initializeSpeech()
+      }
+      await startSpeechRecording()
+      console.log('🎤 Chat: Speech recording started')
+    }
+  } catch (error) {
+    console.error('Chat microphone toggle error:', error)
+  }
 }
 
 // Sidebar functions
@@ -231,6 +265,18 @@ const formatRelativeTime = (dateString: string) => {
 onMounted(async () => {
   setupSpeechTranscriptionListeners()
   console.log('🎤 ChatWindow: Speech transcription listeners set up')
+  
+  // Initialize speech transcription for chat interface
+  try {
+    await initializeSpeech()
+    // Enable auto-send to chat for the chat interface (default behavior)
+    setAutoSendToChat(true)
+    // Disable continuous mode for chat interface (short recordings)
+    setContinuousMode(false)
+    console.log('🎤 ChatWindow: Speech transcription initialized for chat interface')
+  } catch (error) {
+    console.error('🎤 ChatWindow: Failed to initialize speech transcription:', error)
+  }
   
   // Scroll to bottom on mount if there are messages
   if (chatHistory.value.length > 0) {
@@ -476,6 +522,22 @@ onUnmounted(() => {
               placeholder="Ask any AI agent..."
               type="text"
             />
+            
+            <!-- Microphone Button -->
+            <button 
+              @click="handleMicrophoneToggle"
+              :disabled="!isSpeechInitialized"
+              class="chat-mic-btn"
+              :class="{
+                'recording': isSpeechRecording,
+                'disabled': !isSpeechInitialized
+              }"
+              :title="isSpeechRecording ? 'Stop recording' : 'Start voice input'"
+            >
+              <StopIcon v-if="isSpeechRecording" class="w-4 h-4" />
+              <MicrophoneIcon v-else class="w-4 h-4" />
+            </button>
+            
             <button @click="() => sendMessage()" class="chat-send-btn" :disabled="!chatMessage.trim()">
               <ShieldCheckIcon class="w-4 h-4" />
             </button>
@@ -771,6 +833,41 @@ onUnmounted(() => {
 
 .chat-input:focus {
   background: rgba(255, 255, 255, 0.1);
+}
+
+/* Chat Microphone Button */
+.chat-mic-btn {
+  @apply rounded-xl p-3 transition-all duration-200 flex items-center justify-center;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.8), rgba(22, 163, 74, 0.8));
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  color: white;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.chat-mic-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.9), rgba(22, 163, 74, 0.9));
+  border-color: rgba(34, 197, 94, 0.6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.chat-mic-btn.recording {
+  @apply animate-pulse;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.8), rgba(220, 38, 38, 0.8));
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+.chat-mic-btn.recording:hover {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.9));
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
+.chat-mic-btn.disabled {
+  background: rgba(75, 85, 99, 0.8);
+  border-color: rgba(75, 85, 99, 0.4);
+  color: rgba(255, 255, 255, 0.3);
+  cursor: not-allowed;
 }
 
 .chat-send-btn {

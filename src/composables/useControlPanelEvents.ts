@@ -124,39 +124,8 @@ export function useControlPanelEvents(
     console.log('💬 Chat window opened')
   }
 
-  // Enhanced speech transcription with error handling
-  const toggleSpeechTranscription = async (event: Event) => {
-    event.stopPropagation()
-    
-    try {
-      speechError.value = null
-      
-      if (!compatibilityReport.value.ready) {
-        speechError.value = 'Browser not compatible with speech features. ' + compatibilityReport.value.issues.join(', ')
-        return
-      }
-      
-      if (store.speechStatus.isRecording) {
-        await store.stopSpeechTranscription()
-      } else {
-        if (!store.speechStatus.isInitialized) {
-          await store.initializeSpeechTranscription('tiny')
-        }
-        await store.startSpeechTranscription()
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      speechError.value = message
-      console.error('Speech transcription error:', error)
-    }
-  }
-
-  const getSpeechIconClass = () => {
-    if (store.speechStatus.isRecording) return 'text-red-400 animate-pulse'
-    if (store.speechStatus.isProcessing) return 'text-yellow-400 animate-pulse'
-    if (store.isTranscriptionEnabled) return 'text-green-400'
-    return 'text-white/80 group-hover:text-white'
-  }
+  // Speech transcription functionality removed - now handled in chat interface
+  // The microphone button has been moved to the chat interface for better UX
 
   const toggleMLEyeTrackingWithMovement = async (event: Event) => {
     event.stopPropagation()
@@ -294,11 +263,17 @@ export function useControlPanelEvents(
       closeChatWindow()
     }
     
+    // IMPORTANT: Disable click-outside closing for conversational window
+    // The conversational window should only close via explicit user action (X button)
+    // This prevents accidental closing when using controls inside the window
+    // The original logic is commented out below:
+    /*
     if (conversationalWindow && controlPanel && showConversationalWindow.value &&
         !conversationalWindow.contains(target) && 
         !controlPanel.contains(target)) {
       closeConversationalWindow()
     }
+    */
     
     if (transparencyPanel && controlPanel && showTransparencyControls.value &&
         !transparencyPanel.contains(target) && 
@@ -325,8 +300,6 @@ export function useControlPanelEvents(
     openChatWindow,
     toggleConversationalWindow,
     closeConversationalWindow,
-    toggleSpeechTranscription,
-    getSpeechIconClass,
     toggleMLEyeTrackingWithMovement,
     handleKeydown,
     handleClickOutside
