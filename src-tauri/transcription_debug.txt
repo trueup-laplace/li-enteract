@@ -1,0 +1,108 @@
+[15:35:13.633] RMS: 0.181206 (-14.8dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:14.430] RMS: 0.177879 (-15.0dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:14.473] RMS: 0.181206 (-14.8dB) | [MAIN] Raw Whisper result: 'three years any great kind of things that we're doing.'
+[15:35:14.474] RMS: 0.181206 (-14.8dB) | [MAIN] Cleaned text: 'three years any great kind of things that we're doing.'
+[15:35:14.474] RMS: 0.181206 (-14.8dB) | [MAIN SUCCESS] three years any great kind of things that we're doing. (conf: 0.800)
+[15:35:15.230] RMS: 0.181951 (-14.8dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:15.273] RMS: 0.177879 (-15.0dB) | [MAIN] Raw Whisper result: 'great kind of things that we're doing.'
+[15:35:15.274] RMS: 0.177879 (-15.0dB) | [MAIN] Cleaned text: 'great kind of things that we're doing.'
+[15:35:15.274] RMS: 0.177879 (-15.0dB) | [MAIN SUCCESS] great kind of things that we're doing. (conf: 0.800)
+[15:35:16.025] RMS: 0.181951 (-14.8dB) | [MAIN] Raw Whisper result: 'things that we're doing, and our tools has some'
+[15:35:16.025] RMS: 0.181951 (-14.8dB) | [MAIN] Cleaned text: 'things that we're doing, and our tools has some'
+[15:35:16.026] RMS: 0.181951 (-14.8dB) | [MAIN SUCCESS] things that we're doing, and our tools has some (conf: 0.800)
+[15:35:16.036] RMS: 0.162571 (-15.8dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:16.837] RMS: 0.148780 (-16.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:16.863] RMS: 0.162571 (-15.8dB) | [MAIN] Raw Whisper result: 'and the data tools has some nice things.'
+[15:35:16.863] RMS: 0.162571 (-15.8dB) | [MAIN] Cleaned text: 'and the data tools has some nice things.'
+[15:35:16.864] RMS: 0.162571 (-15.8dB) | [MAIN SUCCESS] and the data tools has some nice things. (conf: 0.800)
+[15:35:17.634] RMS: 0.148780 (-16.5dB) | [MAIN] Raw Whisper result: 'has some nice things that could be'
+[15:35:17.634] RMS: 0.148780 (-16.5dB) | [MAIN] Cleaned text: 'has some nice things that could be'
+[15:35:17.635] RMS: 0.148780 (-16.5dB) | [MAIN SUCCESS] has some nice things that could be (conf: 0.800)
+[15:35:17.648] RMS: 0.127947 (-17.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:18.408] RMS: 0.127947 (-17.9dB) | [MAIN] Raw Whisper result: 'things like our team product.'
+[15:35:18.409] RMS: 0.127947 (-17.9dB) | [MAIN] Cleaned text: 'things like our team product.'
+[15:35:18.409] RMS: 0.127947 (-17.9dB) | [MAIN SUCCESS] things like our team product. (conf: 0.800)
+[15:35:18.458] RMS: 0.163299 (-15.7dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:19.242] RMS: 0.163299 (-15.7dB) | [MAIN] Raw Whisper result: 'product on some extra iterator'
+[15:35:19.243] RMS: 0.163299 (-15.7dB) | [MAIN] Cleaned text: 'product on some extra iterator'
+[15:35:19.243] RMS: 0.163299 (-15.7dB) | [MAIN SUCCESS] product on some extra iterator (conf: 0.800)
+[15:35:19.272] RMS: 0.165823 (-15.6dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:20.076] RMS: 0.194035 (-14.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:20.083] RMS: 0.165823 (-15.6dB) | [MAIN] Raw Whisper result: 'some extra iterator functionality.'
+[15:35:20.084] RMS: 0.165823 (-15.6dB) | [MAIN] Cleaned text: 'some extra iterator functionality.'
+[15:35:20.084] RMS: 0.165823 (-15.6dB) | [MAIN SUCCESS] some extra iterator functionality. (conf: 0.800)
+[15:35:20.842] RMS: 0.194035 (-14.2dB) | [MAIN] Raw Whisper result: 'iterator functionality. Nam is a'
+[15:35:20.843] RMS: 0.194035 (-14.2dB) | [MAIN] Cleaned text: 'iterator functionality. Nam is a'
+[15:35:20.843] RMS: 0.194035 (-14.2dB) | [MAIN SUCCESS] iterator functionality. Nam is a (conf: 0.800)
+[15:35:20.889] RMS: 0.198641 (-14.0dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:21.687] RMS: 0.226847 (-12.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:21.703] RMS: 0.198641 (-14.0dB) | [MAIN] Raw Whisper result: 'now the nam as a parcer right ten'
+[15:35:21.704] RMS: 0.198641 (-14.0dB) | [MAIN] Cleaned text: 'now the nam as a parcer right ten'
+[15:35:21.704] RMS: 0.198641 (-14.0dB) | [MAIN SUCCESS] now the nam as a parcer right ten (conf: 0.800)
+[15:35:22.498] RMS: 0.197891 (-14.1dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:22.526] RMS: 0.226847 (-12.9dB) | [MAIN] Raw Whisper result: 'Nom is a parcerite tent to use for these.'
+[15:35:22.527] RMS: 0.226847 (-12.9dB) | [MAIN] Cleaned text: 'Nom is a parcerite tent to use for these.'
+[15:35:22.528] RMS: 0.226847 (-12.9dB) | [MAIN SUCCESS] Nom is a parcerite tent to use for these. (conf: 0.800)
+[15:35:23.300] RMS: 0.173909 (-15.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:23.370] RMS: 0.197891 (-14.1dB) | [MAIN] Raw Whisper result: 'to use for these problems.'
+[15:35:23.370] RMS: 0.197891 (-14.1dB) | [MAIN] Cleaned text: 'to use for these problems.'
+[15:35:23.371] RMS: 0.197891 (-14.1dB) | [MAIN SUCCESS] to use for these problems. (conf: 0.800)
+[15:35:24.100] RMS: 0.202792 (-13.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:24.212] RMS: 0.173909 (-15.2dB) | [MAIN] Raw Whisper result: 'for these problems.'
+[15:35:24.212] RMS: 0.173909 (-15.2dB) | [MAIN] Cleaned text: 'for these problems.'
+[15:35:24.213] RMS: 0.173909 (-15.2dB) | [MAIN SUCCESS] for these problems. (conf: 0.800)
+[15:35:24.910] RMS: 0.236317 (-12.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:25.016] RMS: 0.202792 (-13.9dB) | [MAIN] Raw Whisper result: 'problems sometimes it's a little bit'
+[15:35:25.016] RMS: 0.202792 (-13.9dB) | [MAIN] Cleaned text: 'problems sometimes it's a little bit'
+[15:35:25.016] RMS: 0.202792 (-13.9dB) | [MAIN SUCCESS] problems sometimes it's a little bit (conf: 0.800)
+[15:35:25.718] RMS: 0.227607 (-12.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:25.801] RMS: 0.236317 (-12.5dB) | [MAIN] Raw Whisper result: 'sometimes it's a little bit overkill but I do'
+[15:35:25.801] RMS: 0.236317 (-12.5dB) | [MAIN] Cleaned text: 'sometimes it's a little bit overkill but I do'
+[15:35:25.802] RMS: 0.236317 (-12.5dB) | [MAIN SUCCESS] sometimes it's a little bit overkill but I do (conf: 0.800)
+[15:35:26.529] RMS: 0.187286 (-14.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:26.574] RMS: 0.227607 (-12.9dB) | [MAIN] Raw Whisper result: 'a little bit overkill, but I do like using that.'
+[15:35:26.575] RMS: 0.227607 (-12.9dB) | [MAIN] Cleaned text: 'a little bit overkill, but I do like using that.'
+[15:35:26.575] RMS: 0.227607 (-12.9dB) | [MAIN SUCCESS] a little bit overkill, but I do like using that. (conf: 0.800)
+[15:35:27.327] RMS: 0.135861 (-17.3dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:27.346] RMS: 0.187286 (-14.5dB) | [MAIN] Raw Whisper result: 'But I do like using natural parser because'
+[15:35:27.347] RMS: 0.187286 (-14.5dB) | [MAIN] Cleaned text: 'But I do like using natural parser because'
+[15:35:27.347] RMS: 0.187286 (-14.5dB) | [MAIN SUCCESS] But I do like using natural parser because (conf: 0.800)
+[15:35:28.137] RMS: 0.142897 (-16.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:28.163] RMS: 0.135861 (-17.3dB) | [MAIN] Raw Whisper result: 'using natural parser gives a little bit more strength.'
+[15:35:28.164] RMS: 0.135861 (-17.3dB) | [MAIN] Cleaned text: 'using natural parser gives a little bit more strength.'
+[15:35:28.165] RMS: 0.135861 (-17.3dB) | [MAIN SUCCESS] using natural parser gives a little bit more strength. (conf: 0.800)
+[15:35:28.941] RMS: 0.137839 (-17.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:29.037] RMS: 0.142897 (-16.9dB) | [MAIN] Raw Whisper result: 'The car circuit is a little bit more structured to my person.'
+[15:35:29.037] RMS: 0.142897 (-16.9dB) | [MAIN] Cleaned text: 'The car circuit is a little bit more structured to my person.'
+[15:35:29.038] RMS: 0.142897 (-16.9dB) | [MAIN SUCCESS] The car circuit is a little bit more structured to my person. (conf: 0.800)
+[15:35:29.749] RMS: 0.132077 (-17.6dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:29.850] RMS: 0.137839 (-17.2dB) | [MAIN] Raw Whisper result: 'a little bit more structured to my person code.'
+[15:35:29.850] RMS: 0.137839 (-17.2dB) | [MAIN] Cleaned text: 'a little bit more structured to my person code.'
+[15:35:29.851] RMS: 0.137839 (-17.2dB) | [MAIN SUCCESS] a little bit more structured to my person code. (conf: 0.800)
+[15:35:30.562] RMS: 0.140359 (-17.1dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:30.713] RMS: 0.132077 (-17.6dB) | [MAIN] Raw Whisper result: 'to my person code helps me fix issues.'
+[15:35:30.714] RMS: 0.132077 (-17.6dB) | [MAIN] Cleaned text: 'to my person code helps me fix issues.'
+[15:35:30.714] RMS: 0.132077 (-17.6dB) | [MAIN SUCCESS] to my person code helps me fix issues. (conf: 0.800)
+[15:35:31.370] RMS: 0.169592 (-15.4dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:31.577] RMS: 0.140359 (-17.1dB) | [MAIN] Raw Whisper result: 'helps me fix issues if they're orange.'
+[15:35:31.578] RMS: 0.140359 (-17.1dB) | [MAIN] Cleaned text: 'helps me fix issues if they're orange.'
+[15:35:31.578] RMS: 0.140359 (-17.1dB) | [MAIN SUCCESS] helps me fix issues if they're orange. (conf: 0.800)
+[15:35:32.182] RMS: 0.203206 (-13.8dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:32.437] RMS: 0.169592 (-15.4dB) | [MAIN] Raw Whisper result: 'of the'
+[15:35:32.438] RMS: 0.169592 (-15.4dB) | [MAIN] Cleaned text: 'of the'
+[15:35:32.438] RMS: 0.169592 (-15.4dB) | [MAIN SUCCESS] of the (conf: 0.800)
+[15:35:32.993] RMS: 0.219728 (-13.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:33.335] RMS: 0.203206 (-13.8dB) | [MAIN] Raw Whisper result: 'if they're running, ray on for some breathing.'
+[15:35:33.336] RMS: 0.203206 (-13.8dB) | [MAIN] Cleaned text: 'if they're running, ray on for some breathing.'
+[15:35:33.336] RMS: 0.203206 (-13.8dB) | [MAIN SUCCESS] if they're running, ray on for some breathing. (conf: 0.800)
+[15:35:33.804] RMS: 0.201314 (-13.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:34.204] RMS: 0.219728 (-13.2dB) | [MAIN] Raw Whisper result: 'Rayon for some really using parallelism.'
+[15:35:34.204] RMS: 0.219728 (-13.2dB) | [MAIN] Cleaned text: 'Rayon for some really using parallelism.'
+[15:35:34.205] RMS: 0.219728 (-13.2dB) | [MAIN SUCCESS] Rayon for some really using parallelism. (conf: 0.800)
+[15:35:34.601] RMS: 0.194786 (-14.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:35:35.119] RMS: 0.201314 (-13.9dB) | [MAIN] Raw Whisper result: 'some really easy parallelism. Tracer.'
+[15:35:35.120] RMS: 0.201314 (-13.9dB) | [MAIN] Cleaned text: 'some really easy parallelism. Tracer.'
+[15:35:35.120] RMS: 0.201314 (-13.9dB) | [MAIN SUCCESS] some really easy parallelism. Tracer. (conf: 0.800)
+[15:35:35.918] RMS: 0.194786 (-14.2dB) | [MAIN] Raw Whisper result: 'parallelism tracing and tracing'
+[15:35:35.919] RMS: 0.194786 (-14.2dB) | [MAIN] Cleaned text: 'parallelism tracing and tracing'
+[15:35:35.919] RMS: 0.194786 (-14.2dB) | [MAIN SUCCESS] parallelism tracing and tracing (conf: 0.600)

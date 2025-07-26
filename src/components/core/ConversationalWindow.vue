@@ -14,7 +14,9 @@ import {
   PencilIcon,
   TrashIcon,
   EllipsisVerticalIcon,
-  ClockIcon
+  ClockIcon,
+  SparklesIcon,
+  RocketLaunchIcon
 } from '@heroicons/vue/24/outline'
 import { useSpeechTranscription } from '../../composables/useSpeechTranscription'
 import { useConversationStore } from '../../stores/conversation'
@@ -48,6 +50,13 @@ const showExportControls = ref(false)
 const showConversationSidebar = ref(false)
 const allConversations = ref<any[]>([])
 const isLoadingConversations = ref(false)
+
+// AI Assistant state
+const showAIAssistant = ref(false)
+const aiResponse = ref('')
+const aiIsProcessing = ref(false)
+const aiQuery = ref('')
+const aiError = ref<string | null>(null)
 
 // Enhanced loopback transcription with intelligent sentence building
 const loopbackBuffer = ref<string>('')
@@ -959,6 +968,118 @@ const getLastMessagePreview = (conversation: any) => {
   return lastMessage.content.substring(0, 50) + (lastMessage.content.length > 50 ? '...' : '')
 }
 
+// AI Assistant Functions
+const toggleAIAssistant = () => {
+  showAIAssistant.value = !showAIAssistant.value
+  if (showAIAssistant.value) {
+    // Clear previous state when opening
+    aiResponse.value = ''
+    aiError.value = null
+    aiQuery.value = ''
+  }
+}
+
+const generateConversationContext = (): string => {
+  const currentMessages = conversationStore.currentMessages || []
+  if (currentMessages.length === 0) {
+    return "No conversation context available."
+  }
+  
+  // Format conversation for AI context
+  const contextMessages = currentMessages.map(msg => {
+    const speaker = msg.source === 'microphone' ? 'User' : 'System Audio'
+    const timestamp = new Date(msg.timestamp).toLocaleTimeString()
+    return `[${timestamp}] ${speaker}: ${msg.content}`
+  }).join('\n')
+  
+  const sessionInfo = conversationStore.currentSession ? 
+    `Session: ${conversationStore.currentSession.name} (Started: ${new Date(conversationStore.currentSession.startTime).toLocaleString()})` : 
+    'No active session'
+  
+  return `${sessionInfo}\n\nConversation Transcript:\n${contextMessages}`
+}
+
+const getAISystemPrompt = (): string => {
+  return `You are an intelligent conversation assistant integrated into a real-time conversation interface. Your role is to provide helpful, contextual assistance during ongoing conversations.
+
+CONTEXT: You will be provided with a conversation transcript that includes both user speech (from microphone) and system audio (from other applications/meetings). Your job is to analyze this context and provide relevant assistance.
+
+GUIDELINES:
+- Analyze the conversation context before responding
+- Provide helpful, relevant suggestions and insights
+- Maintain the conversation's tone and style
+- Offer continuation prompts when appropriate
+- Be concise but thorough in your responses
+- Avoid interrupting natural conversation flow
+- Focus on being genuinely helpful rather than verbose
+- If asked about technical topics, provide accurate and practical advice
+- If the conversation seems to be ending, offer thoughtful summaries or next steps
+
+RESPONSE STYLE:
+- Keep responses conversational and natural
+- Use bullet points for multiple suggestions
+- Be encouraging and supportive
+- Adapt your tone to match the conversation context
+
+Remember: You are an assistant, not a participant. Your goal is to enhance the conversation experience without being intrusive.`
+}
+
+const queryAIAssistant = async () => {
+  if (!aiQuery.value.trim() || aiIsProcessing.value) return
+  
+  try {
+    aiIsProcessing.value = true
+    aiError.value = null
+    aiResponse.value = ''
+    
+    const conversationContext = generateConversationContext()
+    const systemPrompt = getAISystemPrompt()
+    
+    // Construct the full prompt with context
+    const fullPrompt = `${systemPrompt}
+
+CURRENT CONVERSATION CONTEXT:
+${conversationContext}
+
+USER QUERY: ${aiQuery.value.trim()}
+
+Please provide a helpful response based on the conversation context and user query:`
+
+    console.log('🤖 Querying AI Assistant with context:', { 
+      contextLength: conversationContext.length,
+      query: aiQuery.value.trim()
+    })
+    
+    // Call Ollama API through Tauri
+    const response = await invoke<string>('query_ollama', {
+      model: 'gemma2:2b', // Using Gemma model as specified
+      prompt: fullPrompt,
+      system: '', // System prompt is included in main prompt for better context integration
+      temperature: 0.7,
+      maxTokens: 500 // Keep responses concise
+    })
+    
+    aiResponse.value = response.trim()
+    console.log('🤖 AI Assistant response received:', aiResponse.value.substring(0, 100) + '...')
+    
+  } catch (error) {
+    console.error('🤖 AI Assistant error:', error)
+    aiError.value = error instanceof Error ? error.message : 'Failed to get AI response'
+  } finally {
+    aiIsProcessing.value = false
+  }
+}
+
+const handleAIQueryKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    queryAIAssistant()
+  } else if (event.key === 'Escape') {
+    event.preventDefault()
+    showAIAssistant.value = false
+  }
+}
+
 // Cleanup
 onUnmounted(async () => {
   window.removeEventListener('transcription-final', handleConversationalUserSpeech)
@@ -1021,6 +1142,17 @@ onUnmounted(async () => {
                   <MicrophoneIcon class="w-3 h-3" />
                 </div>
               </div>
+              
+              <!-- AI Assistant Button -->
+              <button 
+                @click="toggleAIAssistant" 
+                class="ai-assistant-btn"
+                :class="{ 'active': showAIAssistant, 'processing': aiIsProcessing }"
+                title="AI Conversation Assistant"
+              >
+                <SparklesIcon v-if="!aiIsProcessing" class="w-4 h-4" />
+                <RocketLaunchIcon v-else class="w-4 h-4 animate-pulse" />
+              </button>
               
               <!-- Conversation History Button -->
               <button 
@@ -1284,6 +1416,94 @@ onUnmounted(async () => {
           </div>
         </div>
           </div> <!-- End main-content -->
+          
+          <!-- AI Assistant Drawer -->
+          <div v-if="showAIAssistant" class="ai-assistant-drawer">
+            <div class="ai-drawer-header">
+              <div class="flex items-center gap-2">
+                <SparklesIcon class="w-4 h-4 text-blue-400" />
+                <h3 class="text-sm font-medium text-white">AI Conversation Assistant</h3>
+              </div>
+              <button @click="showAIAssistant = false" class="close-drawer-btn">
+                <XMarkIcon class="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div class="ai-drawer-content">
+              <!-- AI Query Input -->
+              <div class="ai-query-section">
+                <textarea
+                  v-model="aiQuery"
+                  @keydown="handleAIQueryKeydown"
+                  class="ai-query-input"
+                  placeholder="Ask the AI assistant about this conversation..."
+                  rows="3"
+                  :disabled="aiIsProcessing"
+                />
+                <button 
+                  @click="queryAIAssistant"
+                  :disabled="!aiQuery.trim() || aiIsProcessing"
+                  class="ai-query-btn"
+                >
+                  <RocketLaunchIcon v-if="aiIsProcessing" class="w-4 h-4 animate-pulse" />
+                  <PaperAirplaneIcon v-else class="w-4 h-4" />
+                </button>
+              </div>
+              
+              <!-- AI Response Area -->
+              <div class="ai-response-section">
+                <div v-if="aiError" class="ai-error">
+                  <div class="error-header">
+                    <XMarkIcon class="w-4 h-4 text-red-400" />
+                    <span class="text-sm text-red-400">Error</span>
+                  </div>
+                  <p class="text-xs text-red-300 mt-1">{{ aiError }}</p>
+                </div>
+                
+                <div v-else-if="aiIsProcessing" class="ai-processing">
+                  <div class="processing-indicator">
+                    <RocketLaunchIcon class="w-5 h-5 text-blue-400 animate-pulse" />
+                    <span class="text-sm text-blue-400">AI is thinking...</span>
+                  </div>
+                </div>
+                
+                <div v-else-if="aiResponse" class="ai-response">
+                  <div class="response-header">
+                    <SparklesIcon class="w-4 h-4 text-green-400" />
+                    <span class="text-sm text-green-400">AI Assistant</span>
+                  </div>
+                  <div class="response-content">
+                    <p class="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">{{ aiResponse }}</p>
+                  </div>
+                </div>
+                
+                <div v-else class="ai-empty-state">
+                  <SparklesIcon class="w-8 h-8 text-white/20 mx-auto mb-2" />
+                  <p class="text-white/60 text-xs text-center">Ask the AI assistant about your conversation</p>
+                  <p class="text-white/40 text-xs text-center mt-1">The AI will analyze your conversation context to provide helpful insights</p>
+                </div>
+              </div>
+              
+              <!-- Quick Suggestions -->
+              <div class="ai-suggestions" v-if="!aiIsProcessing && !aiResponse && messages.length > 0">
+                <p class="text-xs text-white/60 mb-2">Quick suggestions:</p>
+                <div class="suggestion-buttons">
+                  <button @click="aiQuery = 'Summarize this conversation'; queryAIAssistant()" class="suggestion-btn">
+                    📝 Summarize
+                  </button>
+                  <button @click="aiQuery = 'What are the key points discussed?'; queryAIAssistant()" class="suggestion-btn">
+                    🎯 Key Points
+                  </button>
+                  <button @click="aiQuery = 'Suggest follow-up questions'; queryAIAssistant()" class="suggestion-btn">
+                    ❓ Follow-ups
+                  </button>
+                  <button @click="aiQuery = 'What should I do next?'; queryAIAssistant()" class="suggestion-btn">
+                    🚀 Next Steps
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div> <!-- End window-content -->
     </div>
   </Transition>
@@ -1318,11 +1538,24 @@ onUnmounted(async () => {
   max-width: 95vw;
 }
 
+/* When AI assistant is shown, make window wider */
+.conversational-window:has(.ai-assistant-drawer) {
+  width: 980px;
+  max-width: 95vw;
+}
+
+/* When both sidebar and AI assistant are shown */
+.conversational-window:has(.conversation-sidebar):has(.ai-assistant-drawer) {
+  width: 1280px;
+  max-width: 95vw;
+}
+
 .window-content {
   @apply flex-1 flex flex-col min-h-0;
 }
 
-.conversational-window:has(.conversation-sidebar) .window-content {
+.conversational-window:has(.conversation-sidebar) .window-content,
+.conversational-window:has(.ai-assistant-drawer) .window-content {
   @apply flex flex-row;
 }
 
@@ -1727,19 +1960,161 @@ onUnmounted(async () => {
 }
 
 
+/* AI Assistant Button */
+.ai-assistant-btn {
+  @apply rounded-full p-1 hover:bg-white/10 transition-all duration-200 text-white/60 hover:text-white/90;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1));
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.ai-assistant-btn.active {
+  @apply bg-blue-500/20 text-blue-400 hover:bg-blue-500/30;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(147, 51, 234, 0.3));
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.ai-assistant-btn.processing {
+  @apply bg-blue-500/30 text-blue-300;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.4), rgba(147, 51, 234, 0.4));
+  border-color: rgba(59, 130, 246, 0.6);
+}
+
+/* AI Assistant Drawer */
+.ai-assistant-drawer {
+  @apply w-80 border-l border-white/10 bg-white/5 backdrop-blur-sm flex flex-col;
+  min-width: 320px;
+  max-width: 400px;
+  background: linear-gradient(135deg, 
+    rgba(15, 15, 20, 0.95) 0%,
+    rgba(10, 15, 25, 0.95) 50%,
+    rgba(15, 15, 20, 0.95) 100%
+  );
+}
+
+.ai-drawer-header {
+  @apply flex items-center justify-between px-4 py-3 border-b border-white/10;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.close-drawer-btn {
+  @apply rounded-full p-1 hover:bg-white/10 transition-colors text-white/70 hover:text-white;
+}
+
+.ai-drawer-content {
+  @apply flex-1 overflow-hidden flex flex-col p-4 gap-4;
+}
+
+/* AI Query Section */
+.ai-query-section {
+  @apply flex flex-col gap-2;
+}
+
+.ai-query-input {
+  @apply w-full border border-white/20 rounded-lg px-3 py-2 text-white placeholder-white/50 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 resize-none;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  font-size: 13px;
+}
+
+.ai-query-input:focus {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ai-query-btn {
+  @apply self-end rounded-lg p-2 transition-all duration-200 flex items-center justify-center;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.8), rgba(37, 99, 235, 0.8));
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  color: white;
+  min-width: 36px;
+  min-height: 36px;
+}
+
+.ai-query-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.9), rgba(37, 99, 235, 0.9));
+  border-color: rgba(59, 130, 246, 0.6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.ai-query-btn:disabled {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.3);
+  cursor: not-allowed;
+}
+
+/* AI Response Section */
+.ai-response-section {
+  @apply flex-1 overflow-y-auto;
+  min-height: 200px;
+}
+
+.ai-error {
+  @apply p-3 rounded-lg bg-red-500/10 border border-red-500/30;
+}
+
+.error-header {
+  @apply flex items-center gap-2;
+}
+
+.ai-processing {
+  @apply flex items-center justify-center p-8;
+}
+
+.processing-indicator {
+  @apply flex flex-col items-center gap-2;
+}
+
+.ai-response {
+  @apply p-3 rounded-lg bg-green-500/10 border border-green-500/30;
+}
+
+.response-header {
+  @apply flex items-center gap-2 mb-2;
+}
+
+.response-content {
+  @apply pl-6;
+}
+
+.ai-empty-state {
+  @apply flex flex-col items-center justify-center p-8 text-center;
+}
+
+/* AI Suggestions */
+.ai-suggestions {
+  @apply border-t border-white/10 pt-4;
+}
+
+.suggestion-buttons {
+  @apply flex flex-wrap gap-2;
+}
+
+.suggestion-btn {
+  @apply px-3 py-1 rounded-full text-xs bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-all duration-200 border border-white/20;
+}
+
+.suggestion-btn:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.1);
+}
+
 /* Scrollbar */
 .conversation-area::-webkit-scrollbar,
-.conversations-list::-webkit-scrollbar {
+.conversations-list::-webkit-scrollbar,
+.ai-response-section::-webkit-scrollbar {
   width: 4px;
 }
 
 .conversation-area::-webkit-scrollbar-track,
-.conversations-list::-webkit-scrollbar-track {
+.conversations-list::-webkit-scrollbar-track,
+.ai-response-section::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .conversation-area::-webkit-scrollbar-thumb,
-.conversations-list::-webkit-scrollbar-thumb {
+.conversations-list::-webkit-scrollbar-thumb,
+.ai-response-section::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
 }
