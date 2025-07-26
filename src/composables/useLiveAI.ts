@@ -1,5 +1,6 @@
 import { ref, Ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 
 export interface LiveAISession {
   id: string
@@ -21,6 +22,7 @@ export function useLiveAI() {
   const response = ref('')
   const isProcessing = ref(false)
   const error = ref<string | null>(null)
+  let streamListener: any = null
 
   const startLiveAI = async (messages: any[]): Promise<void> => {
     try {
@@ -31,12 +33,35 @@ export function useLiveAI() {
       const newSessionId = `live-ai-${Date.now()}`
       sessionId.value = newSessionId
       
-      // TODO: Implement live AI backend commands
-      // For now, just simulate the functionality
-      console.log('🚀 Live AI session simulated (backend not implemented):', newSessionId)
+      // Set up streaming listener for live AI responses
+      streamListener = await listen(`ollama-stream-${newSessionId}`, (event: any) => {
+        const data = event.payload
+        
+        if (data.type === 'start') {
+          console.log('🚀 Live AI streaming started')
+          isProcessing.value = true
+          response.value = ''
+        } else if (data.type === 'chunk') {
+          response.value += data.text
+        } else if (data.type === 'complete') {
+          console.log('✅ Live AI streaming completed')
+          isProcessing.value = false
+        } else if (data.type === 'error') {
+          console.error('❌ Live AI streaming error:', data.error)
+          error.value = data.error
+          isProcessing.value = false
+        }
+      })
       
       isActive.value = true
-      response.value = "Live AI is not yet implemented in the backend. This feature will analyze conversations in real-time once the Rust commands are added."
+      console.log('🚀 Live AI session started:', newSessionId)
+      
+      // Initial analysis of current conversation context
+      if (messages.length > 0) {
+        await analyzeConversationContext(messages)
+      } else {
+        response.value = "Live AI Response Assistant is now active. The AI will provide real-time response suggestions when you're in a conversation."
+      }
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to start Live AI'
       console.error('Failed to start Live AI:', err)
@@ -49,40 +74,68 @@ export function useLiveAI() {
     if (!sessionId.value) return
     
     try {
-      // TODO: Implement stop command in backend
-      console.log('⏹️ Live AI session stopped (simulated):', sessionId.value)
+      console.log('⏹️ Live AI session stopped:', sessionId.value)
+      
+      // Clean up stream listener
+      if (streamListener) {
+        streamListener()
+        streamListener = null
+      }
       
       isActive.value = false
       response.value = ''
+      sessionId.value = null
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to stop Live AI'
       console.error('Failed to stop Live AI:', err)
     }
   }
 
-  const processLiveContext = async (messages: any[]): Promise<void> => {
+  const analyzeConversationContext = async (messages: any[]): Promise<void> => {
     if (!isActive.value || !sessionId.value) return
     
     try {
       isProcessing.value = true
       
-      // Process the current conversation context
-      const result = await invoke<LiveAIResponse>('process_live_ai_context', {
-        sessionId: sessionId.value,
-        messages: messages
-      })
+      // Format conversation context for the AI
+      const conversationContext = messages
+        .filter(msg => !msg.isPreview) // Exclude preview messages
+        .slice(-10) // Only take the last 10 messages for context
+        .map(msg => `${msg.type === 'user' ? 'User' : 'System'}: ${msg.content}`)
+        .join('\n')
       
-      if (result && result.text) {
-        response.value = result.text
+      if (conversationContext.trim()) {
+        console.log('💬 Analyzing conversation context for response suggestions')
+        
+        // Call the conversational AI backend function
+        await invoke('generate_conversational_ai', {
+          conversationContext,
+          sessionId: sessionId.value
+        })
       }
     } catch (err) {
-      console.error('Failed to process live context:', err)
-    } finally {
-      isProcessing.value = false
+      console.error('Failed to analyze conversation context:', err)
+      error.value = err instanceof Error ? err.message : 'Failed to analyze conversation'
+    }
+  }
+
+  // Function to trigger response assistance when system is speaking
+  const onSystemSpeaking = async (messages: any[]): Promise<void> => {
+    if (!isActive.value) return
+    
+    // Only trigger if the last message is from system/loopback
+    const lastMessage = messages[messages.length - 1]
+    if (lastMessage && lastMessage.source === 'loopback' && !lastMessage.isPreview) {
+      console.log('🎤 System is speaking, generating response suggestions...')
+      await analyzeConversationContext(messages)
     }
   }
 
   const reset = () => {
+    if (streamListener) {
+      streamListener()
+      streamListener = null
+    }
     isActive.value = false
     sessionId.value = null
     response.value = ''
@@ -98,7 +151,8 @@ export function useLiveAI() {
     error,
     startLiveAI,
     stopLiveAI,
-    processLiveContext,
+    analyzeConversationContext,
+    onSystemSpeaking,
     reset
   }
 }

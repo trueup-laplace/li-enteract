@@ -588,7 +588,7 @@ pub async fn generate_conversational_ai(
     conversation_context: String,
     session_id: String,
 ) -> Result<(), String> {
-    let model = "gemma:1.5b".to_string(); // Using Gemma 1.5B as specified for optimal performance
+    let model = "gemma3:1b-it-qat".to_string(); // Using same model as enteract agent for consistency
     
     // Format the prompt to include the conversation context for live analysis
     let full_prompt = format!("LIVE CONVERSATION CONTEXT:\n{}\n\nAnalyze this ongoing conversation and suggest a thoughtful response or contribution that would add value to the discussion. Provide 1-2 concise response options that match the conversation's tone and advance the dialogue.", conversation_context);

@@ -105,7 +105,8 @@ const {
   isProcessing: liveAIIsProcessing,
   error: liveAIError,
   startLiveAI,
-  stopLiveAI
+  stopLiveAI,
+  onSystemSpeaking
 } = useLiveAI()
 
 // Computed
@@ -160,6 +161,23 @@ watch(showConversationSidebar, async (newValue) => {
     console.error('❌ Failed to resize window for sidebar:', error)
   }
 })
+
+// Watch for new messages to trigger live AI response assistance
+watch(messages, async (newMessages, oldMessages) => {
+  if (!isLiveAIActive.value || !newMessages.length) return
+  
+  // Check if a new system message was added
+  const newSystemMessages = newMessages.filter(msg => 
+    msg.source === 'loopback' && 
+    !msg.isPreview &&
+    (!oldMessages || !oldMessages.find(oldMsg => oldMsg.id === msg.id))
+  )
+  
+  if (newSystemMessages.length > 0) {
+    console.log('🎤 New system message detected, triggering response assistance')
+    await onSystemSpeaking(newMessages)
+  }
+}, { deep: true })
 
 // Initialize when component mounts
 onMounted(async () => {

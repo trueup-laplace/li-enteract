@@ -36,6 +36,17 @@ const statusMessage = computed(() => {
   }
   return 'Click Start to enable live AI responses'
 })
+
+const copyToClipboard = async () => {
+  if (!props.response) return
+  
+  try {
+    await navigator.clipboard.writeText(props.response)
+    console.log('✅ Response suggestion copied to clipboard')
+  } catch (error) {
+    console.error('❌ Failed to copy to clipboard:', error)
+  }
+}
 </script>
 
 <template>
@@ -93,18 +104,32 @@ const statusMessage = computed(() => {
         <div v-else-if="response" class="live-response">
           <div class="response-header">
             <RocketLaunchIcon class="w-4 h-4 text-orange-400" />
-            <span class="text-sm text-orange-400">Live AI Response</span>
+            <span class="text-sm text-orange-400">Response Suggestions</span>
           </div>
           <div class="response-content">
-            <p class="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">{{ response }}</p>
+            <div class="response-text">
+              <p class="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">{{ response }}</p>
+            </div>
+            <div class="response-actions">
+              <button 
+                class="action-btn copy-btn"
+                @click="copyToClipboard"
+                title="Copy suggestion to clipboard"
+              >
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy
+              </button>
+            </div>
           </div>
         </div>
         
         <div v-else class="live-empty-state">
           <RocketLaunchIcon class="w-8 h-8 text-white/20 mx-auto mb-2" />
-          <p class="text-white/60 text-xs text-center">Live AI Response System</p>
+          <p class="text-white/60 text-xs text-center">Live Response Assistant</p>
           <p class="text-white/40 text-xs text-center mt-1">
-            The AI will provide real-time responses and insights during your conversation
+            Start recording to enable AI-powered response suggestions
           </p>
         </div>
       </div>
@@ -112,12 +137,13 @@ const statusMessage = computed(() => {
       <!-- Info Section -->
       <div class="live-info-section">
         <div class="info-card">
-          <h4 class="text-xs font-medium text-white/80 mb-1">How it works:</h4>
+          <h4 class="text-xs font-medium text-white/80 mb-1">Response Assistance:</h4>
           <ul class="text-xs text-white/60 space-y-1">
-            <li>• AI listens to the conversation in real-time</li>
-            <li>• Provides contextual responses automatically</li>
-            <li>• Suggests relevant information as you speak</li>
-            <li>• Helps maintain conversation flow</li>
+            <li>• AI analyzes conversation context in real-time</li>
+            <li>• Provides thoughtful response suggestions when others speak</li>
+            <li>• Helps you contribute meaningfully to discussions</li>
+            <li>• Adapts to conversation tone and topic</li>
+            <li>• Click "Copy" to use suggested responses</li>
           </ul>
         </div>
       </div>
@@ -257,7 +283,25 @@ const statusMessage = computed(() => {
 }
 
 .response-content {
+  @apply space-y-3;
+}
+
+.response-text {
   @apply pl-6;
+}
+
+.response-actions {
+  @apply flex justify-end gap-2 pt-2 border-t border-orange-500/20;
+}
+
+.action-btn {
+  @apply flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-all duration-200;
+  @apply hover:transform hover:scale-105;
+}
+
+.copy-btn {
+  @apply bg-orange-500/20 text-orange-400 border border-orange-500/30;
+  @apply hover:bg-orange-500/30 hover:border-orange-500/50;
 }
 
 .live-empty-state {
