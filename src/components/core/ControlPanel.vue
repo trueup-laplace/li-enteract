@@ -75,17 +75,22 @@ const {
 
 // Watch for window state changes to resize window
 watch(showChatWindow, async (newValue) => {
-  await resizeWindow(newValue, showTransparencyControls.value, showAIModelsWindow.value)
+  await resizeWindow(newValue, showTransparencyControls.value, showAIModelsWindow.value, showConversationalWindow.value, false)
 })
 
 watch(showTransparencyControls, async (newValue) => {
   console.log(`🔧 TRANSPARENCY WATCH: newValue=${newValue}, showChat=${showChatWindow.value}, showAI=${showAIModelsWindow.value}`)
-  await resizeWindow(showChatWindow.value, newValue, showAIModelsWindow.value)
+  await resizeWindow(showChatWindow.value, newValue, showAIModelsWindow.value, showConversationalWindow.value, false)
   console.log('🔧 TRANSPARENCY WATCH: Skipping resize to debug issue')
 })
 
 watch(showAIModelsWindow, async (newValue) => {
-  await resizeWindow(showChatWindow.value, showTransparencyControls.value, newValue)
+  await resizeWindow(showChatWindow.value, showTransparencyControls.value, newValue, showConversationalWindow.value, false)
+})
+
+watch(showConversationalWindow, async (newValue) => {
+  console.log(`🔧 CONVERSATIONAL WATCH: newValue=${newValue}`)
+  await resizeWindow(showChatWindow.value, showTransparencyControls.value, showAIModelsWindow.value, newValue, false)
 })
 
 // Expose the openChatWindow method for parent components
@@ -105,7 +110,7 @@ onMounted(async () => {
   
   await store.initializeSpeechTranscription('small')
   
-  await resizeWindow(false, false, false)
+  await resizeWindow(false, false, false, false, false)
   
   console.log('⌨️ Keyboard Shortcuts:')
   console.log('   Ctrl+Shift+E = Start/Stop ML Eye Tracking + Window Movement')

@@ -22,11 +22,11 @@ export const useWindowResizing = () => {
   const resizeStartSize = ref({ width: 0, height: 0 })
 
   // Dynamic window resizing
-  const resizeWindow = async (showChat: boolean, showTransparency: boolean = false, showAIModels: boolean = false) => {
+  const resizeWindow = async (showChat: boolean, showTransparency: boolean = false, showAIModels: boolean = false, showConversational: boolean = false, conversationSidebarOpen: boolean = false) => {
     try {
       let height = CONTROL_PANEL_HEIGHT
       
-      console.log(`🔧 RESIZE DEBUG - showChat: ${showChat}, showTransparency: ${showTransparency}, showAIModels: ${showAIModels}`)
+      console.log(`🔧 RESIZE DEBUG - showChat: ${showChat}, showTransparency: ${showTransparency}, showAIModels: ${showAIModels}, showConversational: ${showConversational}, conversationSidebarOpen: ${conversationSidebarOpen}`)
       
       // Add transparency panel height if shown
       if (showTransparency) {
@@ -40,6 +40,12 @@ export const useWindowResizing = () => {
         console.log(`🔧 Added settings drawer height: ${height}px`)
       }
       
+      // Add conversational window height if shown
+      if (showConversational) {
+        height += 700 // Conversational window height
+        console.log(`🔧 Added conversational window height: ${height}px`)
+      }
+      
       // Add chat window height if shown
       if (showChat) {
         height += chatWindowSize.value.height + 20
@@ -51,6 +57,17 @@ export const useWindowResizing = () => {
       // Increase width for settings drawer to accommodate side navigation
       if (showAIModels) {
         width = Math.max(950, width) // Wider for drawer layout
+      }
+      
+      // Increase width for conversational window
+      if (showConversational) {
+        if (conversationSidebarOpen) {
+          width = Math.max(980, width) // Expanded width when sidebar is open
+          console.log(`🔧 Added conversational window width with sidebar: ${width}px`)
+        } else {
+          width = Math.max(600, width) // Default conversational window width
+          console.log(`🔧 Added conversational window width (no sidebar): ${width}px`)
+        }
       }
       
       // Validate dimensions before setting

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue'
 import { 
   MicrophoneIcon, 
   SpeakerWaveIcon, 
@@ -18,6 +18,7 @@ import {
 } from '@heroicons/vue/24/outline'
 import { useSpeechTranscription } from '../../composables/useSpeechTranscription'
 import { useConversationStore } from '../../stores/conversation'
+import { useWindowResizing } from '../../composables/useWindowResizing'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 
@@ -33,8 +34,9 @@ interface Emits {
 defineProps<Props>()
 const emit = defineEmits<Emits>()
 
-// Store
+// Store and composables
 const conversationStore = useConversationStore()
+const { resizeWindow } = useWindowResizing()
 
 // State
 const scrollContainer = ref<HTMLElement>()
@@ -117,13 +119,24 @@ const {
   setContinuousMode
 } = useSpeechTranscription()
 
+// Watch for sidebar changes to resize window appropriately
+watch(showConversationSidebar, async (newValue) => {
+  try {
+    console.log(`🔧 CONVERSATION SIDEBAR TOGGLED: ${newValue}`)
+    // Trigger window resize to accommodate sidebar changes
+    // Pass the sidebar state to determine proper width (600px vs 980px)
+    await resizeWindow(false, false, false, true, newValue)
+    console.log('✅ Window resized for conversation sidebar')
+  } catch (error) {
+    console.error('❌ Failed to resize window for sidebar:', error)
+  }
+})
+
 // Initialize when component mounts
 onMounted(async () => {
   try {
-    // Create or resume a conversation session
-    if (!conversationStore.currentSession) {
-      conversationStore.createSession()
-    }
+    // Don't create a session here - sessions are created when recording starts
+    // This ensures one conversation per recording session
     
     // Initialize speech transcription
     await initializeSpeech()
@@ -378,18 +391,16 @@ const handleMicrophoneToggle = async () => {
       // Always try to stop audio loopback when stopping recording
       await stopAudioLoopbackCapture()
       
-      // End the current session if there are messages
+      // End the current session when recording stops (save the conversation)
       if (conversationStore.currentSession && conversationStore.currentSession.messages.length > 0) {
         conversationStore.endSession()
-        // Show the conversation sidebar so user can see the completed conversation
-        showConversationSidebar.value = true
-        await loadConversations()
+        console.log('💾 Recording stopped - conversation saved')
+      } else {
+        console.log('🎤 Recording stopped - no messages to save')
       }
     } else {
-      // Ensure we have a current session before starting recording
-      if (!conversationStore.currentSession) {
-        conversationStore.createSession()
-      }
+      // Create a new session when starting recording
+      conversationStore.createSession()
       
       // Start both microphone and audio loopback
       conversationStore.setRecordingState(true)
@@ -397,6 +408,8 @@ const handleMicrophoneToggle = async () => {
       if (audioLoopbackDeviceId.value && !isAudioLoopbackActive.value) {
         await startAudioLoopbackCapture()
       }
+      
+      console.log('🎤 Recording started - new conversation session created')
     }
   } catch (error) {
     console.error('Microphone toggle error:', error)
@@ -481,22 +494,99 @@ const loadConversations = async () => {
   }
 }
 
-const handleNewConversation = () => {
-  conversationStore.createSession()
-  showConversationSidebar.value = false
+const handleNewConversation = async () => {
+  try {
+    console.log('🆕 Starting new conversation')
+    
+    // Prevent any recording-related state conflicts
+    if (isRecording.value) {
+      console.log('⚠️ Recording active - stopping before creating new conversation')
+      await handleMicrophoneToggle() // This will save current session
+    }
+    
+    // Use nextTick to ensure clean state transition
+    await nextTick()
+    
+    // Create a new session (only if we don't have an active one)
+    if (!conversationStore.currentSession || conversationStore.currentSession.messages.length === 0) {
+      conversationStore.createSession()
+    }
+    
+    showConversationSidebar.value = false
+    console.log('✅ New conversation started successfully')
+  } catch (error) {
+    console.error('❌ Failed to create new conversation:', error)
+    // Don't let errors close the window - just log them
+  }
 }
 
-const handleResumeConversation = (conversationId: string) => {
-  conversationStore.switchToSession(conversationId)
-  showConversationSidebar.value = false
+const handleResumeConversation = async (conversationId: string) => {
+  try {
+    console.log('🔄 Attempting to resume conversation:', conversationId)
+    
+    // Stop any active recording before switching
+    if (isRecording.value) {
+      console.log('⚠️ Recording active - stopping before resuming conversation')
+      await handleMicrophoneToggle() // This will save current session
+    }
+    
+    // Use nextTick to ensure state updates are processed
+    await nextTick()
+    
+    // Switch to the selected conversation
+    conversationStore.switchToSession(conversationId)
+    showConversationSidebar.value = false
+    
+    // Scroll to bottom to show latest messages
+    await scrollToBottom()
+    
+    console.log('✅ Conversation resumed successfully:', conversationId)
+  } catch (error) {
+    console.error('❌ Failed to resume conversation:', error)
+    // Don't let errors propagate and close the window
+    showConversationSidebar.value = false // At least close sidebar on error
+  }
 }
 
 const handleDeleteConversation = async (conversationId: string) => {
   try {
+    console.log('🗑️ Deleting conversation:', conversationId)
+    
+    // Stop any active recording if we're deleting the current session
+    if (conversationStore.currentSession?.id === conversationId && isRecording.value) {
+      console.log('⚠️ Stopping recording before deleting current session')
+      await handleMicrophoneToggle()
+    }
+    
+    // If deleting current session, create a new empty one
+    const wasCurrentSession = conversationStore.currentSession?.id === conversationId
+    if (wasCurrentSession) {
+      console.log('⚠️ Deleting current active session - creating new session')
+      // Clear current session first, then delete
+      conversationStore.currentSession = null
+    }
+    
+    // Delete the conversation
     await conversationStore.deleteSession(conversationId)
+    
+    // If we deleted the current session, create a new one
+    if (wasCurrentSession) {
+      // Don't create a session automatically - let user start recording to create one
+      console.log('📝 Deleted current session - ready for new conversation')
+    }
+    
+    // Reload conversations list
     await loadConversations()
+    console.log('✅ Conversation deleted successfully')
   } catch (error) {
-    console.error('Failed to delete conversation:', error)
+    console.error('❌ Failed to delete conversation:', error)
+    // Don't let deletion errors close the window
+    // Just reload conversations to ensure UI state is consistent
+    try {
+      await loadConversations()
+    } catch (reloadError) {
+      console.error('❌ Failed to reload conversations after delete error:', reloadError)
+    }
   }
 }
 
@@ -562,9 +652,14 @@ onUnmounted(async () => {
   setContinuousMode(false)
   console.log('🎤 Auto-send to chat re-enabled for main interface, continuous mode disabled')
   
-  // End the current session when window closes
-  if (conversationStore.currentSession) {
+  // End any active session when window closes (conversations are now saved per recording session)
+  if (conversationStore.currentSession && conversationStore.currentSession.messages.length > 0) {
     conversationStore.endSession()
+    console.log('💾 Final conversation saved when window closed')
+  } else if (conversationStore.currentSession) {
+    // If there are no messages, just clear the session without saving
+    conversationStore.currentSession = null
+    console.log('🗑️ Empty conversation session cleared on window close')
   }
 })
 </script>
@@ -639,7 +734,7 @@ onUnmounted(async () => {
             
             <div class="sidebar-content">
               <!-- New Conversation Button -->
-              <button @click="handleNewConversation" class="new-conversation-btn">
+              <button @click="() => handleNewConversation()" class="new-conversation-btn">
                 <PlusIcon class="w-4 h-4" />
                 New Conversation
               </button>
@@ -662,12 +757,12 @@ onUnmounted(async () => {
                     :key="conversation.id"
                     class="conversation-item"
                     :class="{ 'active': conversation.isActive }"
-                    @click="handleResumeConversation(conversation.id)"
+                    @click="() => handleResumeConversation(conversation.id)"
                   >
                     <div class="conversation-header">
                       <span class="conversation-title">{{ conversation.name }}</span>
                       <button 
-                        @click.stop="handleDeleteConversation(conversation.id)"
+                        @click.stop="() => handleDeleteConversation(conversation.id)"
                         class="delete-btn"
                         title="Delete conversation"
                       >
