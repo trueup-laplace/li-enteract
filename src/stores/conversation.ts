@@ -90,6 +90,7 @@ export const useConversationStore = defineStore('conversation', () => {
 
   // Actions
   const createSession = (name?: string): ConversationSession => {
+    console.log('🆕 Store: Creating new session')
     const session: ConversationSession = {
       id: `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       name: name || `Conversation ${new Date().toLocaleTimeString()}`,
@@ -98,8 +99,15 @@ export const useConversationStore = defineStore('conversation', () => {
       isActive: true
     }
 
+    // Deactivate any existing current session
+    if (currentSession.value) {
+      currentSession.value.isActive = false
+      console.log('🆕 Store: Deactivated previous session')
+    }
+
     sessions.value.push(session)
     currentSession.value = session
+    console.log('🆕 Store: Session created successfully:', session.id)
     return session
   }
 
@@ -121,13 +129,20 @@ export const useConversationStore = defineStore('conversation', () => {
   const switchToSession = (sessionId: string) => {
     const session = sessions.value.find(s => s.id === sessionId)
     if (session) {
-      // End current session if any
+      console.log('🔄 Store: Switching to session:', sessionId)
+      
+      // Simply deactivate current session without ending it (no endTime)
       if (currentSession.value) {
-        endSession(currentSession.value.id)
+        console.log('🔄 Store: Deactivating current session:', currentSession.value.id)
+        currentSession.value.isActive = false
       }
       
+      // Activate the target session
       session.isActive = true
       currentSession.value = session
+      console.log('🔄 Store: Session switched successfully')
+    } else {
+      console.error('🔄 Store: Session not found:', sessionId)
     }
   }
 
@@ -178,22 +193,29 @@ export const useConversationStore = defineStore('conversation', () => {
 
   const deleteSession = async (sessionId: string) => {
     try {
+      console.log(`🗑️ Store: Deleting session ${sessionId}`)
       await invoke('delete_conversation', { conversationId: sessionId })
+      console.log(`🗑️ Store: Backend delete successful for ${sessionId}`)
       
       const sessionIndex = sessions.value.findIndex(s => s.id === sessionId)
       if (sessionIndex !== -1) {
         const deletedSession = sessions.value.splice(sessionIndex, 1)[0]
+        console.log(`🗑️ Store: Removed session from array: ${sessionId}`)
         
         // If we deleted the current session, clear it
         if (currentSession.value?.id === sessionId) {
           currentSession.value = null
+          console.log(`🗑️ Store: Cleared current session reference`)
         }
         
-        console.log(`🗑️ Deleted conversation session: ${sessionId}`)
+        console.log(`🗑️ Store: Deleted conversation session successfully: ${sessionId}`)
         return deletedSession
+      } else {
+        console.warn(`🗑️ Store: Session not found in array: ${sessionId}`)
       }
     } catch (error) {
-      console.error('Failed to delete conversation session:', error)
+      console.error('🗑️ Store: Failed to delete conversation session:', error)
+      throw error // Re-throw to let caller handle it
     }
     return null
   }

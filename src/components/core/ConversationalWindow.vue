@@ -70,38 +70,43 @@ const currentMicPreviewMessageId = ref<string | null>(null)
 
 // Computed
 const messages = computed(() => {
-  const baseMessages = conversationStore.currentMessages
-  const messagesWithPreviews = [...baseMessages]
-  
-  // Add loopback typing preview if active
-  if (isLoopbackTyping.value && loopbackPreviewMessage.value.trim()) {
-    messagesWithPreviews.push({
-      id: currentPreviewMessageId.value || 'loopback-preview',
-      type: 'system',
-      source: 'loopback',
-      content: loopbackPreviewMessage.value,
-      confidence: 0.5,
-      timestamp: Date.now(),
-      isPreview: true,
-      isTyping: true
-    })
+  try {
+    const baseMessages = conversationStore.currentMessages || []
+    const messagesWithPreviews = [...baseMessages]
+    
+    // Add loopback typing preview if active
+    if (isLoopbackTyping.value && loopbackPreviewMessage.value.trim()) {
+      messagesWithPreviews.push({
+        id: currentPreviewMessageId.value || 'loopback-preview',
+        type: 'system',
+        source: 'loopback',
+        content: loopbackPreviewMessage.value,
+        confidence: 0.5,
+        timestamp: Date.now(),
+        isPreview: true,
+        isTyping: true
+      })
+    }
+    
+    // Add microphone typing preview if active
+    if (isMicrophoneTyping.value && microphonePreviewMessage.value.trim()) {
+      messagesWithPreviews.push({
+        id: currentMicPreviewMessageId.value || 'mic-preview',
+        type: 'user',
+        source: 'microphone',
+        content: microphonePreviewMessage.value,
+        confidence: 0.5,
+        timestamp: Date.now(),
+        isPreview: true,
+        isTyping: true
+      })
+    }
+    
+    return messagesWithPreviews
+  } catch (error) {
+    console.error('❌ Error computing messages:', error)
+    return []
   }
-  
-  // Add microphone typing preview if active
-  if (isMicrophoneTyping.value && microphonePreviewMessage.value.trim()) {
-    messagesWithPreviews.push({
-      id: currentMicPreviewMessageId.value || 'mic-preview',
-      type: 'user',
-      source: 'microphone',
-      content: microphonePreviewMessage.value,
-      confidence: 0.5,
-      timestamp: Date.now(),
-      isPreview: true,
-      isTyping: true
-    })
-  }
-  
-  return messagesWithPreviews
 })
 const isAudioLoopbackActive = computed(() => conversationStore.isAudioLoopbackActive)
 const hasSelectedMessages = computed(() => selectedMessages.value.size > 0)
@@ -494,10 +499,14 @@ const loadConversations = async () => {
   }
 }
 
-const handleNewConversation = async () => {
+const handleNewConversation = async (event?: Event) => {
+  console.log('🆕 Starting new conversation - ENTRY')
+  if (event) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+  
   try {
-    console.log('🆕 Starting new conversation')
-    
     // Prevent any recording-related state conflicts
     if (isRecording.value) {
       console.log('⚠️ Recording active - stopping before creating new conversation')
@@ -506,83 +515,105 @@ const handleNewConversation = async () => {
     
     // Use nextTick to ensure clean state transition
     await nextTick()
+    console.log('🆕 After nextTick')
     
-    // Create a new session (only if we don't have an active one)
-    if (!conversationStore.currentSession || conversationStore.currentSession.messages.length === 0) {
-      conversationStore.createSession()
-    }
+    // Always create a fresh session for new conversation
+    console.log('🆕 Creating new session...')
+    conversationStore.createSession()
+    console.log('🆕 Session created successfully')
     
     showConversationSidebar.value = false
-    console.log('✅ New conversation started successfully')
+    console.log('✅ New conversation started successfully - window should remain open')
   } catch (error) {
     console.error('❌ Failed to create new conversation:', error)
-    // Don't let errors close the window - just log them
+    console.error('❌ Error details:', error)
+    // Ensure sidebar closes even on error
+    showConversationSidebar.value = false
   }
 }
 
-const handleResumeConversation = async (conversationId: string) => {
+const handleResumeConversation = async (conversationId: string, event?: Event) => {
+  console.log('🔄 Resume conversation - ENTRY, ID:', conversationId)
+  if (event) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+  
   try {
-    console.log('🔄 Attempting to resume conversation:', conversationId)
-    
     // Stop any active recording before switching
     if (isRecording.value) {
       console.log('⚠️ Recording active - stopping before resuming conversation')
       await handleMicrophoneToggle() // This will save current session
     }
     
+    console.log('🔄 Before nextTick')
     // Use nextTick to ensure state updates are processed
     await nextTick()
+    console.log('🔄 After nextTick')
     
+    console.log('🔄 Switching to session:', conversationId)
     // Switch to the selected conversation
     conversationStore.switchToSession(conversationId)
+    console.log('🔄 Session switched successfully')
+    
     showConversationSidebar.value = false
+    console.log('🔄 Sidebar closed')
     
     // Scroll to bottom to show latest messages
     await scrollToBottom()
     
-    console.log('✅ Conversation resumed successfully:', conversationId)
+    console.log('✅ Conversation resumed successfully - window should remain open:', conversationId)
   } catch (error) {
     console.error('❌ Failed to resume conversation:', error)
+    console.error('❌ Error details:', error)
     // Don't let errors propagate and close the window
     showConversationSidebar.value = false // At least close sidebar on error
   }
 }
 
-const handleDeleteConversation = async (conversationId: string) => {
+const handleDeleteConversation = async (conversationId: string, event?: Event) => {
+  console.log('🗑️ Delete conversation - ENTRY, ID:', conversationId)
+  if (event) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+  
   try {
-    console.log('🗑️ Deleting conversation:', conversationId)
-    
     // Stop any active recording if we're deleting the current session
     if (conversationStore.currentSession?.id === conversationId && isRecording.value) {
       console.log('⚠️ Stopping recording before deleting current session')
       await handleMicrophoneToggle()
     }
     
-    // If deleting current session, create a new empty one
+    console.log('🗑️ Before delete operation')
+    // If deleting current session, clear it first
     const wasCurrentSession = conversationStore.currentSession?.id === conversationId
     if (wasCurrentSession) {
-      console.log('⚠️ Deleting current active session - creating new session')
-      // Clear current session first, then delete
+      console.log('⚠️ Deleting current active session - clearing session')
       conversationStore.currentSession = null
     }
     
     // Delete the conversation
+    console.log('🗑️ Calling deleteSession...')
     await conversationStore.deleteSession(conversationId)
+    console.log('🗑️ DeleteSession completed')
     
-    // If we deleted the current session, create a new one
+    // If we deleted the current session, user can create new one when recording
     if (wasCurrentSession) {
-      // Don't create a session automatically - let user start recording to create one
       console.log('📝 Deleted current session - ready for new conversation')
     }
     
     // Reload conversations list
+    console.log('🗑️ Reloading conversations...')
     await loadConversations()
-    console.log('✅ Conversation deleted successfully')
+    console.log('✅ Conversation deleted successfully - window should remain open')
   } catch (error) {
     console.error('❌ Failed to delete conversation:', error)
+    console.error('❌ Error details:', error)
     // Don't let deletion errors close the window
     // Just reload conversations to ensure UI state is consistent
     try {
+      console.log('🗑️ Attempting to reload conversations after error...')
       await loadConversations()
     } catch (reloadError) {
       console.error('❌ Failed to reload conversations after delete error:', reloadError)
@@ -734,7 +765,7 @@ onUnmounted(async () => {
             
             <div class="sidebar-content">
               <!-- New Conversation Button -->
-              <button @click="() => handleNewConversation()" class="new-conversation-btn">
+              <button @click.stop="handleNewConversation" class="new-conversation-btn">
                 <PlusIcon class="w-4 h-4" />
                 New Conversation
               </button>
@@ -757,12 +788,12 @@ onUnmounted(async () => {
                     :key="conversation.id"
                     class="conversation-item"
                     :class="{ 'active': conversation.isActive }"
-                    @click="() => handleResumeConversation(conversation.id)"
+                    @click.stop="(event) => handleResumeConversation(conversation.id, event)"
                   >
                     <div class="conversation-header">
                       <span class="conversation-title">{{ conversation.name }}</span>
                       <button 
-                        @click.stop="() => handleDeleteConversation(conversation.id)"
+                        @click.stop="(event) => handleDeleteConversation(conversation.id, event)"
                         class="delete-btn"
                         title="Delete conversation"
                       >
