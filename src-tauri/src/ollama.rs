@@ -146,6 +146,7 @@ CONVERSATION TYPES:
 
 Always aim to help the user be a thoughtful, engaged participant who adds value to the conversation."#;
 
+
 // Helper function to build prompt with chat context
 fn build_prompt_with_context(current_prompt: String, context: Option<Vec<ChatContextMessage>>) -> String {
     match context {
@@ -587,7 +588,7 @@ pub async fn generate_conversational_ai(
     conversation_context: String,
     session_id: String,
 ) -> Result<(), String> {
-    let model = "gemma2:2b".to_string(); // Using Gemma as specified for optimal performance
+    let model = "gemma:1.5b".to_string(); // Using Gemma 1.5B as specified for optimal performance
     
     // Format the prompt to include the conversation context for live analysis
     let full_prompt = format!("LIVE CONVERSATION CONTEXT:\n{}\n\nAnalyze this ongoing conversation and suggest a thoughtful response or contribution that would add value to the discussion. Provide 1-2 concise response options that match the conversation's tone and advance the dialogue.", conversation_context);
@@ -595,6 +596,7 @@ pub async fn generate_conversational_ai(
     println!("💬 CONVERSATIONAL AI: Using model {} for live response assistance, session {}", model, session_id);
     generate_agent_response_stream(app_handle, model, full_prompt, CONVERSATIONAL_AI_PROMPT.to_string(), None, session_id, "conversational_ai".to_string()).await
 }
+
 
 // Helper function for streaming with system prompt
 async fn generate_agent_response_stream(

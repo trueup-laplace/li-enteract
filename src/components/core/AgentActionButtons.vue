@@ -175,6 +175,7 @@ defineEmits<Emits>()
   color: rgb(187, 247, 208);
 }
 
+
 .upload-tool {
   background: rgba(34, 197, 94, 0.15);
   border: 1px solid rgba(34, 197, 94, 0.3);

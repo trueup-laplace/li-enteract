@@ -25,16 +25,24 @@ export function useAIAssistant() {
     
     try {
       // Build context from messages
-      const context = messages
+      const contextMessages = messages
         .filter(msg => !msg.isPreview)
-        .map(msg => `${msg.type === 'user' ? 'User' : 'System'}: ${msg.content}`)
-        .join('\n')
+        .map(msg => ({
+          role: msg.type === 'user' ? 'user' : 'assistant',
+          content: msg.content
+        }))
       
-      // Call AI service through Tauri
-      const response = await invoke<string>('query_ai_assistant', {
-        query,
-        context,
-        sessionId: `conversation-${Date.now()}`
+      // Use the simple generate response command (non-streaming for AI Assistant)
+      const response = await invoke<string>('generate_ollama_response', {
+        model: 'gemma3:1b-it-qat',
+        prompt: `You are an AI conversation assistant. Based on this conversation context, please answer this question concisely:
+
+Conversation Context:
+${contextMessages.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n')}
+
+Question: ${query}
+
+Please provide a helpful, concise answer based on the conversation context above.`
       })
       
       aiResponse.value = response

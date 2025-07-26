@@ -31,14 +31,12 @@ export function useLiveAI() {
       const newSessionId = `live-ai-${Date.now()}`
       sessionId.value = newSessionId
       
-      // Start live AI processing
-      await invoke('start_live_ai_session', {
-        sessionId: newSessionId,
-        context: messages
-      })
+      // TODO: Implement live AI backend commands
+      // For now, just simulate the functionality
+      console.log('🚀 Live AI session simulated (backend not implemented):', newSessionId)
       
       isActive.value = true
-      console.log('🚀 Live AI session started:', newSessionId)
+      response.value = "Live AI is not yet implemented in the backend. This feature will analyze conversations in real-time once the Rust commands are added."
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to start Live AI'
       console.error('Failed to start Live AI:', err)
@@ -51,12 +49,11 @@ export function useLiveAI() {
     if (!sessionId.value) return
     
     try {
-      await invoke('stop_live_ai_session', {
-        sessionId: sessionId.value
-      })
+      // TODO: Implement stop command in backend
+      console.log('⏹️ Live AI session stopped (simulated):', sessionId.value)
       
       isActive.value = false
-      console.log('⏹️ Live AI session stopped:', sessionId.value)
+      response.value = ''
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to stop Live AI'
       console.error('Failed to stop Live AI:', err)

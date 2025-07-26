@@ -173,6 +173,7 @@ const handleStartComputerUse = () => {
   startComputerUseAgent({ value: props.showChatWindow })
 }
 
+
 const handleFileUploadEvent = (event: Event) => {
   handleFileUpload(event, { value: props.showChatWindow })
 }

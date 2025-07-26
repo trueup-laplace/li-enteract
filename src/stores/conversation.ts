@@ -33,24 +33,25 @@ export const useConversationStore = defineStore('conversation', () => {
   // Load sessions from Rust backend
   const loadSessions = async () => {
     try {
+      console.log('📁 Store: Attempting to load conversations from backend...')
       const response = await invoke<{conversations: ConversationSession[]}>('load_conversations')
       sessions.value = response.conversations
-      console.log(`📁 Loaded ${sessions.value.length} conversation sessions from backend`)
+      console.log(`📁 Store: Successfully loaded ${sessions.value.length} conversation sessions from backend:`, sessions.value.map(s => ({ id: s.id, name: s.name, messageCount: s.messages.length })))
     } catch (error) {
-      console.error('Failed to load conversation sessions:', error)
+      console.error('📁 Store: Failed to load conversation sessions from backend:', error)
       // Fallback to localStorage for migration
       try {
         const stored = localStorage.getItem(STORAGE_KEY)
         if (stored) {
           const parsed = JSON.parse(stored)
           sessions.value = parsed
-          console.log(`📁 Migrated ${parsed.length} conversation sessions from localStorage`)
+          console.log(`📁 Store: Migrated ${parsed.length} conversation sessions from localStorage`)
           // Save to backend and clear localStorage
           await saveSessions()
           localStorage.removeItem(STORAGE_KEY)
         }
       } catch (migrationError) {
-        console.error('Failed to migrate from localStorage:', migrationError)
+        console.error('📁 Store: Failed to migrate from localStorage:', migrationError)
       }
     }
   }
@@ -58,17 +59,38 @@ export const useConversationStore = defineStore('conversation', () => {
   // Save sessions to Rust backend
   const saveSessions = async () => {
     try {
+      console.log(`💾 Store: Attempting to save ${sessions.value.length} conversation sessions to backend...`)
+      console.log(`💾 Store: Sessions to save:`, sessions.value.map(s => ({ id: s.id, name: s.name, messageCount: s.messages.length, isActive: s.isActive, endTime: s.endTime })))
+      
       await invoke('save_conversations', {
         payload: { conversations: sessions.value }
       })
-      console.log(`💾 Saved ${sessions.value.length} conversation sessions to backend`)
+      console.log(`💾 Store: Successfully saved ${sessions.value.length} conversation sessions to backend`)
+      
+      // Verify save by immediately loading back
+      setTimeout(async () => {
+        try {
+          const response = await invoke<{conversations: ConversationSession[]}>('load_conversations')
+          console.log(`💾 Store: Verification load returned ${response.conversations.length} sessions`)
+        } catch (verifyError) {
+          console.error('💾 Store: Verification load failed:', verifyError)
+        }
+      }, 100)
+      
     } catch (error) {
-      console.error('Failed to save conversation sessions:', error)
+      console.error('💾 Store: Failed to save conversation sessions to backend:', error)
+      throw error // Re-throw to let caller handle
     }
   }
 
-  // Watch for changes and auto-save
-  watch(sessions, saveSessions, { deep: true })
+  // Watch for changes and auto-save (debounced)
+  let saveTimeout: NodeJS.Timeout | null = null
+  watch(sessions, () => {
+    if (saveTimeout) clearTimeout(saveTimeout)
+    saveTimeout = setTimeout(() => {
+      saveSessions().catch(console.error)
+    }, 1000) // Debounce saves by 1 second
+  }, { deep: true })
 
   // Initialize on store creation
   loadSessions().catch(console.error)
@@ -111,7 +133,7 @@ export const useConversationStore = defineStore('conversation', () => {
     return session
   }
 
-  const endSession = (sessionId?: string) => {
+  const endSession = async (sessionId?: string) => {
     const targetSession = sessionId 
       ? sessions.value.find(s => s.id === sessionId)
       : currentSession.value
@@ -119,10 +141,16 @@ export const useConversationStore = defineStore('conversation', () => {
     if (targetSession) {
       targetSession.isActive = false
       targetSession.endTime = Date.now()
+      console.log(`🏁 Store: Session ended with ${targetSession.messages.length} messages:`, targetSession.id)
       
       if (currentSession.value?.id === targetSession.id) {
         currentSession.value = null
+        console.log('🏁 Store: Cleared current session reference')
       }
+      
+      // Force immediate save when ending session to ensure persistence
+      console.log('💾 Store: Force saving session on end')
+      await saveSessions()
     }
   }
 
@@ -190,6 +218,7 @@ export const useConversationStore = defineStore('conversation', () => {
 
     currentSession.value.messages.push(message)
     console.log(`📝 Added message to session ${currentSession.value.id}:`, message.content.substring(0, 50))
+    console.log(`📝 Session now has ${currentSession.value.messages.length} total messages`)
     return message
   }
 
@@ -307,6 +336,7 @@ export const useConversationStore = defineStore('conversation', () => {
         session.messages.filter(m => m.confidence !== undefined).length
     }
   }
+
 
   // Export session data for backup/sharing
   const exportSessionData = (sessionId?: string) => {

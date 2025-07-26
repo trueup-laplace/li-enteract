@@ -67,14 +67,14 @@ pub async fn process_audio_for_transcription(
                 if let Some(model_str) = model.as_str() {
                     model_str.to_string()
                 } else {
-                    "base".to_string() // Default for loopback
+                    "small".to_string() // Default for loopback - same as microphone
                 }
             } else {
-                "base".to_string() // Default for loopback
+                "small".to_string() // Default for loopback - same as microphone
             }
         }
-        Ok(None) => "base".to_string(), // No settings found, use default
-        Err(_) => "base".to_string() // Error loading settings, use default
+        Ok(None) => "small".to_string(), // No settings found, use default
+        Err(_) => "small".to_string() // Error loading settings, use default
     };
     
     println!("[AUDIO_PROCESSOR] Using Whisper model: {}", model_size);
@@ -259,6 +259,7 @@ pub fn process_audio_chunk(
     // Step 5: Convert to f32 normalized [-1.0, 1.0]
     audio_mono.iter().map(|&sample| sample as f32 / 32768.0).collect()
 }
+
 
 pub fn calculate_audio_level(audio_data: &[f32]) -> f32 {
     if audio_data.is_empty() {

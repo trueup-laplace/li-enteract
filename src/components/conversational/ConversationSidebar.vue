@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { } from 'vue'
+import { watch } from 'vue'
 import { 
   QueueListIcon, 
   XMarkIcon, 
@@ -30,8 +30,13 @@ interface Emits {
   (e: 'delete-conversation', id: string): void
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
+
+// Debug: Watch conversations prop
+watch(() => props.conversations, (newConversations) => {
+  console.log('📁 ConversationSidebar: Received conversations:', newConversations.length, newConversations.map(c => ({ id: c.id, name: c.name, messageCount: c.messages.length })))
+}, { immediate: true })
 
 const formatTimestamp = (timestamp: number): string => {
   const date = new Date(timestamp)

@@ -28,11 +28,21 @@ const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 const scrollContainer = ref<HTMLElement>()
+const isUserScrolled = ref(false)
 
 const scrollToBottom = async () => {
   await nextTick()
   if (scrollContainer.value) {
     scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
+    isUserScrolled.value = false
+  }
+}
+
+const checkScrollPosition = () => {
+  if (scrollContainer.value) {
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainer.value
+    const isAtBottom = Math.abs(scrollHeight - scrollTop - clientHeight) < 10
+    isUserScrolled.value = !isAtBottom
   }
 }
 
@@ -40,10 +50,19 @@ const handleToggleSelection = (id: string) => {
   emit('toggle-message-selection', id)
 }
 
-// Auto-scroll when new messages arrive
+// Auto-scroll when new messages arrive, but only if user hasn't scrolled up
 watch(() => props.messages.length, () => {
-  scrollToBottom()
+  if (!isUserScrolled.value) {
+    scrollToBottom()
+  }
 })
+
+// Also watch for content changes (like typing indicators)
+watch(() => props.messages, () => {
+  if (!isUserScrolled.value) {
+    scrollToBottom()
+  }
+}, { deep: true })
 
 defineExpose({
   scrollToBottom
@@ -51,7 +70,7 @@ defineExpose({
 </script>
 
 <template>
-  <div ref="scrollContainer" class="messages-container">
+  <div ref="scrollContainer" class="messages-container" @scroll="checkScrollPosition">
     <div v-if="messages.length === 0" class="empty-state">
       <div class="empty-icon-wrapper">
         <ChatBubbleLeftRightIcon class="w-16 h-16 text-white/20" />

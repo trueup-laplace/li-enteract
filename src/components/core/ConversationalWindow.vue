@@ -175,6 +175,10 @@ onMounted(async () => {
     // Set up event listeners
     setupLoopbackListeners(isRecording)
     
+    // Load existing conversations
+    console.log('📁 ConversationalWindow: Loading conversations on mount')
+    await loadConversations()
+    
   } catch (error) {
     console.error('Failed to initialize conversational window:', error)
   }
@@ -231,13 +235,27 @@ const toggleMicrophone = async () => {
     await stopAudioLoopbackCapture()
     
     if (conversationStore.currentSession) {
-      // End the current session
-      conversationStore.endSession()
+      // Get session ID before ending it
+      const sessionId = conversationStore.currentSession.id
+      
+      // End the current session (now async with immediate save)
+      await conversationStore.endSession()
+      console.log('🏁 ConversationalWindow: Session ended:', sessionId)
+      
+      // Small delay to ensure backend persistence completes
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      // Refresh conversation list to show the newly ended session
+      await loadConversations()
+      console.log('📁 ConversationalWindow: After ending session and loading, allConversations:', allConversations.value.length)
     }
   } else {
     if (!conversationStore.currentSession) {
       // Create a new session if none exists
-      conversationStore.createSession()
+      const session = conversationStore.createSession()
+      console.log('🆕 ConversationalWindow: Created new session:', session.id)
+    } else {
+      console.log('🔄 ConversationalWindow: Using existing session:', conversationStore.currentSession.id)
     }
     
     await startRecording()
@@ -290,15 +308,20 @@ const exportSelectedMessages = async () => {
 }
 
 // Sidebar actions
-const toggleConversationSidebar = () => {
+const toggleConversationSidebar = async () => {
   showConversationSidebar.value = !showConversationSidebar.value
   if (showConversationSidebar.value) {
-    loadConversations()
+    console.log('📁 ConversationalWindow: Loading conversations for sidebar')
+    console.log('📁 ConversationalWindow: Store sessions before loading:', conversationStore.sessions.length)
+    await loadConversations()
+    console.log('📁 ConversationalWindow: Store sessions after loading:', conversationStore.sessions.length)
+    console.log('📁 ConversationalWindow: After loading, allConversations:', allConversations.value.length)
   }
 }
 
 const handleNewConversation = async () => {
   await createNewConversation()
+  console.log('📁 ConversationalWindow: After creating new conversation, allConversations:', allConversations.value.length)
   showConversationSidebar.value = false
 }
 
@@ -313,7 +336,14 @@ const handleDeleteConversation = async (id: string) => {
 
 // AI Assistant actions
 const toggleAIAssistant = () => {
-  showAIAssistant.value = !showAIAssistant.value
+  if (showAIAssistant.value) {
+    // If already open, just close it
+    showAIAssistant.value = false
+  } else {
+    // Close other drawers first, then open AI Assistant
+    showLiveAI.value = false
+    showAIAssistant.value = true
+  }
 }
 
 const handleAIQuery = async (query: string) => {
@@ -323,7 +353,14 @@ const handleAIQuery = async (query: string) => {
 
 // Live AI actions
 const toggleLiveAI = () => {
-  showLiveAI.value = !showLiveAI.value
+  if (showLiveAI.value) {
+    // If already open, just close it
+    showLiveAI.value = false
+  } else {
+    // Close other drawers first, then open Live AI
+    showAIAssistant.value = false
+    showLiveAI.value = true
+  }
 }
 
 const toggleLiveAIActive = async () => {
@@ -343,6 +380,29 @@ const closeWindow = () => {
   }
   emit('close')
   emit('update:showConversationalWindow', false)
+}
+
+// UI helper functions
+const formatSessionDuration = () => {
+  if (!conversationStore.currentSession) return '00:00'
+  
+  const startTime = conversationStore.currentSession.startTime
+  const currentTime = Date.now()
+  const duration = Math.floor((currentTime - startTime) / 1000)
+  
+  const minutes = Math.floor(duration / 60)
+  const seconds = duration % 60
+  
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+}
+
+const getActionSubtitle = () => {
+  if (!isSpeechInitialized.value) return 'Initializing...'
+  if (isRecording.value) {
+    const messageCount = messages.value.filter(m => !m.isPreview).length
+    return `${messageCount} messages captured`
+  }
+  return 'Click to begin conversation'
 }
 
 </script>
@@ -444,17 +504,42 @@ const closeWindow = () => {
           
           <!-- Bottom Action Bar -->
           <div class="action-bar">
-            <button 
-              @click="toggleMicrophone" 
-              class="mic-btn"
-              :class="{ 'active': isRecording }"
-              :disabled="!isSpeechInitialized"
-            >
-              <MicrophoneIcon class="w-6 h-6" />
-              <span class="mic-btn-text">{{ isRecording ? 'Stop' : 'Start' }}</span>
-            </button>
-            <div v-if="speechError" class="error-message">
-              {{ speechError }}
+            <!-- Compact Single Row Layout -->
+            <div class="action-row">
+              <!-- Status Indicators -->
+              <div class="status-indicators">
+                <div class="status-item" :class="{ 'active': isRecording }">
+                  <MicrophoneIcon class="w-3 h-3" />
+                  <span class="status-label">Mic</span>
+                  <div class="status-dot" :class="{ 'active': isRecording }"></div>
+                </div>
+                <div class="status-item" :class="{ 'active': isAudioLoopbackActive }">
+                  <SpeakerWaveIcon class="w-3 h-3" />
+                  <span class="status-label">Audio</span>
+                  <div class="status-dot" :class="{ 'active': isAudioLoopbackActive }"></div>
+                </div>
+                <div v-if="conversationStore.currentSession" class="status-item time-item">
+                  <span class="time-label">{{ formatSessionDuration() }}</span>
+                </div>
+              </div>
+
+              <!-- Compact Action Button -->
+              <button 
+                @click="toggleMicrophone" 
+                class="compact-action-btn"
+                :class="{ 'active': isRecording, 'disabled': !isSpeechInitialized }"
+                :disabled="!isSpeechInitialized"
+                :title="isRecording ? 'Stop Recording' : 'Start Recording'"
+              >
+                <MicrophoneIcon class="w-4 h-4" />
+                <span class="btn-label">{{ isRecording ? 'Stop' : 'Start' }}</span>
+              </button>
+
+              <!-- Error Display -->
+              <div v-if="speechError" class="compact-error">
+                <XMarkIcon class="w-3 h-3 text-red-400" />
+                <span class="error-text">{{ speechError }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -641,46 +726,118 @@ const closeWindow = () => {
 }
 
 .action-bar {
-  @apply flex items-center justify-center gap-4 px-4 py-4 border-t border-white/10;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.4), transparent);
+  @apply px-4 py-3 border-t border-white/10;
+  background: linear-gradient(to top, 
+    rgba(0, 0, 0, 0.4) 0%, 
+    rgba(0, 0, 0, 0.2) 100%
+  );
+  backdrop-filter: blur(10px);
 }
 
-.mic-btn {
-  @apply flex items-center gap-2 px-6 py-3 rounded-full transition-all duration-200;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(147, 51, 234, 0.2));
+/* Compact Action Row */
+.action-row {
+  @apply flex items-center justify-between gap-4;
+}
+
+/* Status Indicators */
+.status-indicators {
+  @apply flex items-center gap-3;
+}
+
+.status-item {
+  @apply flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-all duration-200;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.status-item.active {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.status-item.time-item {
+  @apply px-2 py-1;
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.status-label {
+  @apply text-xs font-medium text-white/70;
+}
+
+.status-item.active .status-label {
+  @apply text-green-400;
+}
+
+.status-dot {
+  @apply w-1.5 h-1.5 rounded-full bg-white/30 transition-all duration-200;
+}
+
+.status-dot.active {
+  @apply bg-green-400 animate-pulse;
+}
+
+.time-label {
+  @apply text-xs text-blue-300 font-mono;
+}
+
+/* Compact Action Button */
+.compact-action-btn {
+  @apply flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200;
+  background: linear-gradient(135deg, 
+    rgba(59, 130, 246, 0.2) 0%, 
+    rgba(147, 51, 234, 0.2) 100%
+  );
   border: 1px solid rgba(59, 130, 246, 0.3);
-  color: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
 }
 
-.mic-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(147, 51, 234, 0.3));
+.compact-action-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, 
+    rgba(59, 130, 246, 0.3) 0%, 
+    rgba(147, 51, 234, 0.3) 100%
+  );
   border-color: rgba(59, 130, 246, 0.5);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
 }
 
-.mic-btn.active {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.8), rgba(220, 38, 38, 0.8));
+.compact-action-btn.active {
+  background: linear-gradient(135deg, 
+    rgba(239, 68, 68, 0.6) 0%, 
+    rgba(220, 38, 38, 0.6) 100%
+  );
   border-color: rgba(239, 68, 68, 0.5);
-  color: white;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
 }
 
-.mic-btn.active:hover {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.9));
-  border-color: rgba(239, 68, 68, 0.7);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+.compact-action-btn.active:hover {
+  background: linear-gradient(135deg, 
+    rgba(239, 68, 68, 0.7) 0%, 
+    rgba(220, 38, 38, 0.7) 100%
+  );
+  border-color: rgba(239, 68, 68, 0.6);
 }
 
-.mic-btn:disabled {
+.compact-action-btn:disabled {
   @apply opacity-50 cursor-not-allowed;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
-.mic-btn-text {
-  @apply text-sm font-medium;
+.btn-label {
+  @apply text-xs font-medium text-white;
 }
 
-.error-message {
-  @apply text-xs text-red-400;
+/* Compact Error Display */
+.compact-error {
+  @apply flex items-center gap-1.5 px-2 py-1.5 rounded-md;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.error-text {
+  @apply text-xs text-red-300;
 }
 
 /* Transition styles */

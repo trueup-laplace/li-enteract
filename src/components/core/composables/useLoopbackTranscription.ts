@@ -10,8 +10,9 @@ export function useLoopbackTranscription() {
   const loopbackLastTimestamp = ref<number>(0)
   const loopbackThoughtTimer = ref<number | null>(null)
   const loopbackBufferStartTime = ref<number>(0)
-  const THOUGHT_PAUSE_DURATION = 3000
-  const MAX_BUFFER_DURATION = 15000
+  const THOUGHT_PAUSE_DURATION = 2500  // Shorter pause for natural breaks (2.5s)
+  const MAX_BUFFER_DURATION = 10000    // Max 10s speaking length as requested
+  const MAX_CONCATENATION_TIME = 3000  // Only concatenate within 3s of last message
   const MIN_SIZEABLE_CONTENT = 30
   
   // Deduplication state
@@ -112,11 +113,42 @@ export function useLoopbackTranscription() {
       const existingMessages = conversationStore.currentMessages || []
       const lastMessage = existingMessages[existingMessages.length - 1]
       
+      // Check if we should concatenate with the last system message
       if (lastMessage && 
           lastMessage.source === 'loopback' && 
-          lastMessage.content === finalContent) {
-        clearBufferState()
-        return
+          lastMessage.type === 'system') {
+        
+        // Check for exact duplicate
+        if (lastMessage.content === finalContent) {
+          clearBufferState()
+          return
+        }
+        
+        // Check if content is already contained in last message
+        if (lastMessage.content.includes(finalContent)) {
+          clearBufferState()
+          return
+        }
+        
+        // Check recent timestamp - only concatenate within short window for natural flow
+        const timeDiff = Date.now() - lastMessage.timestamp
+        if (timeDiff < MAX_CONCATENATION_TIME) {
+          // Concatenate with existing message
+          const concatenatedContent = intelligentConcatenation(lastMessage.content, finalContent)
+          
+          // Update the existing message instead of creating a new one
+          conversationStore.updateMessage(lastMessage.id, {
+            content: concatenatedContent,
+            timestamp: Date.now(), // Update timestamp
+            confidence: Math.min(0.95, (lastMessage.confidence || 0.8) + 0.05) // Slightly increase confidence
+          })
+          
+          console.log('🔗 Concatenated with existing message:', concatenatedContent.substring(0, 50))
+          clearBufferState()
+          return
+        } else {
+          console.log('⏰ Time gap too large for concatenation:', timeDiff, 'ms - creating new bubble')
+        }
       }
       
       const messageFingerprint = finalContent.toLowerCase().replace(/[^\w\s]/g, '').slice(0, 100)
@@ -146,13 +178,19 @@ export function useLoopbackTranscription() {
       const completenessBonus = isCompleteSentence(finalContent) ? 0.1 : 0
       const finalConfidence = Math.min(0.95, baseConfidence + completenessBonus)
       
-      conversationStore.addMessage({
-        type: 'system',
-        source: 'loopback',
-        content: finalContent,
-        confidence: finalConfidence,
-        timestamp: Date.now()
-      })
+      // Only add message if there's an active session
+      if (conversationStore.currentSession) {
+        conversationStore.addMessage({
+          type: 'system',
+          source: 'loopback',
+          content: finalContent,
+          confidence: finalConfidence,
+          timestamp: Date.now()
+        })
+        console.log('📝 Created new loopback message:', finalContent.substring(0, 50))
+      } else {
+        console.log('🚫 Skipping loopback message - no active session:', finalContent.substring(0, 50))
+      }
     }
     
     function clearBufferState() {
@@ -189,13 +227,18 @@ export function useLoopbackTranscription() {
       microphonePreviewMessage.value = ''
       currentMicPreviewMessageId.value = null
       
-      conversationStore.addMessage({
-        type: 'user',
-        source: 'microphone',
-        content: text.trim(),
-        confidence,
-        timestamp: timestamp || Date.now()
-      })
+      // Only add message if there's an active session
+      if (conversationStore.currentSession) {
+        conversationStore.addMessage({
+          type: 'user',
+          source: 'microphone',
+          content: text.trim(),
+          confidence,
+          timestamp: timestamp || Date.now()
+        })
+      } else {
+        console.log('🚫 Skipping microphone message - no active session:', text.substring(0, 50))
+      }
     }
   }
   
