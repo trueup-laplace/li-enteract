@@ -80,12 +80,12 @@ impl WASAPILoopbackEnumerator {
     pub fn new() -> Result<Self> {
         // Initialize COM for WASAPI
         initialize_mta()
-            .map_err(|e| anyhow::anyhow!("Failed to initialize COM: {:?}", e))?;
+            .map_err(|_| anyhow::anyhow!("Failed to initialize COM"))?;
             
         let render_collection = DeviceCollection::new(&Direction::Render)
-            .map_err(|e| anyhow::anyhow!("Failed to create render device collection: {:?}", e))?;
+            .map_err(|_| anyhow::anyhow!("Failed to create render device collection"))?;
         let capture_collection = DeviceCollection::new(&Direction::Capture)
-            .map_err(|e| anyhow::anyhow!("Failed to create capture device collection: {:?}", e))?;
+            .map_err(|_| anyhow::anyhow!("Failed to create capture device collection"))?;
         
         Ok(Self { 
             render_collection,
@@ -138,7 +138,7 @@ impl WASAPILoopbackEnumerator {
     
     fn scan_render_devices(&self, default_id: &str) -> Result<Vec<AudioLoopbackDevice>> {
         let device_count = self.render_collection.get_nbr_devices()
-            .map_err(|e| anyhow::anyhow!("Failed to get render device count: {:?}", e))?;
+            .map_err(|_| anyhow::anyhow!("Failed to get render device count"))?;
         let mut devices = Vec::new();
         
         for i in 0..device_count {
@@ -157,7 +157,7 @@ impl WASAPILoopbackEnumerator {
     
     fn scan_capture_devices(&self, default_id: &str) -> Result<Vec<AudioLoopbackDevice>> {
         let device_count = self.capture_collection.get_nbr_devices()
-            .map_err(|e| anyhow::anyhow!("Failed to get capture device count: {:?}", e))?;
+            .map_err(|_| anyhow::anyhow!("Failed to get capture device count"))?;
         let mut devices = Vec::new();
         
         for i in 0..device_count {
@@ -180,7 +180,7 @@ impl WASAPILoopbackEnumerator {
     
     fn scan_stereo_mix_devices(&self, default_id: &str) -> Result<Vec<AudioLoopbackDevice>> {
         let device_count = self.capture_collection.get_nbr_devices()
-            .map_err(|e| anyhow::anyhow!("Failed to get stereo mix device count: {:?}", e))?;
+            .map_err(|_| anyhow::anyhow!("Failed to get stereo mix device count"))?;
         let mut devices = Vec::new();
         
         for i in 0..device_count {
@@ -223,7 +223,7 @@ impl WASAPILoopbackEnumerator {
     
     fn create_render_device_info(&self, device: &Device, default_id: &str) -> Result<AudioLoopbackDevice> {
         let id = device.get_id()
-            .map_err(|e| anyhow::anyhow!("Failed to get device ID: {:?}", e))?;
+            .map_err(|_| anyhow::anyhow!("Failed to get device ID"))?;
         let name = device.get_friendlyname().unwrap_or_else(|_| "Unknown Render Device".to_string());
         let is_default = id == default_id;
         
@@ -243,7 +243,7 @@ impl WASAPILoopbackEnumerator {
     
     fn create_capture_device_info(&self, device: &Device, default_id: &str) -> Result<AudioLoopbackDevice> {
         let id = device.get_id()
-            .map_err(|e| anyhow::anyhow!("Failed to get device ID: {:?}", e))?;
+            .map_err(|_| anyhow::anyhow!("Failed to get device ID"))?;
         let name = device.get_friendlyname().unwrap_or_else(|_| "Unknown Capture Device".to_string());
         let is_default = id == default_id;
         
@@ -263,9 +263,9 @@ impl WASAPILoopbackEnumerator {
     
     fn get_device_format(&self, device: &Device) -> Result<(u32, u16, String)> {
         let audio_client = device.get_iaudioclient()
-            .map_err(|e| anyhow::anyhow!("Failed to get audio client: {:?}", e))?;
+            .map_err(|_| anyhow::anyhow!("Failed to get audio client"))?;
         let format = audio_client.get_mixformat()
-            .map_err(|e| anyhow::anyhow!("Failed to get mix format: {:?}", e))?;
+            .map_err(|_| anyhow::anyhow!("Failed to get mix format"))?;
         
         let sample_rate = format.get_samplespersec();
         let channels = format.get_nchannels();
@@ -300,9 +300,9 @@ impl WASAPILoopbackEnumerator {
     
     fn try_initialize_render_loopback(&self, device: &Device) -> Result<()> {
         let mut audio_client = device.get_iaudioclient()
-            .map_err(|e| anyhow::anyhow!("Failed to get audio client: {:?}", e))?;
+            .map_err(|_| anyhow::anyhow!("Failed to get audio client"))?;
         let mix_format = audio_client.get_mixformat()
-            .map_err(|e| anyhow::anyhow!("Failed to get mix format: {:?}", e))?;
+            .map_err(|_| anyhow::anyhow!("Failed to get mix format"))?;
         
         // Try to initialize the audio client in loopback mode
         let result = audio_client.initialize_client(
@@ -313,14 +313,14 @@ impl WASAPILoopbackEnumerator {
             true, // use_loopback
         );
         
-        result.map_err(|e| anyhow::anyhow!("WASAPI Error: {:?}", e))
+        result.map_err(|_| anyhow::anyhow!("WASAPI render loopback initialization failed"))
     }
     
     fn try_initialize_capture_device(&self, device: &Device) -> Result<()> {
         let mut audio_client = device.get_iaudioclient()
-            .map_err(|e| anyhow::anyhow!("Failed to get audio client: {:?}", e))?;
+            .map_err(|_| anyhow::anyhow!("Failed to get audio client"))?;
         let mix_format = audio_client.get_mixformat()
-            .map_err(|e| anyhow::anyhow!("Failed to get mix format: {:?}", e))?;
+            .map_err(|_| anyhow::anyhow!("Failed to get mix format"))?;
         
         // Try to initialize as regular capture device (no loopback flag)
         let result = audio_client.initialize_client(
@@ -331,7 +331,7 @@ impl WASAPILoopbackEnumerator {
             false, // no loopback for capture devices
         );
         
-        result.map_err(|e| anyhow::anyhow!("Failed to initialize capture device: {:?}", e))
+        result.map_err(|_| anyhow::anyhow!("Failed to initialize capture device"))
     }
     
     pub fn auto_select_best_device(&self) -> Result<Option<AudioLoopbackDevice>> {
@@ -667,7 +667,7 @@ fn run_audio_capture_loop_sync(
 ) -> Result<()> {
     // Initialize COM for this thread
     initialize_mta()
-        .map_err(|e| anyhow::anyhow!("Failed to initialize COM: {:?}", e))?;
+        .map_err(|_| anyhow::anyhow!("Failed to initialize COM"))?;
     
     // Find the device
     let enumerator = WASAPILoopbackEnumerator::new()?;
@@ -679,11 +679,11 @@ fn run_audio_capture_loop_sync(
     
     // Setup audio client
     let mut audio_client = wasapi_device.get_iaudioclient()
-        .map_err(|e| anyhow::anyhow!("Failed to get audio client: {:?}", e))?;
+        .map_err(|_| anyhow::anyhow!("Failed to get audio client"))?;
     let format = audio_client.get_mixformat()
-        .map_err(|e| anyhow::anyhow!("Failed to get mix format: {:?}", e))?;
+        .map_err(|_| anyhow::anyhow!("Failed to get mix format"))?;
     let (_, min_time) = audio_client.get_periods()
-        .map_err(|e| anyhow::anyhow!("Failed to get periods: {:?}", e))?;
+        .map_err(|_| anyhow::anyhow!("Failed to get periods"))?;
     
     // Determine direction and loopback based on device type
     let (direction, use_loopback) = match device_info.device_type {
@@ -698,12 +698,12 @@ fn run_audio_capture_loop_sync(
         &direction,
         &ShareMode::Shared,
         use_loopback,
-    ).map_err(|e| anyhow::anyhow!("Failed to initialize audio client: {:?}", e))?;
+    ).map_err(|_| anyhow::anyhow!("Failed to initialize audio client - WASAPI error occurred"))?;
     
     let capture_client = audio_client.get_audiocaptureclient()
-        .map_err(|e| anyhow::anyhow!("Failed to get capture client: {:?}", e))?;
+        .map_err(|_| anyhow::anyhow!("Failed to get capture client - WASAPI error occurred"))?;
     let h_event = audio_client.set_get_eventhandle()
-        .map_err(|e| anyhow::anyhow!("Failed to get event handle: {:?}", e))?;
+        .map_err(|_| anyhow::anyhow!("Failed to get event handle - WASAPI error occurred"))?;
     
     println!("✅ Audio capture initialized successfully!");
     println!("📊 Format: {} Hz, {} channels, {} bit", 
@@ -730,11 +730,12 @@ fn run_audio_capture_loop_sync(
     
     // Start the stream
     audio_client.start_stream()
-        .map_err(|e| anyhow::anyhow!("Failed to start stream: {:?}", e))?;
+        .map_err(|_| anyhow::anyhow!("Failed to start stream - WASAPI error occurred"))?;
     
     let start_time = Instant::now();
     let mut total_samples = 0u64;
     let mut last_emit = Instant::now();
+    let mut error_count = 0u32;
     
     // Main capture loop
     loop {
@@ -773,21 +774,36 @@ fn run_audio_capture_loop_sync(
             continue;
         }
         
-        let buffer_size = frames_available as usize * bytes_per_frame as usize;
+        let calculated_buffer_size = frames_available as usize * bytes_per_frame as usize;
         
         // Sanity check: prevent excessive buffer sizes
-        if buffer_size > 1_048_576 { // 1MB limit
-            eprintln!("⚠️ Audio buffer size too large: {} bytes, skipping", buffer_size);
+        if calculated_buffer_size > 1_048_576 { // 1MB limit
+            eprintln!("⚠️ Audio buffer size too large: {} bytes, skipping", calculated_buffer_size);
             std::thread::sleep(Duration::from_millis(10));
             continue;
         }
         
-        let mut buffer = vec![0u8; buffer_size];
+        // Use a safe minimum buffer size to prevent memory access issues
+        let safe_buffer_size = std::cmp::max(calculated_buffer_size, 4096);
+        let mut buffer = vec![0u8; safe_buffer_size];
         
         let (frames_read, _flags) = match capture_client.read_from_device(bytes_per_frame as usize, &mut buffer) {
-            Ok(result) => result,
+            Ok(result) => {
+                if error_count > 0 {
+                    error_count = std::cmp::max(0, error_count - 1);
+                }
+                result
+            },
             Err(e) => {
-                eprintln!("❌ Failed to read from audio device: {:?}", e);
+                error_count += 1;
+                eprintln!("❌ Failed to read from audio device: {:?} (error count: {})", e, error_count);
+                
+                // If we have too many consecutive errors, break the loop
+                if error_count > 10 {
+                    eprintln!("⚠️ Too many consecutive audio read errors, stopping capture");
+                    break;
+                }
+                
                 std::thread::sleep(Duration::from_millis(10));
                 continue;
             }
@@ -801,9 +817,9 @@ fn run_audio_capture_loop_sync(
         let actual_bytes = frames_read as usize * bytes_per_frame as usize;
         
         // Safety check: ensure actual_bytes doesn't exceed buffer size
-        let actual_bytes = if actual_bytes > buffer.len() {
-            eprintln!("⚠️ Audio data size ({}) exceeds buffer size ({}), truncating", actual_bytes, buffer.len());
-            buffer.len()
+        let actual_bytes = if actual_bytes > safe_buffer_size {
+            eprintln!("⚠️ Audio data size ({}) exceeds buffer size ({}), truncating", actual_bytes, safe_buffer_size);
+            safe_buffer_size
         } else {
             actual_bytes
         };
@@ -868,9 +884,9 @@ fn find_wasapi_device(device_info: &AudioLoopbackDevice) -> Result<Device> {
     };
     
     let device_collection = DeviceCollection::new(&direction)
-        .map_err(|e| anyhow::anyhow!("Failed to create device collection: {:?}", e))?;
+        .map_err(|_| anyhow::anyhow!("Failed to create device collection"))?;
     let device_count = device_collection.get_nbr_devices()
-        .map_err(|e| anyhow::anyhow!("Failed to get device count: {:?}", e))?;
+        .map_err(|_| anyhow::anyhow!("Failed to get device count"))?;
     
     for i in 0..device_count {
         if let Ok(device) = device_collection.get_device_at_index(i) {
@@ -893,8 +909,28 @@ fn process_audio_chunk(
     input_sample_rate: u32,
     output_sample_rate: u32
 ) -> Vec<f32> {
-    // Safety check: ensure audio_data is not empty
+    // Safety checks: ensure audio_data is valid
     if audio_data.is_empty() {
+        return Vec::new();
+    }
+    
+    // Validate input parameters
+    if bits_per_sample != 16 && bits_per_sample != 32 {
+        eprintln!("⚠️ Unsupported bits per sample: {}", bits_per_sample);
+        return Vec::new();
+    }
+    
+    if channels == 0 || channels > 8 {
+        eprintln!("⚠️ Invalid channel count: {}", channels);
+        return Vec::new();
+    }
+    
+    let bytes_per_sample = bits_per_sample / 8;
+    let expected_alignment = bytes_per_sample as usize;
+    
+    // Ensure data length is properly aligned
+    if audio_data.len() % expected_alignment != 0 {
+        eprintln!("⚠️ Audio data length ({}) not aligned to {} bytes", audio_data.len(), expected_alignment);
         return Vec::new();
     }
     
@@ -952,17 +988,18 @@ fn process_audio_chunk(
             .collect();
     }
     
-    // Simple resampling
-    if input_sample_rate != output_sample_rate {
+    // Simple resampling with bounds checking
+    if input_sample_rate != output_sample_rate && !f32_samples.is_empty() {
         if input_sample_rate == 48000 && output_sample_rate == 16000 {
             // 48kHz to 16kHz - take every 3rd sample
             f32_samples = f32_samples.iter().step_by(3).copied().collect();
         } else if input_sample_rate == 44100 && output_sample_rate == 16000 {
             // 44.1kHz to 16kHz
             let factor = input_sample_rate as f32 / output_sample_rate as f32;
-            f32_samples = (0..f32_samples.len())
-                .step_by(factor as usize)
-                .filter_map(|i| f32_samples.get(i).copied())
+            let step_size = factor.max(1.0) as usize;
+            f32_samples = f32_samples.iter()
+                .step_by(step_size)
+                .copied()
                 .collect();
         }
         // Add more resampling cases as needed

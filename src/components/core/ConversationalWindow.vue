@@ -75,8 +75,13 @@ const loadAudioLoopbackSettings = async () => {
       loopbackEnabled: boolean
     } | null>('load_audio_settings')
     
-    if (settings?.selectedLoopbackDevice && settings.loopbackEnabled) {
+    console.log('🔊 Audio settings loaded:', settings)
+    
+    if (settings?.selectedLoopbackDevice) {
       audioLoopbackDeviceId.value = settings.selectedLoopbackDevice
+      
+      // Always try to start if a device is selected (ignore loopbackEnabled for now)
+      // The user explicitly selected a device, so they want to use it
       await startAudioLoopbackCapture()
     }
   } catch (error) {
@@ -89,10 +94,6 @@ const startAudioLoopbackCapture = async () => {
   if (!audioLoopbackDeviceId.value) return
   
   try {
-    // TEMPORARY: Disable audio loopback due to memory safety issue
-    console.log('⚠️ Audio loopback temporarily disabled due to buffer safety issue')
-    return
-    
     await invoke('start_audio_loopback_capture', {
       deviceId: audioLoopbackDeviceId.value
     })
@@ -374,9 +375,14 @@ onUnmounted(async () => {
               <span class="text-xs text-white/60">System Audio:</span>
               <span class="text-xs" :class="{
                 'text-green-400': isAudioLoopbackActive,
-                'text-yellow-400': !isAudioLoopbackActive
+                'text-blue-400': audioLoopbackDeviceId && !isAudioLoopbackActive,
+                'text-yellow-400': !audioLoopbackDeviceId
               }">
-                {{ isAudioLoopbackActive ? 'Active' : 'Configure in Settings' }}
+                {{ 
+                  isAudioLoopbackActive ? 'Active' : 
+                  audioLoopbackDeviceId ? 'Device Selected' : 
+                  'Configure in Settings' 
+                }}
               </span>
             </div>
           </div>
