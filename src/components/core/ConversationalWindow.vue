@@ -35,8 +35,60 @@ const audioLoopbackDeviceId = ref<string | null>(null)
 const selectedMessages = ref<Set<string>>(new Set())
 const showExportControls = ref(false)
 
+// Loopback transcription buffering for complete thoughts
+const loopbackBuffer = ref<string>('')
+const loopbackLastTimestamp = ref<number>(0)
+const loopbackThoughtTimer = ref<number | null>(null)
+const loopbackBufferStartTime = ref<number>(0)
+const THOUGHT_PAUSE_DURATION = 2000 // 2 seconds
+const MAX_BUFFER_DURATION = 10000 // 10 seconds for sizeable content
+const MIN_SIZEABLE_CONTENT = 50 // minimum characters for sizeable content
+
+// Typing animation state
+const isLoopbackTyping = ref(false)
+const loopbackPreviewMessage = ref<string>('')
+const currentPreviewMessageId = ref<string | null>(null)
+
+// User microphone typing state
+const isMicrophoneTyping = ref(false)
+const microphonePreviewMessage = ref<string>('')
+const currentMicPreviewMessageId = ref<string | null>(null)
+
 // Computed
-const messages = computed(() => conversationStore.currentMessages)
+const messages = computed(() => {
+  const baseMessages = conversationStore.currentMessages
+  const messagesWithPreviews = [...baseMessages]
+  
+  // Add loopback typing preview if active
+  if (isLoopbackTyping.value && loopbackPreviewMessage.value.trim()) {
+    messagesWithPreviews.push({
+      id: currentPreviewMessageId.value || 'loopback-preview',
+      type: 'system',
+      source: 'loopback',
+      content: loopbackPreviewMessage.value,
+      confidence: 0.5,
+      timestamp: Date.now(),
+      isPreview: true,
+      isTyping: true
+    })
+  }
+  
+  // Add microphone typing preview if active
+  if (isMicrophoneTyping.value && microphonePreviewMessage.value.trim()) {
+    messagesWithPreviews.push({
+      id: currentMicPreviewMessageId.value || 'mic-preview',
+      type: 'user',
+      source: 'microphone',
+      content: microphonePreviewMessage.value,
+      confidence: 0.5,
+      timestamp: Date.now(),
+      isPreview: true,
+      isTyping: true
+    })
+  }
+  
+  return messagesWithPreviews
+})
 const isAudioLoopbackActive = computed(() => conversationStore.isAudioLoopbackActive)
 const hasSelectedMessages = computed(() => selectedMessages.value.size > 0)
 
@@ -134,6 +186,7 @@ const setupEventListeners = async () => {
   
   // Listen for transcription events but handle them separately
   window.addEventListener('transcription-final', handleConversationalUserSpeech)
+  window.addEventListener('transcription-interim', handleConversationalUserInterim)
   
   // Listen for audio loopback events from Rust backend using Tauri's event system
   console.log('🎧 Setting up Tauri audio-chunk event listener')
@@ -152,6 +205,23 @@ const setupEventListeners = async () => {
   console.log('✅ Conversational audio event listeners set up')
 }
 
+// Handle user speech interim results for typing animation
+const handleConversationalUserInterim = (event: Event) => {
+  const customEvent = event as CustomEvent
+  
+  // Only process if we're recording in conversational mode
+  if (!isRecording.value) return
+  
+  const { text } = customEvent.detail
+  
+  if (text && text.trim()) {
+    microphonePreviewMessage.value = text.trim()
+    isMicrophoneTyping.value = true
+    currentMicPreviewMessageId.value = `mic-preview-${Date.now()}`
+    scrollToBottom()
+  }
+}
+
 // Handle user speech from microphone - ONLY for conversational window
 const handleConversationalUserSpeech = (event: Event) => {
   const customEvent = event as CustomEvent
@@ -162,6 +232,11 @@ const handleConversationalUserSpeech = (event: Event) => {
   const { text, confidence, timestamp } = customEvent.detail
   
   if (text && text.trim()) {
+    // Clear typing state
+    isMicrophoneTyping.value = false
+    microphonePreviewMessage.value = ''
+    currentMicPreviewMessageId.value = null
+    
     conversationStore.addMessage({
       type: 'user',
       source: 'microphone',
@@ -169,6 +244,8 @@ const handleConversationalUserSpeech = (event: Event) => {
       confidence,
       timestamp: timestamp || Date.now()
     })
+    
+    scrollToBottom()
   }
 }
 
@@ -178,22 +255,93 @@ const handleSystemAudio = (event: CustomEvent) => {
   // This is now just for monitoring - transcription happens in Rust backend
 }
 
-// Handle loopback transcription results
+// Handle loopback transcription results with thought grouping and typing animation
 const handleLoopbackTranscription = (payload: any) => {
-  console.log('🎙️ Loopback transcription:', payload)
+  console.log('🎙️ Loopback transcription chunk:', payload)
   const { text, confidence, timestamp, audioLevel } = payload
   
   if (text && text.trim()) {
+    const currentTime = timestamp || Date.now()
+    const timeSinceLastChunk = currentTime - loopbackLastTimestamp.value
+    
+    // If more than 2 seconds have passed, start a new thought
+    if (timeSinceLastChunk > THOUGHT_PAUSE_DURATION && loopbackBuffer.value.trim()) {
+      flushLoopbackBuffer()
+    }
+    
+    // Initialize buffer start time if this is the first chunk
+    if (!loopbackBuffer.value.trim()) {
+      loopbackBufferStartTime.value = currentTime
+      currentPreviewMessageId.value = `loopback-preview-${currentTime}`
+    }
+    
+    // Add current text to buffer
+    if (loopbackBuffer.value.trim()) {
+      loopbackBuffer.value += ' ' + text.trim()
+    } else {
+      loopbackBuffer.value = text.trim()
+    }
+    
+    // Update real-time preview
+    loopbackPreviewMessage.value = loopbackBuffer.value
+    isLoopbackTyping.value = true
+    
+    loopbackLastTimestamp.value = currentTime
+    
+    // Check if we should flush due to sizeable content + time
+    const bufferDuration = currentTime - loopbackBufferStartTime.value
+    const hasSize = loopbackBuffer.value.length >= MIN_SIZEABLE_CONTENT
+    const hasTime = bufferDuration >= MAX_BUFFER_DURATION
+    
+    if (hasSize && hasTime) {
+      console.log('🎙️ Flushing buffer due to sizeable content + time:', loopbackBuffer.value.length, 'chars,', bufferDuration, 'ms')
+      flushLoopbackBuffer()
+      return
+    }
+    
+    // Clear existing timer and start new one
+    if (loopbackThoughtTimer.value) {
+      clearTimeout(loopbackThoughtTimer.value)
+    }
+    
+    // Set timer to flush buffer after pause duration
+    loopbackThoughtTimer.value = window.setTimeout(() => {
+      flushLoopbackBuffer()
+    }, THOUGHT_PAUSE_DURATION)
+    
+    // Auto-scroll to show typing animation
+    scrollToBottom()
+    
+    console.log(`🎙️ System Audio chunk (${audioLevel?.toFixed(1)}dB): ${text} [buffered: "${loopbackBuffer.value}" (${loopbackBuffer.value.length} chars, ${bufferDuration}ms)]`)
+  }
+}
+
+// Flush the loopback buffer as a complete thought
+const flushLoopbackBuffer = () => {
+  if (loopbackBuffer.value.trim()) {
     conversationStore.addMessage({
       type: 'system',
       source: 'loopback',
-      content: text.trim(),
-      confidence,
-      timestamp: timestamp || Date.now()
+      content: loopbackBuffer.value.trim(),
+      confidence: 0.8, // Average confidence for grouped chunks
+      timestamp: Date.now()
     })
     
-    console.log(`🎙️ System Audio (${audioLevel?.toFixed(1)}dB): ${text}`)
+    console.log(`🎙️ Complete thought: "${loopbackBuffer.value.trim()}"`)
+    
+    // Clear buffer and typing state
+    loopbackBuffer.value = ''
+    loopbackPreviewMessage.value = ''
+    isLoopbackTyping.value = false
+    currentPreviewMessageId.value = null
+    loopbackBufferStartTime.value = 0
+    
     scrollToBottom()
+  }
+  
+  if (loopbackThoughtTimer.value) {
+    clearTimeout(loopbackThoughtTimer.value)
+    loopbackThoughtTimer.value = null
   }
 }
 
@@ -209,6 +357,9 @@ const scrollToBottom = async () => {
 const handleMicrophoneToggle = async () => {
   try {
     if (isRecording.value) {
+      // Flush any pending loopback buffer before stopping
+      flushLoopbackBuffer()
+      
       // Stop both microphone and audio loopback
       await stopRecording()
       conversationStore.setRecordingState(false)
@@ -287,6 +438,10 @@ const toggleExportMode = () => {
 // Cleanup
 onUnmounted(async () => {
   window.removeEventListener('transcription-final', handleConversationalUserSpeech)
+  window.removeEventListener('transcription-interim', handleConversationalUserInterim)
+  
+  // Flush any remaining loopback buffer
+  flushLoopbackBuffer()
   
   // Stop both recording and loopback when unmounting
   if (isRecording.value) {
@@ -401,13 +556,15 @@ onUnmounted(async () => {
                 'user-message': message.type === 'user',
                 'system-message': message.type === 'system',
                 'selectable': showExportControls,
-                'selected': selectedMessages.has(message.id)
+                'selected': selectedMessages.has(message.id),
+                'typing-preview': message.isPreview && message.isTyping
               }"
               @click="showExportControls ? toggleMessageSelection(message.id) : null"
             >
               <div class="message-bubble" :class="{
                 'user-bubble': message.type === 'user',
-                'system-bubble': message.type === 'system'
+                'system-bubble': message.type === 'system',
+                'typing-bubble': message.isPreview && message.isTyping
               }">
                 <div class="message-header">
                   <div class="message-source">
@@ -430,8 +587,15 @@ onUnmounted(async () => {
                   </div>
                   <span class="message-time">{{ formatTime(message.timestamp) }}</span>
                 </div>
-                <div class="message-content">{{ message.content }}</div>
-                <div v-if="message.confidence" class="message-confidence">
+                <div class="message-content">
+                  {{ message.content }}
+                  <span v-if="message.isPreview && message.isTyping" class="typing-indicator">
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                  </span>
+                </div>
+                <div v-if="message.confidence && !message.isPreview" class="message-confidence">
                   Confidence: {{ Math.round(message.confidence * 100) }}%
                 </div>
               </div>
@@ -675,6 +839,59 @@ onUnmounted(async () => {
 
 .message-confidence {
   @apply text-xs opacity-60 mt-1;
+}
+
+/* Typing animation */
+.typing-preview {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.typing-bubble {
+  opacity: 0.8;
+  border: 1px dashed rgba(255, 255, 255, 0.3) !important;
+}
+
+.typing-indicator {
+  @apply inline-flex items-center gap-1 ml-2;
+}
+
+.typing-dot {
+  @apply w-1 h-1 bg-current rounded-full opacity-60;
+  animation: typingPulse 1.4s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0s;
+}
+
+@keyframes typingPulse {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .controls-area {
