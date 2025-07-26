@@ -49,19 +49,21 @@ const showConversationSidebar = ref(false)
 const allConversations = ref<any[]>([])
 const isLoadingConversations = ref(false)
 
-// Loopback transcription buffering for complete thoughts
+// Enhanced loopback transcription with intelligent sentence building
 const loopbackBuffer = ref<string>('')
 const loopbackLastTimestamp = ref<number>(0)
 const loopbackThoughtTimer = ref<number | null>(null)
 const loopbackBufferStartTime = ref<number>(0)
-const THOUGHT_PAUSE_DURATION = 2000 // 2 seconds
-const MAX_BUFFER_DURATION = 10000 // 10 seconds for sizeable content
-const MIN_SIZEABLE_CONTENT = 50 // minimum characters for sizeable content
+const THOUGHT_PAUSE_DURATION = 3000 // 3 seconds for sentence completion
+const MAX_BUFFER_DURATION = 15000 // 15 seconds max buffer time
+const MIN_SIZEABLE_CONTENT = 30 // minimum characters for sizeable content
 
-// Deduplication tracking
+// Enhanced deduplication and sentence tracking
 const lastProcessedText = ref<string>('')
 const lastProcessedTimestamp = ref<number>(0)
 const recentMessages = ref<Set<string>>(new Set())
+const sentenceBuffer = ref<string[]>([]) // Track sentence fragments
+const processedChunks = ref<Set<string>>(new Set()) // Track already processed chunks
 
 // Typing animation state
 const isLoopbackTyping = ref(false)
@@ -295,30 +297,42 @@ const handleSystemAudio = (event: CustomEvent) => {
   // This is now just for monitoring - transcription happens in Rust backend
 }
 
-// Handle loopback transcription results with thought grouping and typing animation
+// Handle loopback transcription results with intelligent sentence building
 const handleLoopbackTranscription = (payload: any) => {
   console.log('🎙️ Loopback transcription chunk:', payload)
   const { text, confidence, timestamp, audioLevel } = payload
   
   if (text && text.trim()) {
     const currentTime = timestamp || Date.now()
-    const trimmedText = text.trim()
+    const cleanedText = cleanTranscriptionText(text)
     
-    // Deduplication check - ignore if we just processed the same text recently
-    const textFingerprint = `${trimmedText}_${Math.floor(currentTime / 1000)}` // Group by second
-    if (lastProcessedText.value === trimmedText && 
-        (currentTime - lastProcessedTimestamp.value) < 500) { // 500ms window
-      console.log('🎙️ Skipping duplicate transcription:', trimmedText)
+    // Enhanced deduplication using chunk fingerprinting
+    const chunkFingerprint = `${cleanedText.toLowerCase().slice(0, 50)}_${Math.floor(currentTime / 2000)}` // Group by 2 seconds
+    if (processedChunks.value.has(chunkFingerprint)) {
+      console.log('🎙️ Skipping already processed chunk:', cleanedText)
+      return
+    }
+    
+    // Add to processed chunks with cleanup after 30 seconds
+    processedChunks.value.add(chunkFingerprint)
+    setTimeout(() => {
+      processedChunks.value.delete(chunkFingerprint)
+    }, 30000)
+    
+    // Additional duplicate check for immediate repetitions
+    if (lastProcessedText.value === cleanedText && 
+        (currentTime - lastProcessedTimestamp.value) < 1000) { // 1 second window
+      console.log('🎙️ Skipping immediate duplicate:', cleanedText)
       return
     }
     
     // Update last processed tracking
-    lastProcessedText.value = trimmedText
+    lastProcessedText.value = cleanedText
     lastProcessedTimestamp.value = currentTime
     
     const timeSinceLastChunk = currentTime - loopbackLastTimestamp.value
     
-    // If more than 2 seconds have passed, start a new thought
+    // If more than 3 seconds have passed, start a new thought
     if (timeSinceLastChunk > THOUGHT_PAUSE_DURATION && loopbackBuffer.value.trim()) {
       flushLoopbackBuffer()
     }
@@ -327,33 +341,44 @@ const handleLoopbackTranscription = (payload: any) => {
     if (!loopbackBuffer.value.trim()) {
       loopbackBufferStartTime.value = currentTime
       currentPreviewMessageId.value = `loopback-preview-${currentTime}`
+      sentenceBuffer.value = []
     }
     
-    // Check if this text is already in the buffer to avoid concatenating duplicates
-    if (!loopbackBuffer.value.includes(trimmedText)) {
-      // Add current text to buffer
-      if (loopbackBuffer.value.trim()) {
-        loopbackBuffer.value += ' ' + trimmedText
-      } else {
-        loopbackBuffer.value = trimmedText
-      }
+    // Use intelligent concatenation instead of simple concatenation
+    const newBufferContent = intelligentConcatenation(loopbackBuffer.value, cleanedText)
+    
+    // Only update if we actually got new content
+    if (newBufferContent !== loopbackBuffer.value) {
+      loopbackBuffer.value = newBufferContent
+      sentenceBuffer.value.push(cleanedText) // Track individual chunks for analysis
+      
+      // Update real-time preview
+      loopbackPreviewMessage.value = loopbackBuffer.value
+      isLoopbackTyping.value = true
+      
+      console.log(`🎙️ Intelligent concatenation: "${cleanedText}" → "${loopbackBuffer.value}"`)
     } else {
-      console.log('🎙️ Text already in buffer, updating timestamp only')
+      console.log('🎙️ No new content after intelligent concatenation')
     }
-    
-    // Update real-time preview
-    loopbackPreviewMessage.value = loopbackBuffer.value
-    isLoopbackTyping.value = true
     
     loopbackLastTimestamp.value = currentTime
     
-    // Check if we should flush due to sizeable content + time
+    // Enhanced flushing logic based on sentence completion
     const bufferDuration = currentTime - loopbackBufferStartTime.value
     const hasSize = loopbackBuffer.value.length >= MIN_SIZEABLE_CONTENT
     const hasTime = bufferDuration >= MAX_BUFFER_DURATION
+    const isComplete = isCompleteSentence(loopbackBuffer.value)
     
+    // Flush if we have a complete sentence and reasonable size/time
+    if (isComplete && hasSize && bufferDuration > 2000) {
+      console.log('🎙️ Flushing complete sentence:', loopbackBuffer.value)
+      flushLoopbackBuffer()
+      return
+    }
+    
+    // Flush if buffer is too long or too old
     if (hasSize && hasTime) {
-      console.log('🎙️ Flushing buffer due to sizeable content + time:', loopbackBuffer.value.length, 'chars,', bufferDuration, 'ms')
+      console.log('🎙️ Flushing buffer due to size + time:', loopbackBuffer.value.length, 'chars,', bufferDuration, 'ms')
       flushLoopbackBuffer()
       return
     }
@@ -371,77 +396,269 @@ const handleLoopbackTranscription = (payload: any) => {
     // Auto-scroll to show typing animation
     scrollToBottom()
     
-    console.log(`🎙️ System Audio chunk (${audioLevel?.toFixed(1)}dB): ${trimmedText} [buffered: "${loopbackBuffer.value}" (${loopbackBuffer.value.length} chars, ${bufferDuration}ms)]`)
+    console.log(`🎙️ System Audio chunk (${audioLevel?.toFixed(1)}dB): ${cleanedText} [buffer: "${loopbackBuffer.value}" (${loopbackBuffer.value.length} chars, ${bufferDuration}ms)]`)
   }
 }
 
-// Flush the loopback buffer as a complete thought
+// Flush the loopback buffer as a complete thought with intelligent processing
 const flushLoopbackBuffer = () => {
   if (loopbackBuffer.value.trim()) {
-    const finalContent = loopbackBuffer.value.trim()
+    // Apply final cleaning and processing to the complete thought
+    const finalContent = cleanTranscriptionText(loopbackBuffer.value.trim())
     
-    // Check for duplicate messages - don't add if the last message has the same content
+    // Skip if content is too short to be meaningful
+    if (finalContent.length < 5) {
+      console.log('🎙️ Skipping too-short content:', finalContent)
+      clearBufferState()
+      return
+    }
+    
+    // Enhanced duplicate detection for final messages
     const existingMessages = conversationStore.currentMessages || []
     const lastMessage = existingMessages[existingMessages.length - 1]
     
+    // Check for exact duplicate with last message
     if (lastMessage && 
         lastMessage.source === 'loopback' && 
         lastMessage.content === finalContent) {
-      console.log('🎙️ Skipping duplicate final message:', finalContent)
-      // Still clear the buffer state
-      loopbackBuffer.value = ''
-      loopbackPreviewMessage.value = ''
-      isLoopbackTyping.value = false
-      currentPreviewMessageId.value = null
-      loopbackBufferStartTime.value = 0
+      console.log('🎙️ Skipping exact duplicate final message:', finalContent)
+      clearBufferState()
       return
     }
     
-    // Add to recent messages tracking to prevent immediate duplicates
-    const messageFingerprint = finalContent.toLowerCase().replace(/[^\w\s]/g, '')
+    // Check for substantial overlap with recent messages
+    const messageFingerprint = finalContent.toLowerCase().replace(/[^\w\s]/g, '').slice(0, 100)
     if (recentMessages.value.has(messageFingerprint)) {
-      console.log('🎙️ Skipping recently added message:', finalContent)
-      // Still clear the buffer state
-      loopbackBuffer.value = ''
-      loopbackPreviewMessage.value = ''
-      isLoopbackTyping.value = false
-      currentPreviewMessageId.value = null
-      loopbackBufferStartTime.value = 0
+      console.log('🎙️ Skipping substantially similar recent message:', finalContent)
+      clearBufferState()
       return
+    }
+    
+    // Check for intelligent overlap with the last few loopback messages
+    if (lastMessage && lastMessage.source === 'loopback') {
+      const overlap = findLongestCommonSubstring(lastMessage.content, finalContent)
+      if (overlap && overlap.length > Math.min(lastMessage.content.length, finalContent.length) * 0.7) {
+        console.log('🎙️ Skipping message with substantial overlap:', finalContent)
+        clearBufferState()
+        return
+      }
     }
     
     // Clear buffer and typing state FIRST to prevent duplication
-    loopbackBuffer.value = ''
-    loopbackPreviewMessage.value = ''
-    isLoopbackTyping.value = false
-    currentPreviewMessageId.value = null
-    loopbackBufferStartTime.value = 0
+    clearBufferState()
     
-    // Add to recent messages tracking
+    // Add to recent messages tracking with enhanced fingerprinting
     recentMessages.value.add(messageFingerprint)
     // Clean up old entries after 30 seconds
     setTimeout(() => {
       recentMessages.value.delete(messageFingerprint)
     }, 30000)
     
-    // Then add the final message
+    // Calculate confidence based on sentence completeness and buffer chunks
+    const sentenceCount = (finalContent.match(/[.!?]/g) || []).length
+    const baseConfidence = sentenceBuffer.value.length > 0 ? 
+      Math.min(0.9, 0.6 + (sentenceBuffer.value.length * 0.1)) : 0.8
+    const completenessBonus = isCompleteSentence(finalContent) ? 0.1 : 0
+    const finalConfidence = Math.min(0.95, baseConfidence + completenessBonus)
+    
+    // Then add the final message with enhanced metadata
     conversationStore.addMessage({
       type: 'system',
       source: 'loopback',
       content: finalContent,
-      confidence: 0.8, // Average confidence for grouped chunks
+      confidence: finalConfidence,
       timestamp: Date.now()
     })
     
-    console.log(`🎙️ Complete thought: "${finalContent}"`)
+    console.log(`🎙️ Complete thought (${sentenceBuffer.value.length} chunks, conf: ${Math.round(finalConfidence * 100)}%): "${finalContent}"`)
     
     scrollToBottom()
+  }
+  
+  // Helper function to clear all buffer state
+  function clearBufferState() {
+    loopbackBuffer.value = ''
+    loopbackPreviewMessage.value = ''
+    isLoopbackTyping.value = false
+    currentPreviewMessageId.value = null
+    loopbackBufferStartTime.value = 0
+    sentenceBuffer.value = []
   }
   
   if (loopbackThoughtTimer.value) {
     clearTimeout(loopbackThoughtTimer.value)
     loopbackThoughtTimer.value = null
   }
+}
+
+// Intelligent text processing functions
+const cleanTranscriptionText = (text: string): string => {
+  return text
+    .trim()
+    .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+    .replace(/([.!?])\s*\1+/g, '$1') // Remove duplicate punctuation
+    .replace(/\b(\w+)\s+\1\b/gi, '$1') // Remove immediate word repetitions
+}
+
+const findLongestCommonSubstring = (str1: string, str2: string): string => {
+  const words1 = str1.toLowerCase().split(' ')
+  const words2 = str2.toLowerCase().split(' ')
+  
+  let maxLength = 0
+  let endingIndex = 0
+  
+  for (let i = 0; i < words1.length; i++) {
+    for (let j = 0; j < words2.length; j++) {
+      let length = 0
+      while (
+        i + length < words1.length &&
+        j + length < words2.length &&
+        words1[i + length] === words2[j + length]
+      ) {
+        length++
+      }
+      if (length > maxLength) {
+        maxLength = length
+        endingIndex = i + length
+      }
+    }
+  }
+  
+  if (maxLength > 2) { // Only consider significant overlaps
+    return words1.slice(endingIndex - maxLength, endingIndex).join(' ')
+  }
+  return ''
+}
+
+// Enhanced similarity detection for smart deduplication
+const calculateTextSimilarity = (text1: string, text2: string): number => {
+  const words1 = text1.toLowerCase().split(' ')
+  const words2 = text2.toLowerCase().split(' ')
+  
+  // Calculate Jaccard similarity (intersection over union)
+  const set1 = new Set(words1)
+  const set2 = new Set(words2)
+  const intersection = new Set([...set1].filter(x => set2.has(x)))
+  const union = new Set([...set1, ...set2])
+  
+  return intersection.size / union.size
+}
+
+// Check if text is a repetitive fragment
+const isRepetitiveFragment = (text: string): boolean => {
+  const words = text.toLowerCase().split(' ')
+  if (words.length < 3) return false
+  
+  // Check for immediate repetitions
+  const wordCounts = new Map<string, number>()
+  for (const word of words) {
+    if (word.length > 2) { // Only count meaningful words
+      wordCounts.set(word, (wordCounts.get(word) || 0) + 1)
+    }
+  }
+  
+  // If more than 50% of meaningful words are repeated, it's likely repetitive
+  const meaningfulWords = words.filter(w => w.length > 2)
+  const repeatedWords = Array.from(wordCounts.entries()).filter(([_, count]) => count > 1)
+  
+  return repeatedWords.length > meaningfulWords.length * 0.5
+}
+
+const intelligentConcatenation = (existingText: string, newText: string): string => {
+  if (!existingText) return cleanTranscriptionText(newText)
+  if (!newText) return existingText
+  
+  const cleanExisting = cleanTranscriptionText(existingText)
+  const cleanNew = cleanTranscriptionText(newText)
+  
+  // Skip repetitive fragments entirely
+  if (isRepetitiveFragment(cleanNew)) {
+    console.log('🎙️ Skipping repetitive fragment:', cleanNew)
+    return cleanExisting
+  }
+  
+  // Calculate similarity to detect near-duplicates
+  const similarity = calculateTextSimilarity(cleanExisting, cleanNew)
+  if (similarity > 0.8) { // 80% similarity threshold
+    console.log('🎙️ High similarity detected, keeping existing:', similarity.toFixed(2))
+    return cleanExisting
+  }
+  
+  // Check if new text is completely contained in existing text
+  if (cleanExisting.toLowerCase().includes(cleanNew.toLowerCase())) {
+    console.log('🎙️ New text contained in existing, skipping')
+    return cleanExisting
+  }
+  
+  // Find overlap between the end of existing and beginning of new
+  const overlap = findLongestCommonSubstring(cleanExisting, cleanNew)
+  
+  if (overlap && overlap.length > 10) { // Significant overlap found
+    const overlapIndex = cleanNew.toLowerCase().indexOf(overlap.toLowerCase())
+    if (overlapIndex !== -1) {
+      // Take the part after the overlap from the new text
+      const uniquePart = cleanNew.substring(overlapIndex + overlap.length).trim()
+      const result = uniquePart ? `${cleanExisting} ${uniquePart}` : cleanExisting
+      console.log('🎙️ Found overlap, merging:', overlap, '→', result)
+      return result
+    }
+  }
+  
+  // Check if new text extends existing text (smart extension detection)
+  const existingWords = cleanExisting.toLowerCase().split(' ')
+  const newWords = cleanNew.toLowerCase().split(' ')
+  
+  // Look for the best continuation point
+  let bestExtensionIndex = -1
+  let bestMatchLength = 0
+  
+  for (let i = 0; i < newWords.length - 2; i++) {
+    // Try different segment sizes for matching
+    for (let segmentSize = 3; segmentSize <= Math.min(8, existingWords.length); segmentSize++) {
+      if (i + segmentSize > newWords.length) break
+      
+      const segment = newWords.slice(i, i + segmentSize).join(' ')
+      if (cleanExisting.toLowerCase().includes(segment) && segmentSize > bestMatchLength) {
+        bestExtensionIndex = i + segmentSize
+        bestMatchLength = segmentSize
+      }
+    }
+  }
+  
+  if (bestExtensionIndex > 0 && bestMatchLength >= 3) {
+    // Found a good continuation point
+    const extension = newWords.slice(bestExtensionIndex).join(' ')
+    const result = extension ? `${cleanExisting} ${extension}` : cleanExisting
+    console.log('🎙️ Smart extension found:', result)
+    return result
+  }
+  
+  // Check for partial similarity at the end/beginning boundary
+  const lastWords = existingWords.slice(-3).join(' ')
+  const firstWords = newWords.slice(0, 3).join(' ')
+  const boundarySimilarity = calculateTextSimilarity(lastWords, firstWords)
+  
+  if (boundarySimilarity > 0.6) {
+    // High boundary similarity, likely continuation
+    const result = `${cleanExisting} ${cleanNew}`
+    console.log('🎙️ Boundary continuation detected:', result)
+    return result
+  }
+  
+  // No significant overlap, check if we should still append
+  if (similarity < 0.3 && !isRepetitiveFragment(cleanNew)) {
+    // Low similarity and not repetitive, safe to append
+    return `${cleanExisting} ${cleanNew}`
+  }
+  
+  // Default: keep existing if new content seems redundant
+  console.log('🎙️ Content appears redundant, keeping existing')
+  return cleanExisting
+}
+
+const isCompleteSentence = (text: string): boolean => {
+  const trimmed = text.trim()
+  return /[.!?]\s*$/.test(trimmed) && trimmed.length > 10
 }
 
 // Scroll to bottom of conversation
