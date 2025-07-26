@@ -6,7 +6,13 @@ import {
   ArrowsPointingOutIcon,
   ShieldCheckIcon,
   ExclamationTriangleIcon,
-  Bars3Icon
+  Bars3Icon,
+  ChatBubbleLeftRightIcon,
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  EllipsisVerticalIcon,
+  ClockIcon
 } from '@heroicons/vue/24/outline'
 import { useChatManagement } from '../../composables/useChatManagement'
 import { useWindowResizing } from '../../composables/useWindowResizing'
@@ -30,6 +36,12 @@ const emit = defineEmits<Emits>()
 // Refs for scrolling
 const chatMessages = ref<HTMLElement>()
 
+// Chat sidebar state
+const showChatSidebar = ref(false)
+const renamingChatId = ref<string | null>(null)
+const newChatTitle = ref('')
+const showMenuForChat = ref<string | null>(null)
+
 // Helper function to scroll chat to bottom
 const scrollChatToBottom = () => {
   if (chatMessages.value) {
@@ -41,6 +53,13 @@ const scrollChatToBottom = () => {
 const {
   chatMessage,
   chatHistory,
+  chatSessions,
+  currentChatId,
+  createNewChat,
+  switchChat,
+  deleteChat,
+  renameChat,
+  clearChat,
   fileInput,
   renderMarkdown,
   takeScreenshotAndAnalyze,
@@ -65,6 +84,13 @@ const isContextTruncated = computed(() => {
   }, 0)
   
   return totalTokens > MAX_TOKENS
+})
+
+// Computed properties for sidebar
+const sortedChats = computed(() => {
+  return [...chatSessions.value].sort((a, b) => 
+    new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  )
 })
 
 // Set up speech events with real chat management functions
@@ -135,6 +161,70 @@ const handleFileUploadEvent = (event: Event) => {
   handleFileUpload(event, { value: props.showChatWindow })
 }
 
+// Sidebar functions
+const toggleChatSidebar = () => {
+  showChatSidebar.value = !showChatSidebar.value
+}
+
+const handleCreateNewChat = () => {
+  createNewChat()
+  showChatSidebar.value = false
+}
+
+const handleSwitchChat = (chatId: string) => {
+  switchChat(chatId)
+  showMenuForChat.value = null
+  showChatSidebar.value = false
+}
+
+const startRenaming = (chatId: string, currentTitle: string) => {
+  renamingChatId.value = chatId
+  newChatTitle.value = currentTitle
+  showMenuForChat.value = null
+}
+
+const finishRenaming = () => {
+  if (renamingChatId.value && newChatTitle.value.trim()) {
+    renameChat(renamingChatId.value, newChatTitle.value.trim())
+  }
+  renamingChatId.value = null
+  newChatTitle.value = ''
+}
+
+const cancelRenaming = () => {
+  renamingChatId.value = null
+  newChatTitle.value = ''
+}
+
+const handleDeleteChat = (chatId: string) => {
+  deleteChat(chatId)
+  showMenuForChat.value = null
+}
+
+const handleClearChat = () => {
+  clearChat()
+  showMenuForChat.value = null
+}
+
+const toggleChatMenu = (chatId: string) => {
+  showMenuForChat.value = showMenuForChat.value === chatId ? null : chatId
+}
+
+const formatRelativeTime = (dateString: string) => {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / (1000 * 60))
+  const diffHours = Math.floor(diffMins / 60)
+  const diffDays = Math.floor(diffHours / 24)
+  
+  if (diffMins < 1) return 'Just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+  return date.toLocaleDateString()
+}
+
 
 
 // Setup speech events when component mounts
@@ -158,27 +248,11 @@ onUnmounted(() => {
 
 <template>
   <Transition name="chat-window">
-    <div v-if="showChatWindow" class="chat-window-section">
-      <div 
-        class="chat-window" 
-        :class="{ 'resizing': isResizing }"
-        :style="{ 
-          width: chatWindowSize.width + 'px', 
-          height: chatWindowSize.height + 'px' 
-        }"
-      >
-        <!-- Chat Drawer Trigger Button -->
-        <button 
-          @click="toggleChatDrawer"
-          class="chat-drawer-trigger"
-          title="Chat History"
-        >
-          <Bars3Icon class="w-4 h-4 text-white/70 hover:text-white transition-colors" />
-        </button>
-
-        <!-- Chat Header with Resize Indicator -->
-        <div class="chat-header">
-          <div class="chat-title">
+    <div v-if="showChatWindow" class="chat-window">
+      <!-- Window Header -->
+      <div class="window-header">
+        <div class="header-title">
+          <div class="flex items-center gap-2">
             <CommandLineIcon class="w-4 h-4 text-white/80" />
             <span class="text-sm font-medium text-white/90">AI Assistant</span>
             <div class="model-indicator" v-if="selectedModel">
@@ -190,168 +264,288 @@ onUnmounted(() => {
               <ExclamationTriangleIcon class="w-3 h-3 text-yellow-400" />
               <span class="text-xs text-yellow-400">History Truncated</span>
             </div>
-            
-            <div class="resize-indicator">
-              <ArrowsPointingOutIcon class="w-3 h-3 text-white/50" />
-              <span class="text-xs text-white/50">{{ chatWindowSize.width }}×{{ chatWindowSize.height }}</span>
-            </div>
           </div>
-          <button @click="closeWindow" class="chat-close-btn">
-            <XMarkIcon class="w-4 h-4 text-white/70 hover:text-white transition-colors" />
-          </button>
-        </div>
-        
-        <div class="chat-messages" ref="chatMessages" 
-             :style="{ height: (chatWindowSize.height - 120) + 'px' }">
-          <div v-if="chatHistory.length === 0" class="chat-empty">
-            <CommandLineIcon class="w-6 h-6 text-white/40 mb-2" />
-            <p class="text-white/60 text-sm">Start a conversation with your AI assistant</p>
-          </div>
-          
-          <div v-for="(message, index) in chatHistory" :key="index" class="chat-message"
-               :class="{ 
-                 'user': message.sender === 'user', 
-                 'assistant': message.sender === 'assistant',
-                 'transcription': message.sender === 'transcription',
-                 'system': message.sender === 'system'
-               }">
-            <div class="message-bubble">
-              <!-- Transcription messages -->
-              <div v-if="message.sender === 'transcription'" class="transcription-message">
-                <!-- Interim transcription (thought stream) -->
-                <div v-if="message.isInterim" class="interim-transcription">
-                  <span class="interim-icon">💭</span>
-                  <span class="interim-text">{{ message.text }}</span>
-                  <span class="interim-dots">...</span>
-                </div>
-                <!-- Final transcription -->
-                <div v-else class="final-transcription">
-                  <div class="transcription-content">
-                    <span class="transcription-icon">🎤</span>
-                    <span class="transcription-text">{{ message.text }}</span>
-                  </div>
-                  <div v-if="message.confidence" class="confidence-indicator">
-                    {{ Math.round(message.confidence * 100) }}%
-                  </div>
-                </div>
-              </div>
-              
-              <!-- Regular user/assistant messages -->
-              <div v-else class="message-text">
-                <!-- Streaming text with cursor -->
-                <template v-if="message.text.endsWith('▋')">
-                  <div v-html="renderMarkdown(message.text.slice(0, -1))"></div><span class="streaming-cursor">▋</span>
-                </template>
-                <!-- Regular completed text with markdown -->
-                <div v-else v-html="renderMarkdown(message.text)"></div>
-              </div>
-              
-              <span class="message-time">{{ new Date(message.timestamp).toLocaleTimeString() }}</span>
-            </div>
+          <div class="header-controls">
+            <!-- Chat History Button -->
+            <button 
+              @click="toggleChatSidebar" 
+              class="header-btn"
+              :class="{ 'active': showChatSidebar }"
+              title="Chat History"
+            >
+              <ChatBubbleLeftRightIcon class="w-4 h-4" />
+            </button>
           </div>
         </div>
-        
-        <!-- Agent Action Buttons -->
-        <AgentActionButtons
-          :file-input="fileInput"
-          @take-screenshot="handleTakeScreenshot"
-          @start-deep-research="handleStartDeepResearch"
-          @start-conversational="handleStartConversational"
-          @start-coding="handleStartCoding"
-          @start-computer-use="handleStartComputerUse"
-          @trigger-file-upload="triggerFileUpload"
-          @handle-file-upload="handleFileUploadEvent"
-        />
-        
-        
-        <div class="chat-input-container">
-          <input 
-            v-model="chatMessage"
-            @keydown="handleChatKeydown"
-            class="chat-input"
-            placeholder="Ask any AI agent..."
-            type="text"
-          />
-          <button @click="() => sendMessage()" class="chat-send-btn" :disabled="!chatMessage.trim()">
-            <ShieldCheckIcon class="w-4 h-4" />
-          </button>
-        </div>
-
-        <!-- Resize Handles -->
-        <div class="resize-handles">
-          <!-- Corner handles -->
-          <div class="resize-handle corner top-left" @mousedown="startResize($event, 'top-left')"></div>
-          <div class="resize-handle corner top-right" @mousedown="startResize($event, 'top-right')"></div>
-          <div class="resize-handle corner bottom-left" @mousedown="startResize($event, 'bottom-left')"></div>
-          <div class="resize-handle corner bottom-right" @mousedown="startResize($event, 'bottom-right')"></div>
-          
-          <!-- Edge handles -->
-          <div class="resize-handle edge top" @mousedown="startResize($event, 'top')"></div>
-          <div class="resize-handle edge bottom" @mousedown="startResize($event, 'bottom')"></div>
-          <div class="resize-handle edge left" @mousedown="startResize($event, 'left')"></div>
-          <div class="resize-handle edge right" @mousedown="startResize($event, 'right')"></div>
-        </div>
+        <button @click="closeWindow" class="close-btn">
+          <XMarkIcon class="w-4 h-4 text-white/70 hover:text-white transition-colors" />
+        </button>
       </div>
+      
+      <!-- Window Content Container -->
+      <div class="window-content">
+        <!-- Chat Sidebar -->
+        <div v-if="showChatSidebar" class="chat-sidebar">
+          <div class="sidebar-header">
+            <div class="flex items-center gap-2">
+              <ChatBubbleLeftRightIcon class="w-4 h-4 text-blue-400" />
+              <h3 class="text-sm font-medium text-white">Chat Sessions</h3>
+            </div>
+            <button @click="showChatSidebar = false" class="close-sidebar-btn">
+              <XMarkIcon class="w-4 h-4" />
+            </button>
+          </div>
+          
+          <div class="sidebar-content">
+            <!-- New Chat Button -->
+            <button @click="handleCreateNewChat" class="new-chat-btn">
+              <PlusIcon class="w-4 h-4" />
+              New Chat
+            </button>
+            
+            <!-- Chat List -->
+            <div class="chat-list">
+              <div v-if="sortedChats.length === 0" class="empty-state">
+                <ChatBubbleLeftRightIcon class="w-8 h-8 text-white/20 mx-auto mb-2" />
+                <p class="text-white/60 text-xs text-center">No chat sessions yet</p>
+              </div>
+              
+              <div v-else class="chats-grid">
+                <div 
+                  v-for="chat in sortedChats" 
+                  :key="chat.id"
+                  class="chat-item"
+                  :class="{ 'active': chat.id === currentChatId }"
+                  @click="handleSwitchChat(chat.id)"
+                >
+                  <div class="chat-header">
+                    <!-- Chat title (editable) -->
+                    <div v-if="renamingChatId === chat.id" class="w-full">
+                      <input
+                        v-model="newChatTitle"
+                        @keyup.enter="finishRenaming"
+                        @keyup.escape="cancelRenaming"
+                        @blur="finishRenaming"
+                        class="w-full px-2 py-1 text-xs bg-white/10 border border-white/20 rounded text-white/90 focus:outline-none focus:border-blue-500/50"
+                        autofocus
+                      />
+                    </div>
+                    <span v-else class="chat-title">{{ chat.title }}</span>
+                    <button 
+                      @click.stop="toggleChatMenu(chat.id)"
+                      class="menu-btn"
+                      title="Chat options"
+                    >
+                      <EllipsisVerticalIcon class="w-3 h-3" />
+                    </button>
+                  </div>
+                  
+                  <div class="chat-meta">
+                    <div class="meta-row">
+                      <ClockIcon class="w-3 h-3 text-white/40" />
+                      <span class="text-xs text-white/40">{{ formatRelativeTime(chat.updatedAt) }}</span>
+                      <span class="text-xs text-white/40">•</span>
+                      <span class="text-xs text-white/40">{{ chat.history.length }} messages</span>
+                    </div>
+                  </div>
+                  
+                  <!-- Dropdown menu -->
+                  <div v-if="showMenuForChat === chat.id" class="chat-menu">
+                    <button @click.stop="startRenaming(chat.id, chat.title)" class="menu-item">
+                      <PencilIcon class="w-3 h-3" />
+                      <span>Rename</span>
+                    </button>
+                    <button 
+                      v-if="chat.id === currentChatId && chat.history.length > 0"
+                      @click.stop="handleClearChat" 
+                      class="menu-item"
+                    >
+                      <TrashIcon class="w-3 h-3" />
+                      <span>Clear History</span>
+                    </button>
+                    <button @click.stop="handleDeleteChat(chat.id)" class="menu-item danger">
+                      <TrashIcon class="w-3 h-3" />
+                      <span>Delete Chat</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      
+        <!-- Main Content Area -->
+        <div class="main-content" :class="{ 'with-sidebar': showChatSidebar }">
+          <!-- Chat Messages Area -->
+          <div ref="chatMessages" class="chat-area">
+            <div v-if="chatHistory.length === 0" class="empty-state">
+              <div class="empty-icon">
+                <CommandLineIcon class="w-8 h-8 text-white/40" />
+              </div>
+              <p class="text-white/60 text-sm">Start a conversation</p>
+              <p class="text-white/40 text-xs mt-1">
+                Ask your AI assistant anything
+              </p>
+            </div>
+            
+            <div v-else class="messages-container">
+              <div 
+                v-for="(message, index) in chatHistory" 
+                :key="index"
+                class="message-wrapper"
+                :class="{
+                  'user-message': message.sender === 'user',
+                  'assistant-message': message.sender === 'assistant',
+                  'transcription-message': message.sender === 'transcription',
+                  'system-message': message.sender === 'system'
+                }"
+              >
+                <div class="message-bubble" :class="{
+                  'user-bubble': message.sender === 'user',
+                  'assistant-bubble': message.sender === 'assistant',
+                  'transcription-bubble': message.sender === 'transcription',
+                  'system-bubble': message.sender === 'system'
+                }">
+                  <div class="message-header">
+                    <div class="message-source">
+                      <span class="source-label">
+                        {{ message.sender === 'user' ? 'You' : 
+                           message.sender === 'assistant' ? 'Assistant' : 
+                           message.sender === 'transcription' ? 'Voice' : 'System' }}
+                      </span>
+                    </div>
+                    <span class="message-time">{{ new Date(message.timestamp).toLocaleTimeString() }}</span>
+                  </div>
+                  <div class="message-content">
+                    <!-- Transcription messages -->
+                    <div v-if="message.sender === 'transcription'" class="transcription-message">
+                      <!-- Interim transcription (thought stream) -->
+                      <div v-if="message.isInterim" class="interim-transcription">
+                        <span class="interim-icon">💭</span>
+                        <span class="interim-text">{{ message.text }}</span>
+                        <span class="interim-dots">...</span>
+                      </div>
+                      <!-- Final transcription -->
+                      <div v-else class="final-transcription">
+                        <div class="transcription-content">
+                          <span class="transcription-icon">🎤</span>
+                          <span class="transcription-text">{{ message.text }}</span>
+                        </div>
+                        <div v-if="message.confidence" class="confidence-indicator">
+                          {{ Math.round(message.confidence * 100) }}%
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- Regular user/assistant messages -->
+                    <div v-else>
+                      <!-- Streaming text with cursor -->
+                      <template v-if="message.text.endsWith('▋')">
+                        <div v-html="renderMarkdown(message.text.slice(0, -1))"></div><span class="streaming-cursor">▋</span>
+                      </template>
+                      <!-- Regular completed text with markdown -->
+                      <div v-else v-html="renderMarkdown(message.text)"></div>
+                    </div>
+                  </div>
+                  <div v-if="message.confidence && message.sender !== 'transcription'" class="message-confidence">
+                    Confidence: {{ Math.round(message.confidence * 100) }}%
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Agent Action Buttons -->
+          <AgentActionButtons
+            :file-input="fileInput"
+            @take-screenshot="handleTakeScreenshot"
+            @start-deep-research="handleStartDeepResearch"
+            @start-conversational="handleStartConversational"
+            @start-coding="handleStartCoding"
+            @start-computer-use="handleStartComputerUse"
+            @trigger-file-upload="triggerFileUpload"
+            @handle-file-upload="handleFileUploadEvent"
+          />
+          
+          <!-- Chat Input -->
+          <div class="chat-input-container">
+            <input 
+              v-model="chatMessage"
+              @keydown="handleChatKeydown"
+              class="chat-input"
+              placeholder="Ask any AI agent..."
+              type="text"
+            />
+            <button @click="() => sendMessage()" class="chat-send-btn" :disabled="!chatMessage.trim()">
+              <ShieldCheckIcon class="w-4 h-4" />
+            </button>
+          </div>
+        </div> <!-- End main-content -->
+      </div> <!-- End window-content -->
     </div>
   </Transition>
 </template>
 
 <style scoped>
-.chat-window-section {
-  @apply w-full flex justify-center;
-  padding: 8px; /* Normal padding since button is inside the window */
-  background: transparent;
-  /* Ensure the section doesn't get cut off */
-  min-height: 100%;
-  box-sizing: border-box;
-  position: relative;
-}
-
-/* Chat Window Styles - Matching ConversationalWindow */
 .chat-window {
-  @apply backdrop-blur-xl border border-white/15 rounded-2xl relative;
-  pointer-events: auto;
-  min-width: 450px;
-  min-height: 500px;
-  max-width: 800px;
-  max-height: calc(100vh - 100px);
-  overflow: visible; /* Allow menu button to be visible */
-  display: flex;
-  flex-direction: column;
-  
-  /* Enhanced glass effect matching conversational window */
+  @apply backdrop-blur-xl border border-white/15 rounded-2xl overflow-hidden;
   background: linear-gradient(to bottom, 
     rgba(10, 10, 12, 0.9) 0%, 
     rgba(5, 5, 7, 0.95) 100%
   );
+  width: 600px;
+  height: 700px;
+  max-width: 95vw;
+  max-height: calc(100vh - 100px);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  
+  /* Enhanced glass effect similar to conversational window */
   backdrop-filter: blur(80px) saturate(180%);
   box-shadow: 
     0 25px 80px rgba(0, 0, 0, 0.6),
     0 10px 30px rgba(0, 0, 0, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
-
-  transition: all 0.2s ease;
 }
 
-.chat-window.resizing {
-  box-shadow: 
-    0 30px 90px rgba(0, 0, 0, 0.7),
-    0 15px 40px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.25);
+/* When sidebar is shown, make window wider and use row layout */
+.chat-window:has(.chat-sidebar) {
+  width: 980px;
+  max-width: 95vw;
 }
 
-.chat-header {
+.window-content {
+  @apply flex-1 flex flex-col min-h-0;
+}
+
+.chat-window:has(.chat-sidebar) .window-content {
+  @apply flex flex-row;
+}
+
+.main-content {
+  @apply flex-1 flex flex-col min-h-0;
+}
+
+.window-header {
   @apply flex items-center justify-between px-4 py-3 border-b border-white/10;
   flex-shrink: 0;
-  padding-left: 56px; /* Space for drawer button */
-  border-radius: 16px 16px 0 0;
-  overflow: visible; /* Allow drawer button to show */
-  position: relative;
 }
 
-.chat-title {
+.header-title {
+  @apply flex items-center justify-between w-full mr-4;
+}
+
+.header-controls {
   @apply flex items-center gap-2;
+}
+
+.header-btn {
+  @apply rounded-full p-1 hover:bg-white/10 transition-all duration-200 text-white/60 hover:text-white/90;
+}
+
+.header-btn.active {
+  @apply bg-blue-500/20 text-blue-400 hover:bg-blue-500/30;
 }
 
 .model-indicator {
@@ -362,99 +556,160 @@ onUnmounted(() => {
   @apply flex items-center gap-1 px-2 py-1 bg-yellow-500/20 rounded-full border border-yellow-500/30;
 }
 
-.resize-indicator {
-  @apply flex items-center gap-1;
-}
-
-.chat-close-btn {
+.close-btn {
   @apply rounded-full p-1 hover:bg-white/10 transition-colors;
 }
 
-.chat-drawer-trigger {
-  @apply absolute z-20 rounded-full p-2 transition-all duration-200;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  top: 12px;
-  left: 12px;
-  min-width: 36px;
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* Chat Sidebar */
+.chat-sidebar {
+  @apply w-80 border-r border-white/10 bg-white/5 backdrop-blur-sm flex flex-col;
+  min-width: 320px;
+  max-width: 400px;
 }
 
-.chat-drawer-trigger:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-  transform: scale(1.05);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+.sidebar-header {
+  @apply flex items-center justify-between px-4 py-3 border-b border-white/10;
 }
 
-.chat-messages {
-  @apply flex-1 overflow-y-auto px-4 py-3;
-  max-height: calc(100% - 120px);
+.close-sidebar-btn {
+  @apply rounded-full p-1 hover:bg-white/10 transition-colors text-white/70 hover:text-white;
+}
+
+.sidebar-content {
+  @apply flex-1 overflow-hidden flex flex-col;
+}
+
+.new-chat-btn {
+  @apply w-full flex items-center justify-center gap-2 mx-4 my-3 px-4 py-2 bg-blue-500/80 hover:bg-blue-500 text-white rounded-lg transition-all duration-200 font-medium text-sm;
+}
+
+.chat-list {
+  @apply flex-1 overflow-y-auto px-4 pb-4;
+}
+
+.empty-state {
+  @apply flex flex-col items-center justify-center h-full text-center p-8;
+}
+
+.empty-icon {
+  @apply mb-4 p-4 rounded-full bg-white/5;
+}
+
+.chats-grid {
+  @apply space-y-2;
+}
+
+.chat-item {
+  @apply rounded-lg bg-white/5 hover:bg-white/10 transition-all duration-200 cursor-pointer p-3 border border-transparent relative;
+}
+
+.chat-item.active {
+  @apply border-blue-500/50 bg-blue-500/10;
+}
+
+.chat-header {
+  @apply flex items-center justify-between mb-2;
+}
+
+.chat-title {
+  @apply text-xs font-medium text-white truncate flex-1 mr-2;
+}
+
+.menu-btn {
+  @apply rounded-full p-1 hover:bg-white/10 transition-colors text-white/60 hover:text-white/90;
+}
+
+.chat-meta {
+  @apply space-y-1 mb-2;
+}
+
+.meta-row {
+  @apply flex items-center gap-1;
+}
+
+.chat-menu {
+  @apply absolute right-3 top-12 bg-black/95 border border-white/20 rounded-lg shadow-xl z-50 py-1 min-w-32;
+}
+
+.menu-item {
+  @apply w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-white/10 transition-colors text-white/80 hover:text-white/90;
+}
+
+.menu-item.danger {
+  @apply text-red-400 hover:text-red-300 hover:bg-red-500/10;
+}
+
+/* Chat Area */
+.chat-area {
+  @apply flex-1 overflow-y-auto;
   min-height: 0;
-  scroll-behavior: smooth;
 }
 
-.chat-messages::-webkit-scrollbar {
-  width: 4px;
+.messages-container {
+  @apply p-4 space-y-4;
 }
 
-.chat-messages::-webkit-scrollbar-track {
-  background: transparent;
+.message-wrapper {
+  @apply flex;
 }
 
-.chat-messages::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
+.message-wrapper.user-message {
+  @apply justify-end;
 }
 
-.chat-empty {
-  @apply flex flex-col items-center justify-center h-full text-center;
-}
-
-.chat-message {
-  @apply mb-4;
-}
-
-.chat-message:last-child {
-  @apply mb-6; /* Extra margin for the last message to ensure good scroll space */
-}
-
-.chat-message.user {
-  @apply flex justify-end;
-}
-
-.chat-message.assistant {
-  @apply flex justify-start;
-}
-
-.chat-message.transcription {
-  @apply flex justify-start;
+.message-wrapper.assistant-message,
+.message-wrapper.transcription-message,
+.message-wrapper.system-message {
+  @apply justify-start;
 }
 
 .message-bubble {
-  @apply max-w-xs px-4 py-3 rounded-2xl;
+  @apply rounded-2xl p-3 max-w-xs;
   word-wrap: break-word;
 }
 
-.chat-message.user .message-bubble {
+.user-bubble {
   @apply bg-blue-500/80 text-white;
   border-bottom-right-radius: 6px;
 }
 
-.chat-message.assistant .message-bubble {
+.assistant-bubble,
+.system-bubble {
   @apply text-white/90 border border-white/10;
   background: rgba(255, 255, 255, 0.05);
   border-bottom-left-radius: 6px;
 }
 
-.chat-message.transcription .message-bubble {
+.transcription-bubble {
   @apply bg-purple-500/20 text-white/90 border border-purple-400/30;
+  border-bottom-left-radius: 6px;
 }
 
+.message-header {
+  @apply flex items-center justify-between mb-1;
+}
+
+.message-source {
+  @apply flex items-center gap-1 text-xs opacity-75;
+}
+
+.source-label {
+  @apply font-medium;
+}
+
+.message-time {
+  @apply text-xs opacity-60;
+}
+
+.message-content {
+  @apply text-sm leading-relaxed;
+}
+
+.message-confidence {
+  @apply text-xs opacity-60 mt-1;
+}
+
+/* Transcription specific styles */
 .transcription-message {
   @apply w-full;
 }
@@ -495,14 +750,7 @@ onUnmounted(() => {
   @apply text-xs text-white/60 mt-1;
 }
 
-.message-text {
-  @apply text-sm leading-relaxed;
-}
-
-.message-time {
-  @apply text-xs opacity-70 mt-1 block;
-}
-
+/* Chat Input */
 .chat-input-container {
   @apply flex items-center gap-3 px-4 py-4 border-t border-white/10;
   flex-shrink: 0;
@@ -548,125 +796,13 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
-/* Resize Handles */
-.resize-handles {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-}
-
-.resize-handle {
-  position: absolute;
-  pointer-events: auto;
-  transition: background-color 0.2s ease;
-}
-
-/* Corner handles */
-.resize-handle.corner {
-  width: 16px;
-  height: 16px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-}
-
-.resize-handle.corner:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.4);
-}
-
-.resize-handle.top-left {
-  top: -8px;
-  left: -8px;
-  cursor: nw-resize;
-}
-
-.resize-handle.top-right {
-  top: -8px;
-  right: -8px;
-  cursor: ne-resize;
-}
-
-.resize-handle.bottom-left {
-  bottom: -8px;
-  left: -8px;
-  cursor: sw-resize;
-}
-
-.resize-handle.bottom-right {
-  bottom: -8px;
-  right: -8px;
-  cursor: se-resize;
-}
-
-/* Edge handles */
-.resize-handle.edge {
-  background: transparent;
-}
-
-.resize-handle.edge:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.resize-handle.top {
-  top: -4px;
-  left: 16px;
-  right: 16px;
-  height: 8px;
-  cursor: n-resize;
-}
-
-.resize-handle.bottom {
-  bottom: -4px;
-  left: 16px;
-  right: 16px;
-  height: 8px;
-  cursor: s-resize;
-}
-
-.resize-handle.left {
-  left: -4px;
-  top: 16px;
-  bottom: 16px;
-  width: 8px;
-  cursor: w-resize;
-}
-
-.resize-handle.right {
-  right: -4px;
-  top: 16px;
-  bottom: 16px;
-  width: 8px;
-  cursor: e-resize;
-}
-
-/* Chat Window Transitions */
-.chat-window-enter-active,
-.chat-window-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.chat-window-enter-from {
-  opacity: 0;
-  transform: translateY(-10px) scale(0.95);
-}
-
-.chat-window-leave-to {
-  opacity: 0;
-  transform: translateY(-10px) scale(0.95);
-}
-
-/* Style for streaming cursor */
+/* Streaming cursor */
 .streaming-cursor {
   animation: blink 1s infinite;
   color: #60a5fa;
   font-weight: bold;
 }
 
-/* Blinking cursor animation for streaming responses */
 @keyframes blink {
   0%, 50% {
     opacity: 1;
@@ -676,13 +812,36 @@ onUnmounted(() => {
   }
 }
 
-/* Prevent text selection during resize */
-.chat-window.resizing {
-  user-select: none;
+/* Transitions */
+.chat-window-enter-active,
+.chat-window-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.chat-window.resizing * {
-  user-select: none;
+.chat-window-enter-from {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.98);
 }
 
+.chat-window-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.98);
+}
+
+/* Scrollbar */
+.chat-area::-webkit-scrollbar,
+.chat-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chat-area::-webkit-scrollbar-track,
+.chat-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-area::-webkit-scrollbar-thumb,
+.chat-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
 </style> 

@@ -71,14 +71,18 @@ const emit = defineEmits<Emits>()
     </div>
   </Transition>
 
-  <!-- Chat Window -->
-  <ChatWindow 
-    :show-chat-window="showChatWindow"
-    :selected-model="selectedModel"
-    @close="emit('close-chat')"
-    @update:show-chat-window="emit('update:show-chat-window', $event)"
-    @toggle-chat-drawer="emit('toggle-chat-drawer')"
-  />
+  <!-- Chat Window Section -->
+  <Transition name="chat-panel">
+    <div v-if="showChatWindow" class="chat-panel-section">
+      <ChatWindow 
+        :show-chat-window="showChatWindow"
+        :selected-model="selectedModel"
+        @close="emit('close-chat')"
+        @update:show-chat-window="emit('update:show-chat-window', $event)"
+        @toggle-chat-drawer="emit('toggle-chat-drawer')"
+      />
+    </div>
+  </Transition>
 </template>
 
 <style scoped>
@@ -158,6 +162,14 @@ const emit = defineEmits<Emits>()
   position: relative;
 }
 
+/* Chat Panel Section */
+.chat-panel-section {
+  @apply w-full flex justify-center;
+  padding: 8px;
+  background: transparent;
+  position: relative;
+}
+
 /* Settings Panel Transitions */
 .settings-panel-enter-active,
 .settings-panel-leave-active {
@@ -186,6 +198,22 @@ const emit = defineEmits<Emits>()
 }
 
 .conversational-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+/* Chat Panel Transitions */
+.chat-panel-enter-active,
+.chat-panel-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chat-panel-enter-from {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+.chat-panel-leave-to {
   opacity: 0;
   transform: translateY(-10px) scale(0.95);
 }

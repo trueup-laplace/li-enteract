@@ -2365,3 +2365,147 @@
 [14:30:46.348] RMS: 0.303599 (-10.4dB) | [MAIN] Raw Whisper result: 'We're around in circles all'
 [14:30:46.348] RMS: 0.303599 (-10.4dB) | [MAIN] Cleaned text: 'We're around in circles all'
 [14:30:46.349] RMS: 0.303599 (-10.4dB) | [MAIN SUCCESS] We're around in circles all (conf: 0.800)
+[14:40:13.798] RMS: 0.243415 (-12.3dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:14.589] RMS: 0.220958 (-13.1dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:14.632] RMS: 0.243415 (-12.3dB) | [MAIN] Raw Whisper result: 'and constantly defensive and unsure that I have.'
+[14:40:14.633] RMS: 0.243415 (-12.3dB) | [MAIN] Cleaned text: 'and constantly defensive and unsure that I have.'
+[14:40:14.633] RMS: 0.243415 (-12.3dB) | [MAIN SUCCESS] and constantly defensive and unsure that I have. (conf: 0.700)
+[14:40:15.397] RMS: 0.202870 (-13.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:15.402] RMS: 0.220958 (-13.1dB) | [MAIN] Raw Whisper result: 'of an unsure that I had remembered to start'
+[14:40:15.402] RMS: 0.220958 (-13.1dB) | [MAIN] Cleaned text: 'of an unsure that I had remembered to start'
+[14:40:15.403] RMS: 0.220958 (-13.1dB) | [MAIN SUCCESS] of an unsure that I had remembered to start (conf: 0.800)
+[14:40:16.173] RMS: 0.202870 (-13.9dB) | [MAIN] Raw Whisper result: 'I hope you enjoyed this video.'
+[14:40:16.173] RMS: 0.202870 (-13.9dB) | [MAIN] Cleaned text: 'I hope you enjoyed this video.'
+[14:40:16.174] RMS: 0.202870 (-13.9dB) | [MAIN SUCCESS] I hope you enjoyed this video. (conf: 0.800)
+[14:40:16.200] RMS: 0.203025 (-13.8dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:16.968] RMS: 0.203025 (-13.8dB) | [MAIN] Raw Whisper result: 'December to satisfy all cases. This brings us to the'
+[14:40:16.968] RMS: 0.203025 (-13.8dB) | [MAIN] Cleaned text: 'December to satisfy all cases. This brings us to the'
+[14:40:16.969] RMS: 0.203025 (-13.8dB) | [MAIN SUCCESS] December to satisfy all cases. This brings us to the (conf: 0.720)
+[14:40:17.000] RMS: 0.234836 (-12.6dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:17.800] RMS: 0.234836 (-12.6dB) | [MAIN] Raw Whisper result: 'case it's this brings us to the language world here.'
+[14:40:17.800] RMS: 0.234836 (-12.6dB) | [MAIN] Cleaned text: 'case it's this brings us to the language world here.'
+[14:40:17.801] RMS: 0.234836 (-12.6dB) | [MAIN SUCCESS] case it's this brings us to the language world here. (conf: 0.800)
+[14:40:17.807] RMS: 0.240071 (-12.4dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:18.572] RMS: 0.240071 (-12.4dB) | [MAIN] Raw Whisper result: 'This brings us to the language we're all here to talk about.'
+[14:40:18.573] RMS: 0.240071 (-12.4dB) | [MAIN] Cleaned text: 'This brings us to the language we're all here to talk about.'
+[14:40:18.574] RMS: 0.240071 (-12.4dB) | [MAIN SUCCESS] This brings us to the language we're all here to talk about. (conf: 0.733)
+[14:40:18.606] RMS: 0.199915 (-14.0dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:19.353] RMS: 0.199915 (-14.0dB) | [MAIN] Raw Whisper result: 'which we're all here to talk about. Rust.'
+[14:40:19.353] RMS: 0.199915 (-14.0dB) | [MAIN] Cleaned text: 'which we're all here to talk about. Rust.'
+[14:40:19.354] RMS: 0.199915 (-14.0dB) | [MAIN SUCCESS] which we're all here to talk about. Rust. (conf: 0.800)
+[14:40:19.413] RMS: 0.241030 (-12.4dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:20.136] RMS: 0.241030 (-12.4dB) | [MAIN] Raw Whisper result: 'about rust. It is not there right now.'
+[14:40:20.136] RMS: 0.241030 (-12.4dB) | [MAIN] Cleaned text: 'about rust. It is not there right now.'
+[14:40:20.137] RMS: 0.241030 (-12.4dB) | [MAIN SUCCESS] about rust. It is not there right now. (conf: 0.800)
+[14:40:20.220] RMS: 0.283928 (-10.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:20.998] RMS: 0.283928 (-10.9dB) | [MAIN] Raw Whisper result: 'If it's not clear by now, I'm a person who loves you.'
+[14:40:20.998] RMS: 0.283928 (-10.9dB) | [MAIN] Cleaned text: 'If it's not clear by now, I'm a person who loves you.'
+[14:40:20.999] RMS: 0.283928 (-10.9dB) | [MAIN SUCCESS] If it's not clear by now, I'm a person who loves you. (conf: 0.800)
+[14:40:21.029] RMS: 0.279339 (-11.1dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:21.791] RMS: 0.279339 (-11.1dB) | [MAIN] Raw Whisper result: 'I'm a person who likes learning.'
+[14:40:21.792] RMS: 0.279339 (-11.1dB) | [MAIN] Cleaned text: 'I'm a person who likes learning.'
+[14:40:21.792] RMS: 0.279339 (-11.1dB) | [MAIN SUCCESS] I'm a person who likes learning. (conf: 0.800)
+[14:40:21.828] RMS: 0.246220 (-12.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:22.587] RMS: 0.246220 (-12.2dB) | [MAIN] Raw Whisper result: 'person who likes learning languages.'
+[14:40:22.588] RMS: 0.246220 (-12.2dB) | [MAIN] Cleaned text: 'person who likes learning languages.'
+[14:40:22.589] RMS: 0.246220 (-12.2dB) | [MAIN SUCCESS] person who likes learning languages. (conf: 0.800)
+[14:40:22.641] RMS: 0.250553 (-12.0dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:23.438] RMS: 0.245879 (-12.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:23.456] RMS: 0.250553 (-12.0dB) | [MAIN] Raw Whisper result: 'learning languages. There's a long trail of language.'
+[14:40:23.457] RMS: 0.250553 (-12.0dB) | [MAIN] Cleaned text: 'learning languages. There's a long trail of language.'
+[14:40:23.458] RMS: 0.250553 (-12.0dB) | [MAIN SUCCESS] learning languages. There's a long trail of language. (conf: 0.800)
+[14:40:24.247] RMS: 0.274364 (-11.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:24.249] RMS: 0.245879 (-12.2dB) | [MAIN] Raw Whisper result: 'There's a long trail of languages that got new stuff.'
+[14:40:24.249] RMS: 0.245879 (-12.2dB) | [MAIN] Cleaned text: 'There's a long trail of languages that got new stuff.'
+[14:40:24.250] RMS: 0.245879 (-12.2dB) | [MAIN SUCCESS] There's a long trail of languages that got new stuff. (conf: 0.800)
+[14:40:25.059] RMS: 0.264740 (-11.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:25.111] RMS: 0.274364 (-11.2dB) | [MAIN] Raw Whisper result: 'I'm sure you're not sure.'
+[14:40:25.111] RMS: 0.274364 (-11.2dB) | [MAIN] Cleaned text: 'I'm sure you're not sure.'
+[14:40:25.112] RMS: 0.274364 (-11.2dB) | [MAIN SUCCESS] I'm sure you're not sure. (conf: 0.800)
+[14:40:25.857] RMS: 0.288137 (-10.8dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:25.873] RMS: 0.264740 (-11.5dB) | [MAIN] Raw Whisper result: 'I've gotten used to writing, but never been paid to write.'
+[14:40:25.873] RMS: 0.264740 (-11.5dB) | [MAIN] Cleaned text: 'I've gotten used to writing, but never been paid to write.'
+[14:40:25.874] RMS: 0.264740 (-11.5dB) | [MAIN SUCCESS] I've gotten used to writing, but never been paid to write. (conf: 0.727)
+[14:40:26.653] RMS: 0.288137 (-10.8dB) | [MAIN] Raw Whisper result: 'but never been paid to write or not contained.'
+[14:40:26.654] RMS: 0.288137 (-10.8dB) | [MAIN] Cleaned text: 'but never been paid to write or not contained.'
+[14:40:26.654] RMS: 0.288137 (-10.8dB) | [MAIN SUCCESS] but never been paid to write or not contained. (conf: 0.800)
+[14:40:26.667] RMS: 0.262387 (-11.6dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:27.455] RMS: 0.262387 (-11.6dB) | [MAIN] Raw Whisper result: 'or not continue using for very well.'
+[14:40:27.456] RMS: 0.262387 (-11.6dB) | [MAIN] Cleaned text: 'or not continue using for very well.'
+[14:40:27.457] RMS: 0.262387 (-11.6dB) | [MAIN SUCCESS] or not continue using for very well. (conf: 0.800)
+[14:40:27.469] RMS: 0.246401 (-12.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:28.253] RMS: 0.246401 (-12.2dB) | [MAIN] Raw Whisper result: 'or not continue using for very long.'
+[14:40:28.253] RMS: 0.246401 (-12.2dB) | [MAIN] Cleaned text: 'or not continue using for very long.'
+[14:40:28.254] RMS: 0.246401 (-12.2dB) | [MAIN SUCCESS] or not continue using for very long. (conf: 0.800)
+[14:40:28.279] RMS: 0.222188 (-13.1dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:29.090] RMS: 0.244845 (-12.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:29.126] RMS: 0.222188 (-13.1dB) | [MAIN] Raw Whisper result: 'in for very long.'
+[14:40:29.126] RMS: 0.222188 (-13.1dB) | [MAIN] Cleaned text: 'in for very long.'
+[14:40:29.127] RMS: 0.222188 (-13.1dB) | [MAIN SUCCESS] in for very long. (conf: 0.800)
+[14:40:29.899] RMS: 0.270640 (-11.4dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:29.947] RMS: 0.244845 (-12.2dB) | [MAIN] Raw Whisper result: 'lists like E-list or closure.'
+[14:40:29.947] RMS: 0.244845 (-12.2dB) | [MAIN] Cleaned text: 'lists like E-list or closure.'
+[14:40:29.948] RMS: 0.244845 (-12.2dB) | [MAIN SUCCESS] lists like E-list or closure. (conf: 0.800)
+[14:40:30.679] RMS: 0.270640 (-11.4dB) | [MAIN] Raw Whisper result: 'like E-list or closure, Irland is'
+[14:40:30.679] RMS: 0.270640 (-11.4dB) | [MAIN] Cleaned text: 'like E-list or closure, Irland is'
+[14:40:30.680] RMS: 0.270640 (-11.4dB) | [MAIN SUCCESS] like E-list or closure, Irland is (conf: 0.800)
+[14:40:30.707] RMS: 0.238170 (-12.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:31.443] RMS: 0.238170 (-12.5dB) | [MAIN] Raw Whisper result: 'or closure or laying etc.'
+[14:40:31.444] RMS: 0.238170 (-12.5dB) | [MAIN] Cleaned text: 'or closure or laying etc.'
+[14:40:31.444] RMS: 0.238170 (-12.5dB) | [MAIN SUCCESS] or closure or laying etc. (conf: 0.640)
+[14:40:31.513] RMS: 0.238791 (-12.4dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:32.280] RMS: 0.238791 (-12.4dB) | [MAIN] Raw Whisper result: 'or laying etc. So it should be no surprise.'
+[14:40:32.281] RMS: 0.238791 (-12.4dB) | [MAIN] Cleaned text: 'or laying etc. So it should be no surprise.'
+[14:40:32.281] RMS: 0.238791 (-12.4dB) | [MAIN SUCCESS] or laying etc. So it should be no surprise. (conf: 0.800)
+[14:40:32.316] RMS: 0.222275 (-13.1dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:33.120] RMS: 0.188428 (-14.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:33.217] RMS: 0.222275 (-13.1dB) | [MAIN] Raw Whisper result: 'So I should be no surprise that I was experimenting.'
+[14:40:33.217] RMS: 0.222275 (-13.1dB) | [MAIN] Cleaned text: 'So I should be no surprise that I was experimenting.'
+[14:40:33.218] RMS: 0.222275 (-13.1dB) | [MAIN SUCCESS] So I should be no surprise that I was experimenting. (conf: 0.720)
+[14:40:33.919] RMS: 0.188428 (-14.5dB) | [MAIN] Raw Whisper result: 'surprise that I was experimenting with Rust.'
+[14:40:33.920] RMS: 0.188428 (-14.5dB) | [MAIN] Cleaned text: 'surprise that I was experimenting with Rust.'
+[14:40:33.920] RMS: 0.188428 (-14.5dB) | [MAIN SUCCESS] surprise that I was experimenting with Rust. (conf: 0.800)
+[14:40:33.927] RMS: 0.204933 (-13.8dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:34.700] RMS: 0.204933 (-13.8dB) | [MAIN] Raw Whisper result: 'experiment with Rust. And by 20 minutes'
+[14:40:34.700] RMS: 0.204933 (-13.8dB) | [MAIN] Cleaned text: 'experiment with Rust. And by 20 minutes'
+[14:40:34.701] RMS: 0.204933 (-13.8dB) | [MAIN SUCCESS] experiment with Rust. And by 20 minutes (conf: 0.800)
+[14:40:34.727] RMS: 0.279548 (-11.1dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:35.516] RMS: 0.279548 (-11.1dB) | [MAIN] Raw Whisper result: 'rust.'
+[14:40:35.517] RMS: 0.279548 (-11.1dB) | [MAIN] Cleaned text: 'rust.'
+[14:40:35.517] RMS: 0.279548 (-11.1dB) | [MAIN SUCCESS] rust. (conf: 0.800)
+[14:40:35.536] RMS: 0.292396 (-10.7dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:36.338] RMS: 0.265014 (-11.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:36.347] RMS: 0.292396 (-10.7dB) | [MAIN] Raw Whisper result: '2019, I have written enough for us.'
+[14:40:36.348] RMS: 0.292396 (-10.7dB) | [MAIN] Cleaned text: '2019, I have written enough for us.'
+[14:40:36.348] RMS: 0.292396 (-10.7dB) | [MAIN SUCCESS] 2019, I have written enough for us. (conf: 0.800)
+[14:40:37.148] RMS: 0.222387 (-13.1dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:37.149] RMS: 0.265014 (-11.5dB) | [MAIN] Raw Whisper result: 'I have written enough for us to get through the evidence.'
+[14:40:37.149] RMS: 0.265014 (-11.5dB) | [MAIN] Cleaned text: 'I have written enough for us to get through the evidence.'
+[14:40:37.150] RMS: 0.265014 (-11.5dB) | [MAIN SUCCESS] I have written enough for us to get through the evidence. (conf: 0.800)
+[14:40:37.921] RMS: 0.222387 (-13.1dB) | [MAIN] Raw Whisper result: 'for us together the additive code problems.'
+[14:40:37.922] RMS: 0.222387 (-13.1dB) | [MAIN] Cleaned text: 'for us together the additive code problems.'
+[14:40:37.923] RMS: 0.222387 (-13.1dB) | [MAIN SUCCESS] for us together the additive code problems. (conf: 0.800)
+[14:40:37.956] RMS: 0.234056 (-12.6dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:38.742] RMS: 0.234056 (-12.6dB) | [MAIN] Raw Whisper result: 'for the evidence of code problems out here.'
+[14:40:38.743] RMS: 0.234056 (-12.6dB) | [MAIN] Cleaned text: 'for the evidence of code problems out here.'
+[14:40:38.743] RMS: 0.234056 (-12.6dB) | [MAIN SUCCESS] for the evidence of code problems out here. (conf: 0.800)
+[14:40:38.767] RMS: 0.265529 (-11.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:39.505] RMS: 0.265529 (-11.5dB) | [MAIN] Raw Whisper result: 'problems that year. And it was clear of me that this'
+[14:40:39.506] RMS: 0.265529 (-11.5dB) | [MAIN] Cleaned text: 'problems that year. And it was clear of me that this'
+[14:40:39.506] RMS: 0.265529 (-11.5dB) | [MAIN SUCCESS] problems that year. And it was clear of me that this (conf: 0.727)
+[14:40:39.580] RMS: 0.290570 (-10.7dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:40.380] RMS: 0.274907 (-11.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:40.403] RMS: 0.290570 (-10.7dB) | [MAIN] Raw Whisper result: 'And it was clear me that this was a language.'
+[14:40:40.404] RMS: 0.290570 (-10.7dB) | [MAIN] Cleaned text: 'And it was clear me that this was a language.'
+[14:40:40.404] RMS: 0.290570 (-10.7dB) | [MAIN SUCCESS] And it was clear me that this was a language. (conf: 0.720)
+[14:40:41.189] RMS: 0.194308 (-14.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:41.213] RMS: 0.274907 (-11.2dB) | [MAIN] Raw Whisper result: 'This was a language that I could use.'
+[14:40:41.213] RMS: 0.274907 (-11.2dB) | [MAIN] Cleaned text: 'This was a language that I could use.'
+[14:40:41.214] RMS: 0.274907 (-11.2dB) | [MAIN SUCCESS] This was a language that I could use. (conf: 0.800)
+[14:40:41.964] RMS: 0.194308 (-14.2dB) | [MAIN] Raw Whisper result: 'language that I could use.'
+[14:40:41.965] RMS: 0.194308 (-14.2dB) | [MAIN] Cleaned text: 'language that I could use.'
+[14:40:41.966] RMS: 0.194308 (-14.2dB) | [MAIN SUCCESS] language that I could use. (conf: 0.800)
+[14:40:41.997] RMS: 0.106036 (-19.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[14:40:42.792] RMS: 0.106036 (-19.5dB) | [MAIN] Raw Whisper result: 'I can use for'
+[14:40:42.792] RMS: 0.106036 (-19.5dB) | [MAIN] Cleaned text: 'I can use for'
+[14:40:42.793] RMS: 0.106036 (-19.5dB) | [MAIN SUCCESS] I can use for (conf: 0.800)
