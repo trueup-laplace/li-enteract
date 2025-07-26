@@ -106,3 +106,71 @@
 [15:35:35.918] RMS: 0.194786 (-14.2dB) | [MAIN] Raw Whisper result: 'parallelism tracing and tracing'
 [15:35:35.919] RMS: 0.194786 (-14.2dB) | [MAIN] Cleaned text: 'parallelism tracing and tracing'
 [15:35:35.919] RMS: 0.194786 (-14.2dB) | [MAIN SUCCESS] parallelism tracing and tracing (conf: 0.600)
+[15:45:12.380] RMS: 0.231406 (-12.7dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:13.163] RMS: 0.231406 (-12.7dB) | [MAIN] Raw Whisper result: 'not doing anything for leaderboards.'
+[15:45:13.163] RMS: 0.231406 (-12.7dB) | [MAIN] Cleaned text: 'not doing anything for leaderboards.'
+[15:45:13.164] RMS: 0.231406 (-12.7dB) | [MAIN SUCCESS] not doing anything for leaderboards. (conf: 0.800)
+[15:45:13.192] RMS: 0.193403 (-14.3dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:13.998] RMS: 0.193403 (-14.3dB) | [MAIN] Raw Whisper result: 'thing for a meterboard or I wouldn't be making'
+[15:45:13.998] RMS: 0.193403 (-14.3dB) | [MAIN] Cleaned text: 'thing for a meterboard or I wouldn't be making'
+[15:45:13.999] RMS: 0.193403 (-14.3dB) | [MAIN SUCCESS] thing for a meterboard or I wouldn't be making (conf: 0.800)
+[15:45:14.001] RMS: 0.187840 (-14.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:14.740] RMS: 0.187840 (-14.5dB) | [MAIN] Raw Whisper result: 'or I wouldn't be making this video.'
+[15:45:14.740] RMS: 0.187840 (-14.5dB) | [MAIN] Cleaned text: 'or I wouldn't be making this video.'
+[15:45:14.741] RMS: 0.187840 (-14.5dB) | [MAIN SUCCESS] or I wouldn't be making this video. (conf: 0.800)
+[15:45:14.803] RMS: 0.206563 (-13.7dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:15.568] RMS: 0.206563 (-13.7dB) | [MAIN] Raw Whisper result: 'would be making this video.'
+[15:45:15.568] RMS: 0.206563 (-13.7dB) | [MAIN] Cleaned text: 'would be making this video.'
+[15:45:15.568] RMS: 0.206563 (-13.7dB) | [MAIN SUCCESS] would be making this video. (conf: 0.800)
+[15:45:15.609] RMS: 0.231986 (-12.7dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:16.370] RMS: 0.231986 (-12.7dB) | [MAIN] Raw Whisper result: 'video.'
+[15:45:16.370] RMS: 0.231986 (-12.7dB) | [MAIN] Cleaned text: 'video.'
+[15:45:16.371] RMS: 0.231986 (-12.7dB) | [MAIN SUCCESS] video. (conf: 0.800)
+[15:45:16.417] RMS: 0.229906 (-12.8dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:17.158] RMS: 0.229906 (-12.8dB) | [MAIN] Raw Whisper result: 'because explaining it probably takes'
+[15:45:17.158] RMS: 0.229906 (-12.8dB) | [MAIN] Cleaned text: 'because explaining it probably takes'
+[15:45:17.159] RMS: 0.229906 (-12.8dB) | [MAIN SUCCESS] because explaining it probably takes (conf: 0.800)
+[15:45:17.211] RMS: 0.167599 (-15.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:17.939] RMS: 0.167599 (-15.5dB) | [MAIN] Raw Whisper result: 'is explaining it probably takes more time than'
+[15:45:17.939] RMS: 0.167599 (-15.5dB) | [MAIN] Cleaned text: 'is explaining it probably takes more time than'
+[15:45:17.940] RMS: 0.167599 (-15.5dB) | [MAIN SUCCESS] is explaining it probably takes more time than (conf: 0.800)
+[15:45:18.013] RMS: 0.126594 (-18.0dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:18.741] RMS: 0.126594 (-18.0dB) | [MAIN] Raw Whisper result: 'probably takes more time than some people take.'
+[15:45:18.742] RMS: 0.126594 (-18.0dB) | [MAIN] Cleaned text: 'probably takes more time than some people take.'
+[15:45:18.743] RMS: 0.126594 (-18.0dB) | [MAIN SUCCESS] probably takes more time than some people take. (conf: 0.800)
+[15:45:18.835] RMS: 0.124612 (-18.1dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:19.627] RMS: 0.124612 (-18.1dB) | [MAIN] Raw Whisper result: 'time, and some people take to do it.'
+[15:45:19.628] RMS: 0.124612 (-18.1dB) | [MAIN] Cleaned text: 'time, and some people take to do it.'
+[15:45:19.628] RMS: 0.124612 (-18.1dB) | [MAIN SUCCESS] time, and some people take to do it. (conf: 0.800)
+[15:45:19.629] RMS: 0.124699 (-18.1dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:20.420] RMS: 0.124699 (-18.1dB) | [MAIN] Raw Whisper result: 'people take them to it.'
+[15:45:20.421] RMS: 0.124699 (-18.1dB) | [MAIN] Cleaned text: 'people take them to it.'
+[15:45:20.422] RMS: 0.124699 (-18.1dB) | [MAIN SUCCESS] people take them to it. (conf: 0.800)
+[15:45:20.430] RMS: 0.139434 (-17.1dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:21.216] RMS: 0.139434 (-17.1dB) | [MAIN] Raw Whisper result: 'Do it. So let's see.'
+[15:45:21.216] RMS: 0.139434 (-17.1dB) | [MAIN] Cleaned text: 'Do it. So let's see.'
+[15:45:21.217] RMS: 0.139434 (-17.1dB) | [MAIN SUCCESS] Do it. So let's see. (conf: 0.800)
+[15:45:21.230] RMS: 0.171514 (-15.3dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:22.000] RMS: 0.171514 (-15.3dB) | [MAIN] Raw Whisper result: 'So let's see, historian history.'
+[15:45:22.000] RMS: 0.171514 (-15.3dB) | [MAIN] Cleaned text: 'So let's see, historian history.'
+[15:45:22.001] RMS: 0.171514 (-15.3dB) | [MAIN SUCCESS] So let's see, historian history. (conf: 0.800)
+[15:45:22.039] RMS: 0.188693 (-14.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:22.797] RMS: 0.188693 (-14.5dB) | [MAIN] Raw Whisper result: 'history in history.'
+[15:45:22.798] RMS: 0.188693 (-14.5dB) | [MAIN] Cleaned text: 'history in history.'
+[15:45:22.798] RMS: 0.188693 (-14.5dB) | [MAIN SUCCESS] history in history. (conf: 0.800)
+[15:45:22.839] RMS: 0.202146 (-13.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:23.611] RMS: 0.202146 (-13.9dB) | [MAIN] Raw Whisper result: 'history of history.'
+[15:45:23.612] RMS: 0.202146 (-13.9dB) | [MAIN] Cleaned text: 'history of history.'
+[15:45:23.613] RMS: 0.202146 (-13.9dB) | [MAIN SUCCESS] history of history. (conf: 0.800)
+[15:45:23.639] RMS: 0.184332 (-14.7dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:24.396] RMS: 0.184332 (-14.7dB) | [MAIN] Raw Whisper result: 'the Chief of Historians always present it. Always'
+[15:45:24.396] RMS: 0.184332 (-14.7dB) | [MAIN] Cleaned text: 'the Chief of Historians always present it. Always'
+[15:45:24.397] RMS: 0.184332 (-14.7dB) | [MAIN SUCCESS] the Chief of Historians always present it. Always (conf: 0.800)
+[15:45:24.441] RMS: 0.188999 (-14.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:25.251] RMS: 0.187826 (-14.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[15:45:27.065] RMS: 0.188999 (-14.5dB) | [MAIN] Raw Whisper result: 'As always President always President always'
+[15:45:27.065] RMS: 0.188999 (-14.5dB) | [MAIN] Cleaned text: 'As always President always President always'
+[15:45:27.066] RMS: 0.188999 (-14.5dB) | [MAIN SUCCESS] As always President always President always (conf: 0.400)
+[15:45:27.821] RMS: 0.187826 (-14.5dB) | [MAIN] Raw Whisper result: 'always present always present for the big'
+[15:45:27.822] RMS: 0.187826 (-14.5dB) | [MAIN] Cleaned text: 'always present always present for the big'
+[15:45:27.823] RMS: 0.187826 (-14.5dB) | [MAIN SUCCESS] always present always present for the big (conf: 0.571)

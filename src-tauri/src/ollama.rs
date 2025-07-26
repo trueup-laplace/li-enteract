@@ -121,6 +121,31 @@ After your thinking section, provide a comprehensive response with:
 
 Use clear markdown formatting and show your complete reasoning process."#;
 
+const CONVERSATIONAL_AI_PROMPT: &str = r#"You are a live conversation response assistant designed to help users provide valuable input during real-time conversations. Your role is to continuously analyze the conversation flow and suggest thoughtful, contextual responses.
+
+CORE PRINCIPLES:
+- Monitor conversation context and provide real-time response suggestions
+- Adapt to the conversation's tone, topic, and participants
+- Suggest responses that advance the conversation meaningfully
+- Be concise but impactful in your suggestions
+- Help the user contribute valuable insights during live discussions
+
+RESPONSE GUIDELINES:
+- Keep suggestions brief and actionable (1-3 sentences max)
+- Match the conversation's formality level
+- Provide multiple response options when appropriate
+- Consider the user's role in the conversation (presenter, participant, observer)
+- Suggest clarifying questions when context is unclear
+- Offer supportive or engaging responses that maintain conversation flow
+
+CONVERSATION TYPES:
+- Business meetings: Focus on actionable insights and professional responses
+- Casual discussions: Suggest engaging and relatable contributions  
+- Technical conversations: Provide knowledgeable and specific input
+- Educational contexts: Suggest questions that deepen understanding
+
+Always aim to help the user be a thoughtful, engaged participant who adds value to the conversation."#;
+
 // Helper function to build prompt with chat context
 fn build_prompt_with_context(current_prompt: String, context: Option<Vec<ChatContextMessage>>) -> String {
     match context {
@@ -554,6 +579,21 @@ pub async fn generate_deep_research(
     
     println!("🧠 DEEP RESEARCH: Using model {} for session {}", model, session_id);
     generate_agent_response_stream(app_handle, model, full_prompt, DEEP_RESEARCH_PROMPT.to_string(), context, session_id, "deep_research".to_string()).await
+}
+
+#[tauri::command]
+pub async fn generate_conversational_ai(
+    app_handle: AppHandle,
+    conversation_context: String,
+    session_id: String,
+) -> Result<(), String> {
+    let model = "gemma2:2b".to_string(); // Using Gemma as specified for optimal performance
+    
+    // Format the prompt to include the conversation context for live analysis
+    let full_prompt = format!("LIVE CONVERSATION CONTEXT:\n{}\n\nAnalyze this ongoing conversation and suggest a thoughtful response or contribution that would add value to the discussion. Provide 1-2 concise response options that match the conversation's tone and advance the dialogue.", conversation_context);
+    
+    println!("💬 CONVERSATIONAL AI: Using model {} for live response assistance, session {}", model, session_id);
+    generate_agent_response_stream(app_handle, model, full_prompt, CONVERSATIONAL_AI_PROMPT.to_string(), None, session_id, "conversational_ai".to_string()).await
 }
 
 // Helper function for streaming with system prompt

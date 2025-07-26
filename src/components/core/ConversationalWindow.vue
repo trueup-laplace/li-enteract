@@ -51,12 +51,20 @@ const showConversationSidebar = ref(false)
 const allConversations = ref<any[]>([])
 const isLoadingConversations = ref(false)
 
-// AI Assistant state
+// AI Assistant state (post-processing)
 const showAIAssistant = ref(false)
 const aiResponse = ref('')
 const aiIsProcessing = ref(false)
 const aiQuery = ref('')
 const aiError = ref<string | null>(null)
+
+// Live AI Response Assistant state
+const showLiveAI = ref(false)
+const liveAIResponse = ref('')
+const liveAIIsProcessing = ref(false)
+const liveAIError = ref<string | null>(null)
+const liveAISessionId = ref<string | null>(null)
+const isLiveAIActive = ref(false)
 
 // Enhanced loopback transcription with intelligent sentence building
 const loopbackBuffer = ref<string>('')
@@ -1080,10 +1088,140 @@ const handleAIQueryKeydown = (event: KeyboardEvent) => {
   }
 }
 
+// Live AI Response Assistant Functions
+const toggleLiveAI = () => {
+  showLiveAI.value = !showLiveAI.value
+  if (showLiveAI.value) {
+    startLiveAI()
+  } else {
+    stopLiveAI()
+  }
+}
+
+const startLiveAI = async () => {
+  try {
+    isLiveAIActive.value = true
+    liveAISessionId.value = `live-ai-${Date.now()}`
+    liveAIError.value = null
+    
+    // Set up event listener for streaming responses
+    setupLiveAIEventListener()
+    
+    // Generate initial response if there's conversation context
+    if (conversationStore.currentMessages.length > 0) {
+      await generateLiveAIResponse()
+    } else {
+      liveAIResponse.value = "💡 Ready to assist! I'll provide live response suggestions as the conversation develops."
+    }
+    
+    console.log('🤖 Live AI Response Assistant activated')
+  } catch (error) {
+    console.error('🤖 Failed to start Live AI:', error)
+    liveAIError.value = error instanceof Error ? error.message : 'Failed to start Live AI'
+  }
+}
+
+const stopLiveAI = () => {
+  isLiveAIActive.value = false
+  liveAISessionId.value = null
+  liveAIResponse.value = ''
+  liveAIError.value = null
+  
+  // Clean up event listener if exists
+  cleanupLiveAIEventListener()
+  
+  console.log('🤖 Live AI Response Assistant deactivated')
+}
+
+const generateLiveAIResponse = async () => {
+  if (!isLiveAIActive.value || liveAIIsProcessing.value) return
+  
+  try {
+    liveAIIsProcessing.value = true
+    liveAIError.value = null
+    
+    const conversationContext = generateConversationContext()
+    
+    console.log('🤖 Generating live AI response with context:', {
+      contextLength: conversationContext.length,
+      sessionId: liveAISessionId.value
+    })
+    
+    // Call the new conversational AI backend function
+    await invoke('generate_conversational_ai', {
+      conversationContext,
+      sessionId: liveAISessionId.value
+    })
+    
+  } catch (error) {
+    console.error('🤖 Live AI generation error:', error)
+    liveAIError.value = error instanceof Error ? error.message : 'Failed to generate live response'
+    liveAIIsProcessing.value = false
+  }
+}
+
+// Event listener setup for live AI streaming
+let liveAIUnlisten: (() => void) | null = null
+
+const setupLiveAIEventListener = async () => {
+  if (!liveAISessionId.value) return
+  
+  try {
+    const { listen } = await import('@tauri-apps/api/event')
+    
+    liveAIUnlisten = await listen(`ollama-stream-${liveAISessionId.value}`, (event: any) => {
+      const data = event.payload
+      
+      if (data.type === 'start') {
+        liveAIIsProcessing.value = true
+        liveAIResponse.value = ''
+      } else if (data.type === 'chunk') {
+        liveAIResponse.value += data.text
+      } else if (data.type === 'complete' || data.done) {
+        liveAIIsProcessing.value = false
+        console.log('🤖 Live AI response complete:', liveAIResponse.value.substring(0, 100) + '...')
+      } else if (data.type === 'error') {
+        liveAIError.value = data.error
+        liveAIIsProcessing.value = false
+        console.error('🤖 Live AI streaming error:', data.error)
+      }
+    })
+    
+    console.log('🤖 Live AI event listener set up for session:', liveAISessionId.value)
+  } catch (error) {
+    console.error('🤖 Failed to set up Live AI event listener:', error)
+  }
+}
+
+const cleanupLiveAIEventListener = () => {
+  if (liveAIUnlisten) {
+    liveAIUnlisten()
+    liveAIUnlisten = null
+    console.log('🤖 Live AI event listener cleaned up')
+  }
+}
+
+// Watch for conversation changes to trigger live AI updates
+watch(() => conversationStore.currentMessages, async (newMessages) => {
+  if (isLiveAIActive.value && newMessages.length > 0 && !liveAIIsProcessing.value) {
+    // Debounce updates to avoid excessive API calls
+    setTimeout(() => {
+      if (isLiveAIActive.value && !liveAIIsProcessing.value) {
+        generateLiveAIResponse()
+      }
+    }, 1500) // Wait 1.5 seconds after last message before updating
+  }
+}, { deep: true })
+
 // Cleanup
 onUnmounted(async () => {
   window.removeEventListener('transcription-final', handleConversationalUserSpeech)
   window.removeEventListener('transcription-interim', handleConversationalUserInterim)
+  
+  // Cleanup Live AI
+  if (isLiveAIActive.value) {
+    stopLiveAI()
+  }
   
   // Flush any remaining loopback buffer
   flushLoopbackBuffer()
@@ -1143,6 +1281,17 @@ onUnmounted(async () => {
                 </div>
               </div>
               
+              <!-- Live AI Response Assistant Button -->
+              <button 
+                @click="toggleLiveAI" 
+                class="live-ai-btn"
+                :class="{ 'active': showLiveAI, 'processing': liveAIIsProcessing }"
+                title="Live AI Response Assistant"
+              >
+                <RocketLaunchIcon v-if="!liveAIIsProcessing" class="w-4 h-4" />
+                <RocketLaunchIcon v-else class="w-4 h-4 animate-pulse" />
+              </button>
+              
               <!-- AI Assistant Button -->
               <button 
                 @click="toggleAIAssistant" 
@@ -1151,7 +1300,7 @@ onUnmounted(async () => {
                 title="AI Conversation Assistant"
               >
                 <SparklesIcon v-if="!aiIsProcessing" class="w-4 h-4" />
-                <RocketLaunchIcon v-else class="w-4 h-4 animate-pulse" />
+                <SparklesIcon v-else class="w-4 h-4 animate-pulse" />
               </button>
               
               <!-- Conversation History Button -->
@@ -1504,6 +1653,79 @@ onUnmounted(async () => {
               </div>
             </div>
           </div>
+          
+          <!-- Live AI Response Assistant Drawer -->
+          <div v-if="showLiveAI" class="live-ai-drawer">
+            <div class="live-ai-header">
+              <div class="flex items-center gap-2">
+                <RocketLaunchIcon class="w-4 h-4 text-orange-400" />
+                <h3 class="text-sm font-medium text-white">Live Response Assistant</h3>
+                <div v-if="isLiveAIActive" class="live-indicator">
+                  <div class="live-dot"></div>
+                  <span class="text-xs text-orange-400">LIVE</span>
+                </div>
+              </div>
+              <button @click="showLiveAI = false" class="close-drawer-btn">
+                <XMarkIcon class="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div class="live-ai-content">
+              <!-- Live AI Response Area -->
+              <div class="live-response-section">
+                <div v-if="liveAIError" class="live-ai-error">
+                  <div class="error-header">
+                    <XMarkIcon class="w-4 h-4 text-red-400" />
+                    <span class="text-sm text-red-400">Error</span>
+                  </div>
+                  <p class="text-xs text-red-300 mt-1">{{ liveAIError }}</p>
+                </div>
+                
+                <div v-else-if="liveAIIsProcessing" class="live-ai-processing">
+                  <div class="processing-indicator">
+                    <RocketLaunchIcon class="w-5 h-5 text-orange-400 animate-pulse" />
+                    <span class="text-sm text-orange-400">Analyzing conversation...</span>
+                  </div>
+                </div>
+                
+                <div v-else-if="liveAIResponse" class="live-ai-response">
+                  <div class="response-header">
+                    <RocketLaunchIcon class="w-4 h-4 text-orange-400" />
+                    <span class="text-sm text-orange-400">Suggested Response</span>
+                  </div>
+                  <div class="response-content">
+                    <p class="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">{{ liveAIResponse }}</p>
+                  </div>
+                </div>
+                
+                <div v-else class="live-ai-empty-state">
+                  <RocketLaunchIcon class="w-8 h-8 text-white/20 mx-auto mb-2" />
+                  <p class="text-white/60 text-xs text-center">Live response assistant ready</p>
+                  <p class="text-white/40 text-xs text-center mt-1">I'll suggest responses as your conversation develops</p>
+                </div>
+              </div>
+              
+              <!-- Live AI Status -->
+              <div class="live-ai-status">
+                <div class="status-row">
+                  <span class="text-xs text-white/60">Status:</span>
+                  <span class="text-xs" :class="{
+                    'text-orange-400': isLiveAIActive,
+                    'text-gray-400': !isLiveAIActive
+                  }">
+                    {{ isLiveAIActive ? 'Active & Monitoring' : 'Inactive' }}
+                  </span>
+                </div>
+                <div v-if="isLiveAIActive" class="status-row">
+                  <span class="text-xs text-white/60">Messages:</span>
+                  <span class="text-xs text-white/80">{{ conversationStore.currentMessages.length }}</span>
+                </div>
+                <div class="status-info">
+                  <p class="text-xs text-white/50">💡 Updates automatically as conversation flows</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div> <!-- End window-content -->
     </div>
   </Transition>
@@ -1550,12 +1772,37 @@ onUnmounted(async () => {
   max-width: 95vw;
 }
 
+/* When Live AI drawer is shown */
+.conversational-window:has(.live-ai-drawer) {
+  width: 980px;
+  max-width: 95vw;
+}
+
+/* When both AI drawers are shown */
+.conversational-window:has(.ai-assistant-drawer):has(.live-ai-drawer) {
+  width: 1280px;
+  max-width: 95vw;
+}
+
+/* When sidebar and Live AI drawer are shown */
+.conversational-window:has(.conversation-sidebar):has(.live-ai-drawer) {
+  width: 1280px;
+  max-width: 95vw;
+}
+
+/* When all three are shown */
+.conversational-window:has(.conversation-sidebar):has(.ai-assistant-drawer):has(.live-ai-drawer) {
+  width: 1600px;
+  max-width: 95vw;
+}
+
 .window-content {
   @apply flex-1 flex flex-col min-h-0;
 }
 
 .conversational-window:has(.conversation-sidebar) .window-content,
-.conversational-window:has(.ai-assistant-drawer) .window-content {
+.conversational-window:has(.ai-assistant-drawer) .window-content,
+.conversational-window:has(.live-ai-drawer) .window-content {
   @apply flex flex-row;
 }
 
@@ -2099,22 +2346,108 @@ onUnmounted(async () => {
   background: rgba(59, 130, 246, 0.1);
 }
 
+/* Live AI Response Assistant Button */
+.live-ai-btn {
+  @apply rounded-full p-1 hover:bg-white/10 transition-all duration-200 text-white/60 hover:text-white/90;
+  background: linear-gradient(135deg, rgba(251, 146, 60, 0.1), rgba(249, 115, 22, 0.1));
+  border: 1px solid rgba(251, 146, 60, 0.2);
+}
+
+.live-ai-btn.active {
+  @apply bg-orange-500/20 text-orange-400 hover:bg-orange-500/30;
+  background: linear-gradient(135deg, rgba(251, 146, 60, 0.3), rgba(249, 115, 22, 0.3));
+  border-color: rgba(251, 146, 60, 0.5);
+}
+
+.live-ai-btn.processing {
+  @apply bg-orange-500/30 text-orange-300;
+  background: linear-gradient(135deg, rgba(251, 146, 60, 0.4), rgba(249, 115, 22, 0.4));
+  border-color: rgba(251, 146, 60, 0.6);
+}
+
+/* Live AI Response Assistant Drawer */
+.live-ai-drawer {
+  @apply w-80 border-l border-white/10 bg-white/5 backdrop-blur-sm flex flex-col;
+  min-width: 320px;
+  max-width: 400px;
+  background: linear-gradient(135deg, 
+    rgba(25, 15, 10, 0.95) 0%,
+    rgba(30, 20, 10, 0.95) 50%,
+    rgba(25, 15, 10, 0.95) 100%
+  );
+}
+
+.live-ai-header {
+  @apply flex items-center justify-between px-4 py-3 border-b border-white/10;
+  background: rgba(251, 146, 60, 0.1);
+}
+
+.live-indicator {
+  @apply flex items-center gap-1 px-2 py-1 bg-orange-500/20 rounded-full border border-orange-500/30;
+}
+
+.live-dot {
+  @apply w-2 h-2 bg-orange-400 rounded-full animate-pulse;
+}
+
+.live-ai-content {
+  @apply flex-1 overflow-hidden flex flex-col p-4 gap-4;
+}
+
+/* Live AI Response Section */
+.live-response-section {
+  @apply flex-1 overflow-y-auto;
+  min-height: 200px;
+}
+
+.live-ai-error {
+  @apply p-3 rounded-lg bg-red-500/10 border border-red-500/30;
+}
+
+.live-ai-processing {
+  @apply flex items-center justify-center p-8;
+}
+
+.live-ai-response {
+  @apply p-3 rounded-lg bg-orange-500/10 border border-orange-500/30;
+}
+
+.live-ai-empty-state {
+  @apply flex flex-col items-center justify-center p-8 text-center;
+}
+
+/* Live AI Status */
+.live-ai-status {
+  @apply border-t border-white/10 pt-4 space-y-2;
+}
+
+.status-row {
+  @apply flex items-center justify-between;
+}
+
+.status-info {
+  @apply mt-2;
+}
+
 /* Scrollbar */
 .conversation-area::-webkit-scrollbar,
 .conversations-list::-webkit-scrollbar,
-.ai-response-section::-webkit-scrollbar {
+.ai-response-section::-webkit-scrollbar,
+.live-response-section::-webkit-scrollbar {
   width: 4px;
 }
 
 .conversation-area::-webkit-scrollbar-track,
 .conversations-list::-webkit-scrollbar-track,
-.ai-response-section::-webkit-scrollbar-track {
+.ai-response-section::-webkit-scrollbar-track,
+.live-response-section::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .conversation-area::-webkit-scrollbar-thumb,
 .conversations-list::-webkit-scrollbar-thumb,
-.ai-response-section::-webkit-scrollbar-thumb {
+.ai-response-section::-webkit-scrollbar-thumb,
+.live-response-section::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
 }
