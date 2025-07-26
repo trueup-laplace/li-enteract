@@ -34,6 +34,7 @@ const handleOpenChatWindow = () => {
   }
 }
 
+
 onMounted(() => {
   initializeWindow()
   

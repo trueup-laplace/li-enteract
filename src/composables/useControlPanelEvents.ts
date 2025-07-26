@@ -7,6 +7,7 @@ interface StateRefs {
   showChatWindow: Ref<boolean>
   showTransparencyControls: Ref<boolean>
   showAIModelsWindow: Ref<boolean>
+  showConversationalWindow: Ref<boolean>
   speechError: Ref<string | null>
   compatibilityReport: Ref<any>
   isGazeControlActive: Ref<boolean>
@@ -26,6 +27,7 @@ export function useControlPanelEvents(
     showChatWindow,
     showTransparencyControls,
     showAIModelsWindow,
+    showConversationalWindow,
     speechError,
     compatibilityReport,
     isGazeControlActive
@@ -86,11 +88,15 @@ export function useControlPanelEvents(
   const toggleChatWindow = async (event: Event) => {
     event.stopPropagation()
     
+    // Close other panels first to ensure only one window is open at a time
     if (showTransparencyControls.value) {
       showTransparencyControls.value = false
     }
     if (showAIModelsWindow.value) {
       showAIModelsWindow.value = false
+    }
+    if (showConversationalWindow.value) {
+      showConversationalWindow.value = false
     }
     
     showChatWindow.value = !showChatWindow.value
@@ -110,44 +116,16 @@ export function useControlPanelEvents(
     if (showAIModelsWindow.value) {
       showAIModelsWindow.value = false
     }
+    if (showConversationalWindow.value) {
+      showConversationalWindow.value = false
+    }
     
     showChatWindow.value = true
     console.log('💬 Chat window opened')
   }
 
-  // Enhanced speech transcription with error handling
-  const toggleSpeechTranscription = async (event: Event) => {
-    event.stopPropagation()
-    
-    try {
-      speechError.value = null
-      
-      if (!compatibilityReport.value.ready) {
-        speechError.value = 'Browser not compatible with speech features. ' + compatibilityReport.value.issues.join(', ')
-        return
-      }
-      
-      if (store.speechStatus.isRecording) {
-        await store.stopSpeechTranscription()
-      } else {
-        if (!store.speechStatus.isInitialized) {
-          await store.initializeSpeechTranscription('tiny')
-        }
-        await store.startSpeechTranscription()
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      speechError.value = message
-      console.error('Speech transcription error:', error)
-    }
-  }
-
-  const getSpeechIconClass = () => {
-    if (store.speechStatus.isRecording) return 'text-red-400 animate-pulse'
-    if (store.speechStatus.isProcessing) return 'text-yellow-400 animate-pulse'
-    if (store.isTranscriptionEnabled) return 'text-green-400'
-    return 'text-white/80 group-hover:text-white'
-  }
+  // Speech transcription functionality removed - now handled in chat interface
+  // The microphone button has been moved to the chat interface for better UX
 
   const toggleMLEyeTrackingWithMovement = async (event: Event) => {
     event.stopPropagation()
@@ -244,10 +222,36 @@ export function useControlPanelEvents(
     }
   }
 
+  // Conversational window handlers
+  const toggleConversationalWindow = async (event: Event) => {
+    event.stopPropagation()
+    
+    // Close other panels first
+    if (showTransparencyControls.value) {
+      showTransparencyControls.value = false
+    }
+    if (showAIModelsWindow.value) {
+      showAIModelsWindow.value = false
+    }
+    if (showChatWindow.value) {
+      showChatWindow.value = false
+    }
+    
+    showConversationalWindow.value = !showConversationalWindow.value
+    console.log(`💬 Conversational window ${showConversationalWindow.value ? 'opened' : 'closed'}`)
+  }
+
+  const closeConversationalWindow = async () => {
+    showConversationalWindow.value = false
+    console.log('💬 Conversational window closed')
+  }
+
+
   // Click outside to close panels
   const handleClickOutside = (event: Event) => {
     const target = event.target as HTMLElement
     const chatWindow = document.querySelector('.chat-window')
+    const conversationalWindow = document.querySelector('.conversational-window')
     const transparencyPanel = document.querySelector('.transparency-controls-panel')
     const aiModelsPanel = document.querySelector('.ai-models-panel')
     const controlPanel = document.querySelector('.control-panel-glass-bar')
@@ -257,6 +261,18 @@ export function useControlPanelEvents(
         !controlPanel.contains(target)) {
       closeChatWindow()
     }
+    
+    // IMPORTANT: Disable click-outside closing for conversational window
+    // The conversational window should only close via explicit user action (X button)
+    // This prevents accidental closing when using controls inside the window
+    // The original logic is commented out below:
+    /*
+    if (conversationalWindow && controlPanel && showConversationalWindow.value &&
+        !conversationalWindow.contains(target) && 
+        !controlPanel.contains(target)) {
+      closeConversationalWindow()
+    }
+    */
     
     if (transparencyPanel && controlPanel && showTransparencyControls.value &&
         !transparencyPanel.contains(target) && 
@@ -281,8 +297,8 @@ export function useControlPanelEvents(
     toggleChatWindow,
     closeChatWindow,
     openChatWindow,
-    toggleSpeechTranscription,
-    getSpeechIconClass,
+    toggleConversationalWindow,
+    closeConversationalWindow,
     toggleMLEyeTrackingWithMovement,
     handleKeydown,
     handleClickOutside

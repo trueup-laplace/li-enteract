@@ -33,6 +33,8 @@ export function useSpeechTranscription() {
   const transcriptionHistory = ref<TranscriptionResult[]>([])
   const currentSession = ref<TranscriptionSession | null>(null)
   const error = ref<string | null>(null)
+  const autoSendToChat = ref(true) // Control whether to auto-send to main chat
+  const continuousMode = ref(false) // Keep mic open during conversations
 
   // Audio recording
   let mediaRecorder: MediaRecorder | null = null
@@ -45,12 +47,12 @@ export function useSpeechTranscription() {
   let audioContext: AudioContext | null = null
   let analyser: AnalyserNode | null = null
   let silenceThreshold = 0.01
-  let silenceDuration = 2000 // 3 seconds - more reasonable for natural speech patterns
+  let silenceDuration = 5000 // 5 seconds - more reasonable for natural speech patterns in conversational UI
   let lastAudioTime = 0
 
   // Configuration
   const defaultWhisperConfig: WhisperConfig = {
-    modelSize: 'tiny',
+    modelSize: 'small',
     language: 'en',
     enableVAD: true,
     silenceThreshold: 0.01,
@@ -105,8 +107,24 @@ export function useSpeechTranscription() {
         setupSpeechRecognition()
       }
 
-      // Initialize Whisper model
-      const config = { ...defaultWhisperConfig, ...whisperConfig }
+      // Load settings to get the selected whisper model for microphone
+      let selectedModel = defaultWhisperConfig.modelSize
+      try {
+        const storedSettings = await invoke<any>('load_general_settings')
+        if (storedSettings?.microphoneWhisperModel) {
+          selectedModel = storedSettings.microphoneWhisperModel
+          console.log(`🎤 Using stored microphone Whisper model: ${selectedModel}`)
+        }
+      } catch (settingsError) {
+        console.warn('Failed to load model settings, using default:', settingsError)
+      }
+
+      // Initialize Whisper model with selected model size
+      const config = { 
+        ...defaultWhisperConfig, 
+        modelSize: selectedModel,
+        ...whisperConfig 
+      }
       
       // Check if model exists with proper error handling
       try {
@@ -347,9 +365,12 @@ export function useSpeechTranscription() {
   function startSilenceTimer() {
     if (silenceTimer) return
     
+    // Don't auto-stop in continuous mode (for conversations)
+    if (continuousMode.value) return
+    
     silenceTimer = window.setTimeout(() => {
       const timeSinceLastAudio = Date.now() - lastAudioTime
-      if (timeSinceLastAudio >= silenceDuration && isRecording.value) {
+      if (timeSinceLastAudio >= silenceDuration && isRecording.value && !continuousMode.value) {
         console.log('Auto-stopping transcription due to silence')
         stopRecording()
         emitTranscriptionEvent('transcription-auto-stopped', { reason: 'silence' })
@@ -527,8 +548,8 @@ export function useSpeechTranscription() {
 
       console.log('Recording stopped - button state immediately reset')
       
-      // Auto-send the transcribed message if there's content
-      if (finalText.value.trim()) {
+      // Auto-send the transcribed message if there's content and auto-send is enabled
+      if (finalText.value.trim() && autoSendToChat.value) {
         // Emit event to send the message to chat
         const sendMessageEvent = new CustomEvent('send-transcribed-message', {
           detail: {
@@ -578,7 +599,7 @@ export function useSpeechTranscription() {
     try {
       // Don't set isProcessing to true here - let background processing happen
       // without blocking the UI state
-      console.log(`🔄 Processing ${audioChunks.length} audio chunks with Whisper (tiny model)...`)
+      console.log(`🔄 Processing ${audioChunks.length} audio chunks with Whisper (small model)...`)
 
       // Combine audio chunks
       const audioBlob = new Blob(audioChunks, { type: mediaRecorder?.mimeType || 'audio/webm' })
@@ -610,9 +631,9 @@ export function useSpeechTranscription() {
             maxSegmentLength: defaultWhisperConfig.maxSegmentLength
           }
         }),
-        // Timeout after 10 seconds for tiny model (faster than small model)
+        // Timeout after 15 seconds for small model (slower than tiny but more accurate)
         new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Whisper processing timeout')), 10000)
+          setTimeout(() => reject(new Error('Whisper processing timeout')), 15000)
         )
       ])
 
@@ -651,7 +672,7 @@ export function useSpeechTranscription() {
           timestamp: Date.now()
         })
 
-        console.log('✅ Whisper transcription (tiny model):', newText)
+        console.log('✅ Whisper transcription (small model):', newText)
       } else {
         console.log('ℹ️ Whisper returned empty text')
       }
@@ -768,6 +789,45 @@ export function useSpeechTranscription() {
     error.value = null
   }
 
+  // Control auto-send to chat
+  function setAutoSendToChat(enabled: boolean) {
+    autoSendToChat.value = enabled
+    console.log(`📤 Auto-send to chat ${enabled ? 'enabled' : 'disabled'}`)
+  }
+
+  // Control continuous mode (keeps mic open during conversations)
+  function setContinuousMode(enabled: boolean) {
+    continuousMode.value = enabled
+    console.log(`🎤 Continuous mode ${enabled ? 'enabled' : 'disabled'}`)
+  }
+
+  // Reinitialize with new model settings
+  async function reinitializeWithSettings() {
+    try {
+      console.log('🔄 Reinitializing speech transcription with new settings...')
+      
+      // Store current recording state
+      const wasRecording = isRecording.value
+      
+      // Stop recording if active
+      if (wasRecording) {
+        await stopRecording()
+      }
+      
+      // Reset initialization state
+      isInitialized.value = false
+      hasWhisperModel.value = false
+      
+      // Reinitialize with current settings
+      await initialize()
+      
+      console.log('✅ Speech transcription reinitialized successfully')
+    } catch (error) {
+      console.error('❌ Failed to reinitialize speech transcription:', error)
+      throw error
+    }
+  }
+
   // Get available models
   async function getAvailableModels() {
     try {
@@ -817,6 +877,8 @@ export function useSpeechTranscription() {
     currentSession,
     error,
     status,
+    autoSendToChat,
+    continuousMode,
 
     // Methods
     initialize,
@@ -824,6 +886,9 @@ export function useSpeechTranscription() {
     stopRecording,
     clearTranscription,
     getAvailableModels,
-    startTranscription
+    startTranscription,
+    setAutoSendToChat,
+    setContinuousMode,
+    reinitializeWithSettings
   }
 } 

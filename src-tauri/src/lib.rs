@@ -1,3 +1,4 @@
+// src-tauri/src/main.rs
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 // Import our modules
@@ -9,6 +10,7 @@ mod ollama;
 mod screenshot;
 mod file_handler;
 mod data_store;
+mod audio_loopback; // New audio loopback module
 
 // Re-export the commands from modules
 use transparency::{set_window_transparency, emergency_restore_window, toggle_transparency};
@@ -27,14 +29,22 @@ use speech::{
 use ollama::{
     get_ollama_models, get_ollama_status, pull_ollama_model, delete_ollama_model,
     generate_ollama_response, generate_ollama_response_stream, get_ollama_model_info,
-    generate_enteract_agent_response, generate_vision_analysis, generate_deep_research
+    generate_enteract_agent_response, generate_vision_analysis, generate_deep_research,
+    generate_conversational_ai
 };
 use screenshot::{capture_screenshot, capture_screenshot_area};
 use file_handler::{
     upload_file_base64, validate_file_upload, get_file_upload_config,
     process_clipboard_image, cleanup_temp_files
 };
-use data_store::{save_chat_sessions, load_chat_sessions};
+use data_store::{save_chat_sessions, load_chat_sessions, save_conversations, load_conversations, delete_conversation, clear_all_conversations};
+
+// Import new audio loopback commands
+use audio_loopback::{
+    enumerate_loopback_devices, auto_select_best_device, test_audio_device,
+    save_audio_settings, load_audio_settings, save_general_settings, load_general_settings,
+    start_audio_loopback_capture, stop_audio_loopback_capture, process_audio_for_transcription
+};
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -57,18 +67,18 @@ pub fn run() {
                 // For now, we'll rely on window-level keyboard shortcuts
             }
             
+            // Audio loopback functionality is initialized on-demand
+            
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // Basic commands
+            // Existing commands
             greet,
             
-            // Transparency commands
-            set_window_transparency, 
+            // Window management
+            set_window_transparency,
             emergency_restore_window,
             toggle_transparency,
-            
-            // Window management commands
             move_window_to_position,
             get_window_position,
             get_window_size,
@@ -77,7 +87,7 @@ pub fn run() {
             get_monitor_layout,
             set_window_bounds,
             
-            // Eye tracking commands
+            // Eye tracking
             start_ml_eye_tracking,
             stop_ml_eye_tracking,
             get_ml_gaze_data,
@@ -87,7 +97,7 @@ pub fn run() {
             resume_ml_tracking,
             detect_window_drag,
             
-            // Whisper transcription commands
+            // Speech transcription
             initialize_whisper_model,
             transcribe_audio_base64,
             transcribe_audio_file,
@@ -95,7 +105,7 @@ pub fn run() {
             download_whisper_model,
             list_available_models,
             
-            // Ollama commands
+            // Ollama AI
             get_ollama_models,
             get_ollama_status,
             pull_ollama_model,
@@ -103,26 +113,41 @@ pub fn run() {
             generate_ollama_response,
             generate_ollama_response_stream,
             get_ollama_model_info,
-            
-            // Agent commands
             generate_enteract_agent_response,
             generate_vision_analysis,
             generate_deep_research,
+            generate_conversational_ai,
             
-            // Screenshot commands
+            // Screenshot
             capture_screenshot,
             capture_screenshot_area,
             
-            // File upload commands
+            // File handling
             upload_file_base64,
             validate_file_upload,
             get_file_upload_config,
             process_clipboard_image,
             cleanup_temp_files,
-
-            // Chat session commands
+            
+            // Data storage
             save_chat_sessions,
-            load_chat_sessions
+            load_chat_sessions,
+            save_conversations,
+            load_conversations,
+            delete_conversation,
+            clear_all_conversations,
+            
+            // NEW: Audio loopback commands
+            enumerate_loopback_devices,
+            auto_select_best_device,
+            test_audio_device,
+            save_audio_settings,
+            load_audio_settings,
+            save_general_settings,
+            load_general_settings,
+            start_audio_loopback_capture,
+            stop_audio_loopback_capture,
+            process_audio_for_transcription
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

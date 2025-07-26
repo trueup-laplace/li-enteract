@@ -110,6 +110,7 @@ export class AgentService {
     }, 50)
   }
 
+
   // Send message function
   static async sendMessage(userMessage: string, selectedModel: string | null, agentType: string = 'enteract') {
     // Ensure we have an active chat session
@@ -188,30 +189,46 @@ export class AgentService {
               
               // For deep research, handle thinking vs response separately
               if (agentType === 'deep_research') {
-                // Check for thinking tags
-                if (data.text.includes('<think>')) {
+                // Improved thinking tag detection
+                const thinkingStartMatch = data.text.match(/<thinking>/i)
+                const thinkingEndMatch = data.text.match(/<\/thinking>/i)
+                
+                if (thinkingStartMatch) {
                   isInThinking = true
-                } else if (data.text.includes('</think>')) {
+                }
+                if (thinkingEndMatch) {
                   isInThinking = false
                 }
                 
-                if (isInThinking || (fullResponse.includes('<think>') && !fullResponse.includes('</think>'))) {
-                  // We're in thinking mode
-                  thinkingContent += data.text.replace(/<\/?think>/g, '')
+                // Process text based on current state
+                if (isInThinking || (fullResponse.includes('<thinking>') && !fullResponse.includes('</thinking>'))) {
+                  // Extract thinking content more precisely
+                  const cleanText = data.text.replace(/<\/?thinking>/gi, '')
+                  if (cleanText.trim()) {
+                    thinkingContent += cleanText
+                  }
                 } else {
-                  // We're in response mode
-                  actualResponse += data.text.replace(/<\/?think>/g, '')
+                  // Extract response content, removing any remaining thinking tags
+                  const cleanText = data.text.replace(/<\/?thinking>/gi, '')
+                  if (cleanText.trim()) {
+                    actualResponse += cleanText
+                  }
                 }
               } else {
                 // For other agents, just accumulate normally
                 actualResponse += data.text
               }
               
-              // Update the message in real-time
+              // Update the message in real-time with improved formatting
               if (currentHistory[streamingMessageIndex]) {
-                const displayText = agentType === 'deep_research' 
-                  ? `🧠 Deep Research AI:\n\n${actualResponse}${isTyping ? '▋' : ''}`
-                  : `🤖 ${agentName}:\n\n${actualResponse}${isTyping ? '▋' : ''}`
+                let displayText = ''
+                
+                if (agentType === 'deep_research') {
+                  displayText = `🧠 **Deep Research Analysis**\n\n${actualResponse.trim()}${isTyping ? '▋' : ''}`
+                } else {
+                  displayText = `🤖 **${agentName}**\n\n${actualResponse.trim()}${isTyping ? '▋' : ''}`
+                }
+                
                 currentHistory[streamingMessageIndex].text = displayText
               }
               
@@ -223,19 +240,30 @@ export class AgentService {
             if (data.done) {
               isTyping = false
               if (currentHistory[streamingMessageIndex]) {
-                if (agentType === 'deep_research' && thinkingContent) {
-                  const thinkingDisplay = `<details style="margin: 10px 0; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 10px;">
-<summary style="cursor: pointer; font-weight: bold; color: #a855f7;">🤔 Show thinking process</summary>
-<div style="margin-top: 10px; padding: 10px; background: rgba(168,85,247,0.1); border-radius: 6px; font-family: monospace; white-space: pre-wrap;">${thinkingContent}</div>
+                let finalText = ''
+                
+                if (agentType === 'deep_research') {
+                  if (thinkingContent.trim()) {
+                    // Create collapsible thinking section with better styling
+                    const thinkingDisplay = `<details style="margin: 15px 0; border: 1px solid rgba(147, 51, 234, 0.3); border-radius: 12px; padding: 15px; background: rgba(147, 51, 234, 0.05);">
+<summary style="cursor: pointer; font-weight: 600; color: #a855f7; font-size: 14px;">🧠 View Reasoning Process</summary>
+<div style="margin-top: 12px; padding: 12px; background: rgba(147, 51, 234, 0.1); border-radius: 8px; border-left: 3px solid #a855f7;">
+<div style="font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace; white-space: pre-wrap; font-size: 13px; line-height: 1.5; color: rgba(255,255,255,0.9);">${thinkingContent.trim()}</div>
+</div>
 </details>`
-                  currentHistory[streamingMessageIndex].text = `🧠 Deep Research Analysis:\n\n${thinkingDisplay}\n\n${actualResponse}`
+                    finalText = `🧠 **Deep Research Analysis**\n\n${thinkingDisplay}\n\n${actualResponse.trim()}`
+                  } else {
+                    finalText = `🧠 **Deep Research Analysis**\n\n${actualResponse.trim()}`
+                  }
                 } else {
-                  currentHistory[streamingMessageIndex].text = agentType === 'deep_research' 
-                    ? `🧠 Deep Research Analysis:\n\n${actualResponse}`
-                    : currentHistory[streamingMessageIndex].text.replace('▋', '')
+                  // Clean formatting for other agents
+                  const agentDisplayName = agentName === 'Enteract AI' ? 'AI Assistant' : agentName
+                  finalText = `🤖 **${agentDisplayName}**\n\n${actualResponse.trim()}`
                 }
+                
+                currentHistory[streamingMessageIndex].text = finalText
               }
-              console.log(`✅ ${agentType} streaming completed. Full response: ${actualResponse}`)
+              console.log(`✅ ${agentType} streaming completed. Response length: ${actualResponse.length} chars`)
             }
             break
             

@@ -29,6 +29,7 @@ const {
   showChatWindow,
   showTransparencyControls,
   showAIModelsWindow,
+  showConversationalWindow,
   speechError,
   compatibilityReport,
   isGazeControlActive,
@@ -46,8 +47,8 @@ const {
   toggleChatWindow,
   closeChatWindow,
   openChatWindow,
-  toggleSpeechTranscription,
-  getSpeechIconClass,
+  toggleConversationalWindow,
+  closeConversationalWindow,
   toggleMLEyeTrackingWithMovement,
   handleKeydown,
   handleClickOutside
@@ -62,6 +63,7 @@ const {
     showChatWindow,
     showTransparencyControls,
     showAIModelsWindow,
+    showConversationalWindow,
     speechError,
     compatibilityReport,
     isGazeControlActive,
@@ -71,17 +73,22 @@ const {
 
 // Watch for window state changes to resize window
 watch(showChatWindow, async (newValue) => {
-  await resizeWindow(newValue, showTransparencyControls.value, showAIModelsWindow.value)
+  await resizeWindow(newValue, showTransparencyControls.value, showAIModelsWindow.value, showConversationalWindow.value, false)
 })
 
 watch(showTransparencyControls, async (newValue) => {
   console.log(`🔧 TRANSPARENCY WATCH: newValue=${newValue}, showChat=${showChatWindow.value}, showAI=${showAIModelsWindow.value}`)
-  await resizeWindow(showChatWindow.value, newValue, showAIModelsWindow.value)
+  await resizeWindow(showChatWindow.value, newValue, showAIModelsWindow.value, showConversationalWindow.value, false)
   console.log('🔧 TRANSPARENCY WATCH: Skipping resize to debug issue')
 })
 
 watch(showAIModelsWindow, async (newValue) => {
-  await resizeWindow(showChatWindow.value, showTransparencyControls.value, newValue)
+  await resizeWindow(showChatWindow.value, showTransparencyControls.value, newValue, showConversationalWindow.value, false)
+})
+
+watch(showConversationalWindow, async (newValue) => {
+  console.log(`🔧 CONVERSATIONAL WATCH: newValue=${newValue}`)
+  await resizeWindow(showChatWindow.value, showTransparencyControls.value, showAIModelsWindow.value, newValue, false)
 })
 
 // Expose the openChatWindow method for parent components
@@ -101,7 +108,7 @@ onMounted(async () => {
   
   await store.initializeSpeechTranscription('small')
   
-  await resizeWindow(false, false, false)
+  await resizeWindow(false, false, false, false, false)
   
   console.log('⌨️ Keyboard Shortcuts:')
   console.log('   Ctrl+Shift+E = Start/Stop ML Eye Tracking + Window Movement')
@@ -136,12 +143,12 @@ onUnmounted(() => {
           :showChatWindow="showChatWindow"
           :showTransparencyControls="showTransparencyControls"
           :showAIModelsWindow="showAIModelsWindow"
+          :showConversationalWindow="showConversationalWindow"
           :isGazeControlActive="isGazeControlActive"
-          :getSpeechIconClass="getSpeechIconClass"
           @toggle-ai-models="toggleAIModelsWindow"
-          @toggle-speech="toggleSpeechTranscription"
           @toggle-eye-tracking="toggleMLEyeTrackingWithMovement"
           @toggle-transparency="toggleTransparencyControls"
+          @toggle-conversational="toggleConversationalWindow"
           @toggle-chat="toggleChatWindow"
         />
         
@@ -156,19 +163,24 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Panel Windows -->
-    <PanelWindows
-      :showTransparencyControls="showTransparencyControls"
-      :showAIModelsWindow="showAIModelsWindow"
-      :showChatWindow="showChatWindow"
-      :selectedModel="selectedModel"
-      @close-transparency="closeTransparencyControls"
-      @close-ai-models="closeAIModelsWindow"
-      @close-chat="closeChatWindow"
-      @update:show-ai-models-window="showAIModelsWindow = $event"
-      @update:show-chat-window="showChatWindow = $event"
-      @toggle-chat-drawer="emit('toggle-chat-drawer')"
-    />
+    <!-- Panel Windows Container -->
+    <div class="panel-windows-container">
+      <PanelWindows
+        :showTransparencyControls="showTransparencyControls"
+        :showSettingsPanel="showAIModelsWindow"
+        :showChatWindow="showChatWindow"
+        :showConversationalWindow="showConversationalWindow"
+        :selectedModel="selectedModel"
+        @close-transparency="closeTransparencyControls"
+        @close-settings="closeAIModelsWindow"
+        @close-chat="closeChatWindow"
+        @close-conversational="closeConversationalWindow"
+        @update:show-settings-panel="showAIModelsWindow = $event"
+        @update:show-chat-window="showChatWindow = $event"
+        @update:show-conversational-window="showConversationalWindow = $event"
+        @toggle-chat-drawer="emit('toggle-chat-drawer')"
+      />
+    </div>
   </div>
 </template>
 
@@ -178,6 +190,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  position: relative;
 }
 
 .control-panel-section {
@@ -185,6 +198,9 @@ onUnmounted(() => {
   height: 60px;
   padding: 8px;
   background: transparent;
+  position: fixed;
+  top: 0;
+  z-index: 100;
 }
 
 /* Curved Glass Control Panel Bar */
@@ -197,11 +213,11 @@ onUnmounted(() => {
   
   /* Premium curved glass effect with darker background */
   background: linear-gradient(135deg, 
-    rgba(17, 17, 21, 0.85) 0%,
-    rgba(17, 17, 21, 0.75) 25%,
-    rgba(17, 17, 21, 0.70) 50%,
-    rgba(17, 17, 21, 0.75) 75%,
-    rgba(17, 17, 21, 0.85) 100%
+    rgba(10, 10, 12, 0.90) 0%,
+    rgba(10, 10, 12, 0.80) 25%,
+    rgba(10, 10, 12, 0.75) 50%,
+    rgba(10, 10, 12, 0.80) 75%,
+    rgba(10, 10, 12, 0.90) 100%
   );
   backdrop-filter: blur(40px) saturate(180%) brightness(1.1);
   border: 1px solid rgba(255, 255, 255, 0.3);
@@ -216,11 +232,11 @@ onUnmounted(() => {
 
 .control-panel-glass-bar:hover {
   background: linear-gradient(135deg, 
-    rgba(17, 17, 21, 0.90) 0%,
-    rgba(17, 17, 21, 0.80) 25%,
-    rgba(17, 17, 21, 0.75) 50%,
-    rgba(17, 17, 21, 0.80) 75%,
-    rgba(17, 17, 21, 0.90) 100%
+    rgba(10, 10, 12, 0.95) 0%,
+    rgba(10, 10, 12, 0.85) 25%,
+    rgba(10, 10, 12, 0.80) 50%,
+    rgba(10, 10, 12, 0.85) 75%,
+    rgba(10, 10, 12, 0.95) 100%
   );
   border-color: rgba(255, 255, 255, 0.4);
   box-shadow: 
@@ -242,11 +258,11 @@ onUnmounted(() => {
     inset 0 -1px 0 rgba(0, 0, 0, 0.1);
   border-color: rgba(255, 255, 255, 0.5);
   background: linear-gradient(135deg, 
-    rgba(17, 17, 21, 0.95) 0%,
-    rgba(17, 17, 21, 0.85) 25%,
-    rgba(17, 17, 21, 0.80) 50%,
-    rgba(17, 17, 21, 0.85) 75%,
-    rgba(17, 17, 21, 0.95) 100%
+    rgba(10, 10, 12, 1) 0%,
+    rgba(10, 10, 12, 0.90) 25%,
+    rgba(10, 10, 12, 0.85) 50%,
+    rgba(10, 10, 12, 0.90) 75%,
+    rgba(10, 10, 12, 1) 100%
   );
 }
 
@@ -287,6 +303,16 @@ onUnmounted(() => {
 
 .control-panel-glass-bar:hover:not(.dragging) {
   animation: none;
+}
+
+/* Panel Windows Container */
+.panel-windows-container {
+  @apply w-full flex-1;
+  margin-top: 68px; /* Account for fixed control panel height + padding */
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 /* Drag region styling */

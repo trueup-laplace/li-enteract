@@ -75,7 +75,7 @@ pub struct TranscriptionResult {
 
 // Global whisper context
 lazy_static::lazy_static! {
-    static ref WHISPER_CONTEXT: Arc<Mutex<Option<WhisperContext>>> = Arc::new(Mutex::new(None));
+    pub static ref WHISPER_CONTEXT: Arc<Mutex<Option<WhisperContext>>> = Arc::new(Mutex::new(None));
     static ref MODEL_CACHE_DIR: PathBuf = {
         let mut cache_dir = std::env::temp_dir();
         cache_dir.push("enteract");
@@ -107,8 +107,8 @@ pub async fn transcribe_audio_base64(audioData: String, config: WhisperModelConf
         .decode(&audioData)
         .map_err(|e| format!("Failed to decode base64 audio: {}", e))?;
     
-    // Create temporary file for audio
-    let temp_file = NamedTempFile::with_suffix(".wav")
+    // Create temporary file for audio - using .pcm extension for raw PCM data
+    let temp_file = NamedTempFile::with_suffix(".pcm")
         .map_err(|e| format!("Failed to create temp file: {}", e))?;
     
     fs::write(temp_file.path(), audio_bytes)
@@ -136,20 +136,32 @@ pub async fn transcribe_audio_file(file_path: String, config: WhisperModelConfig
     let whisper_ctx = WHISPER_CONTEXT.lock().unwrap();
     let ctx = whisper_ctx.as_ref().ok_or("Whisper context not initialized")?;
     
-    // Set up transcription parameters
+    // Set up transcription parameters - MATCHING PYTHON SCRIPT
+    // Python uses: beam_size=1, best_of=1, temperature=0.0
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
     
+    // Python passes language=None for auto-detection
     if let Some(ref lang) = config.language {
-        params.set_language(Some(lang));
+        if lang != "auto" && !lang.is_empty() {
+            params.set_language(Some(lang));
+        } else {
+            params.set_language(None);  // Auto-detect like Python
+        }
     } else {
-        params.set_language(Some("auto"));
+        params.set_language(None);  // Auto-detect like Python
     }
     
+    // Match Python settings
     params.set_translate(false);
     params.set_print_special(false);
     params.set_print_progress(false);
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
+    params.set_suppress_blank(true);      // Python: suppress_blank=True
+    params.set_single_segment(false);     // Allow multiple segments
+    params.set_no_context(true);          // Python: condition_on_previous_text=False
+    params.set_temperature(0.0);          // Python: temperature=0.0
+    params.set_no_timestamps(true);       // Python: without_timestamps=True
     
     // Run transcription
     let mut state = ctx.create_state().map_err(|e| format!("Failed to create state: {}", e))?;
@@ -285,6 +297,8 @@ fn load_audio_file(file_path: &str) -> Result<Vec<f32>, String> {
     let audio_bytes = fs::read(file_path)
         .map_err(|e| format!("Failed to read audio file: {}", e))?;
     
+    println!("[WHISPER] Loading audio file: {} bytes from {}", audio_bytes.len(), file_path);
+    
     let mut audio_f32 = Vec::new();
     for chunk in audio_bytes.chunks(2) {
         if chunk.len() == 2 {
@@ -293,5 +307,12 @@ fn load_audio_file(file_path: &str) -> Result<Vec<f32>, String> {
         }
     }
     
+    println!("[WHISPER] Converted to {} f32 samples", audio_f32.len());
+    
+    // Check if audio is silent
+    let rms = (audio_f32.iter().map(|&x| x * x).sum::<f32>() / audio_f32.len() as f32).sqrt();
+    println!("[WHISPER] Audio RMS: {:.6}", rms);
+    
     Ok(audio_f32)
 }
+

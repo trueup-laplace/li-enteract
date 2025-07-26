@@ -22,11 +22,11 @@ export const useWindowResizing = () => {
   const resizeStartSize = ref({ width: 0, height: 0 })
 
   // Dynamic window resizing
-  const resizeWindow = async (showChat: boolean, showTransparency: boolean = false, showAIModels: boolean = false) => {
+  const resizeWindow = async (showChat: boolean, showTransparency: boolean = false, showAIModels: boolean = false, showConversational: boolean = false, conversationSidebarOpen: boolean = false) => {
     try {
       let height = CONTROL_PANEL_HEIGHT
       
-      console.log(`🔧 RESIZE DEBUG - showChat: ${showChat}, showTransparency: ${showTransparency}, showAIModels: ${showAIModels}`)
+      console.log(`🔧 RESIZE DEBUG - showChat: ${showChat}, showTransparency: ${showTransparency}, showAIModels: ${showAIModels}, showConversational: ${showConversational}, conversationSidebarOpen: ${conversationSidebarOpen}`)
       
       // Add transparency panel height if shown
       if (showTransparency) {
@@ -34,10 +34,16 @@ export const useWindowResizing = () => {
         console.log(`🔧 Added transparency panel height: ${height}px`)
       }
       
-      // Add AI models window height if shown
+      // Add AI models/settings drawer height if shown (new drawer design)
       if (showAIModels) {
-        height += 550 // AI models window height (increased to show all content)
-        console.log(`🔧 Added AI models height: ${height}px`)
+        height += 650 // Settings drawer height (drawer design is more compact)
+        console.log(`🔧 Added settings drawer height: ${height}px`)
+      }
+      
+      // Add conversational window height if shown
+      if (showConversational) {
+        height += 700 // Conversational window height
+        console.log(`🔧 Added conversational window height: ${height}px`)
       }
       
       // Add chat window height if shown
@@ -46,7 +52,23 @@ export const useWindowResizing = () => {
         console.log(`🔧 Added chat window height: ${height}px`)
       }
       
-      const width = Math.max(320, chatWindowSize.value.width + 40)
+      let width = Math.max(320, chatWindowSize.value.width + 40)
+      
+      // Increase width for settings drawer to accommodate side navigation
+      if (showAIModels) {
+        width = Math.max(950, width) // Wider for drawer layout
+      }
+      
+      // Increase width for conversational window
+      if (showConversational) {
+        if (conversationSidebarOpen) {
+          width = Math.max(980, width) // Expanded width when sidebar is open
+          console.log(`🔧 Added conversational window width with sidebar: ${width}px`)
+        } else {
+          width = Math.max(600, width) // Default conversational window width
+          console.log(`🔧 Added conversational window width (no sidebar): ${width}px`)
+        }
+      }
       
       // Validate dimensions before setting
       if (width <= 0 || height <= 0) {

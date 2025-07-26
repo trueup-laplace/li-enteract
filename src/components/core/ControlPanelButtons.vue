@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { 
-  MicrophoneIcon, 
   Cog6ToothIcon,
   CommandLineIcon,
   CpuChipIcon,
-  AdjustmentsHorizontalIcon
+  AdjustmentsHorizontalIcon,
+  ChatBubbleLeftRightIcon
 } from '@heroicons/vue/24/outline'
 
 interface Props {
@@ -13,16 +13,16 @@ interface Props {
   showChatWindow: boolean
   showTransparencyControls: boolean
   showAIModelsWindow: boolean
+  showConversationalWindow: boolean
   isGazeControlActive: boolean
-  getSpeechIconClass: () => string
 }
 
 interface Emits {
   (e: 'toggle-ai-models', event: Event): void
-  (e: 'toggle-speech', event: Event): void
   (e: 'toggle-eye-tracking', event: Event): void
   (e: 'toggle-transparency', event: Event): void
   (e: 'toggle-chat', event: Event): void
+  (e: 'toggle-conversational', event: Event): void
 }
 
 defineProps<Props>()
@@ -42,22 +42,7 @@ const emit = defineEmits<Emits>()
         :class="showAIModelsWindow ? 'text-white' : 'text-white/70 group-hover:text-white'" />
     </button>
     
-    <!-- Speech Transcription Button -->
-    <button 
-      @click="emit('toggle-speech', $event)"
-      class="control-btn group"
-      :class="{ 
-        'active-pulse': store.speechStatus.isRecording,
-        'active-warning': store.speechStatus.isProcessing,
-        'active': store.isTranscriptionEnabled && !store.speechStatus.isRecording
-      }"
-      :disabled="store.speechStatus.isProcessing"
-      title="Speech Transcription"
-    >
-      <MicrophoneIcon class="w-4 h-4 transition-all" 
-        :class="getSpeechIconClass()" />
-    </button>
-    
+    <!-- Speech Transcription Button removed - now in chat interface -->
     <!-- ML Eye Tracking + Window Movement Button -->
     <button 
       @click="emit('toggle-eye-tracking', $event)"
@@ -82,6 +67,17 @@ const emit = defineEmits<Emits>()
     >
       <AdjustmentsHorizontalIcon class="w-4 h-4 transition-all" 
         :class="showTransparencyControls ? 'text-white' : 'text-white/70 group-hover:text-white'" />
+    </button>
+
+    <!-- Conversational Window Button -->
+    <button 
+      @click="emit('toggle-conversational', $event)"
+      class="control-btn group"
+      :class="{ 'active': showConversationalWindow }"
+      title="Conversational Interface"
+    >
+      <ChatBubbleLeftRightIcon class="w-4 h-4 transition-all" 
+        :class="showConversationalWindow ? 'text-white' : 'text-white/70 group-hover:text-white'" />
     </button>
 
     <!-- Chat Window Button -->

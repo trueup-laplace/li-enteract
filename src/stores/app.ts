@@ -293,6 +293,25 @@ export const useAppStore = defineStore('app', () => {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
   }
 
+  // Event listener for whisper model changes
+  const handleWhisperModelChange = async (event: CustomEvent) => {
+    try {
+      console.log('🔄 App store received whisper model change event:', event.detail)
+      
+      // Reinitialize speech transcription with new settings
+      if (speechTranscription.isInitialized.value) {
+        await speechTranscription.reinitializeWithSettings()
+        addMessage(`🔄 Updated Whisper models: Mic=${event.detail.microphoneModel}, Audio=${event.detail.loopbackModel}`, "assistant")
+      }
+    } catch (error) {
+      console.error('❌ Failed to reinitialize speech transcription with new models:', error)
+      addMessage(`❌ Failed to update Whisper models: ${error}`, "assistant")
+    }
+  }
+
+  // Set up event listener for whisper model changes
+  window.addEventListener('whisper-models-changed', handleWhisperModelChange as EventListener)
+
   return {
     // State
     micEnabled,

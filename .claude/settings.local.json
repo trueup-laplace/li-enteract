@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run tauri:*)",
+      "Bash(cargo check:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm run build:*)",
+      "Bash(taskkill:*)",
+      "Bash(cargo:*)",
+      "Bash(timeout:*)",
+      "Bash(rm:*)",
+      "Bash(find:*)",
+      "Bash(dir:*)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(npx vite:*)",
+      "Bash(mkdir:*)",
+      "Bash(move \"C:\\_dev\\enteract\\src\\components\\core\\ConversationalWindow.vue\" \"C:\\_dev\\enteract\\src\\components\\core\\ConversationalWindow.vue.backup\")",
+      "Bash(mv:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(npm run:*)"
+    ],
+    "deny": []
+  }
+}

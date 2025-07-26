@@ -2,21 +2,25 @@
 import { AdjustmentsHorizontalIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import TransparencyControls from './TransparencyControls.vue'
 import ChatWindow from './ChatWindow.vue'
-import AIModelsPanel from './AIModelsPanel.vue'
+import SettingsPanel from './SettingsPanel.vue' // Updated import
+import ConversationalWindow from './ConversationalWindow.vue'
 
 interface Props {
   showTransparencyControls: boolean
-  showAIModelsWindow: boolean
+  showSettingsPanel: boolean  // Renamed from showAIModelsWindow
   showChatWindow: boolean
+  showConversationalWindow: boolean
   selectedModel: any
 }
 
 interface Emits {
   (e: 'close-transparency'): void
-  (e: 'close-ai-models'): void
+  (e: 'close-settings'): void  // Renamed from close-ai-models
   (e: 'close-chat'): void
-  (e: 'update:show-ai-models-window', value: boolean): void
+  (e: 'close-conversational'): void
+  (e: 'update:show-settings-panel', value: boolean): void  // Renamed
   (e: 'update:show-chat-window', value: boolean): void
+  (e: 'update:show-conversational-window', value: boolean): void
   (e: 'toggle-chat-drawer'): void
 }
 
@@ -45,21 +49,40 @@ const emit = defineEmits<Emits>()
     </div>
   </Transition>
 
-  <!-- AI Models Panel -->
-  <AIModelsPanel 
-    :show-a-i-models-window="showAIModelsWindow"
-    @close="emit('close-ai-models')"
-    @update:show-a-i-models-window="emit('update:show-ai-models-window', $event)"
-  />
+  <!-- Settings Panel Section -->
+  <Transition name="settings-panel">
+    <div v-if="showSettingsPanel" class="settings-panel-section">
+      <SettingsPanel 
+        :show-settings-panel="showSettingsPanel"
+        @close="emit('close-settings')"
+        @update:show-settings-panel="emit('update:show-settings-panel', $event)"
+      />
+    </div>
+  </Transition>
 
-  <!-- Chat Window -->
-  <ChatWindow 
-    :show-chat-window="showChatWindow"
-    :selected-model="selectedModel"
-    @close="emit('close-chat')"
-    @update:show-chat-window="emit('update:show-chat-window', $event)"
-    @toggle-chat-drawer="emit('toggle-chat-drawer')"
-  />
+  <!-- Conversational Window Section -->
+  <Transition name="conversational-panel">
+    <div v-if="showConversationalWindow" class="conversational-panel-section">
+      <ConversationalWindow 
+        :show-conversational-window="showConversationalWindow"
+        @close="emit('close-conversational')"
+        @update:show-conversational-window="emit('update:show-conversational-window', $event)"
+      />
+    </div>
+  </Transition>
+
+  <!-- Chat Window Section -->
+  <Transition name="chat-panel">
+    <div v-if="showChatWindow" class="chat-panel-section">
+      <ChatWindow 
+        :show-chat-window="showChatWindow"
+        :selected-model="selectedModel"
+        @close="emit('close-chat')"
+        @update:show-chat-window="emit('update:show-chat-window', $event)"
+        @toggle-chat-drawer="emit('toggle-chat-drawer')"
+      />
+    </div>
+  </Transition>
 </template>
 
 <style scoped>
@@ -77,11 +100,11 @@ const emit = defineEmits<Emits>()
   
   /* Same glass effect as other panels with darker background */
   background: linear-gradient(135deg, 
-    rgba(17, 17, 21, 0.85) 0%,
-    rgba(17, 17, 21, 0.75) 25%,
-    rgba(17, 17, 21, 0.70) 50%,
-    rgba(17, 17, 21, 0.75) 75%,
-    rgba(17, 17, 21, 0.85) 100%
+    rgba(10, 10, 12, 0.90) 0%,
+    rgba(10, 10, 12, 0.80) 25%,
+    rgba(10, 10, 12, 0.75) 50%,
+    rgba(10, 10, 12, 0.80) 75%,
+    rgba(10, 10, 12, 0.90) 100%
   );
   backdrop-filter: blur(60px) saturate(180%) brightness(1.1);
   border: 1px solid rgba(255, 255, 255, 0.25);
@@ -108,7 +131,7 @@ const emit = defineEmits<Emits>()
   @apply p-4;
 }
 
-/* Transparency Panel Transitions */
+/* Panel Transitions */
 .transparency-panel-enter-active,
 .transparency-panel-leave-active {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -120,6 +143,77 @@ const emit = defineEmits<Emits>()
 }
 
 .transparency-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+/* Settings Panel Section */
+.settings-panel-section {
+  @apply w-full flex justify-center;
+  padding: 0 8px 8px 8px;
+  background: transparent;
+}
+
+/* Conversational Panel Section */
+.conversational-panel-section {
+  @apply w-full flex justify-center;
+  padding: 8px;
+  background: transparent;
+  position: relative;
+}
+
+/* Chat Panel Section */
+.chat-panel-section {
+  @apply w-full flex justify-center;
+  padding: 8px;
+  background: transparent;
+  position: relative;
+}
+
+/* Settings Panel Transitions */
+.settings-panel-enter-active,
+.settings-panel-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.settings-panel-enter-from {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+.settings-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+/* Conversational Panel Transitions */
+.conversational-panel-enter-active,
+.conversational-panel-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.conversational-panel-enter-from {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+.conversational-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+/* Chat Panel Transitions */
+.chat-panel-enter-active,
+.chat-panel-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chat-panel-enter-from {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+.chat-panel-leave-to {
   opacity: 0;
   transform: translateY(-10px) scale(0.95);
 }

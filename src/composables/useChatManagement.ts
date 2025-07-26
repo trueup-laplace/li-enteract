@@ -1,5 +1,5 @@
 // useChatManagement.ts - Main composable that orchestrates all chat functionality
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import type { ChatMessage } from '../types/chat'
 import { sharedChatState } from './sharedState'
 import { StorageService } from './storageService'
@@ -13,6 +13,7 @@ import { MarkdownRenderer } from './markdownRenderer'
 export const useChatManagement = (selectedModel: string | null, scrollChatToBottom: () => void) => {
   const chatMessage = ref('')
   const fileInput = ref<HTMLInputElement>()
+  
   
   // Use the shared state instead of creating new instances
   const { chatSessions, currentChatId, isInitialized } = sharedChatState
@@ -71,6 +72,7 @@ export const useChatManagement = (selectedModel: string | null, scrollChatToBott
     await AgentService.startComputerUseAgent(showChatWindow)
   }
 
+
   // Vision service function
   const takeScreenshotAndAnalyze = async (showChatWindow: any) => {
     await VisionService.takeScreenshotAndAnalyze(showChatWindow)
@@ -125,10 +127,12 @@ export const useChatManagement = (selectedModel: string | null, scrollChatToBott
         StorageService.debouncedSaveChats(chatSessions.value)
       }, { deep: true })
       
+      
       isInitialized.value = true
       console.log('✅ Chat management initialized')
     }
   })
+
 
   return {
     // Legacy exports for compatibility
