@@ -87,7 +87,10 @@ const generalSettings = ref({
   enableKeyboardShortcuts: true,
   transcriptionLanguage: 'en',
   enableAutoSave: true,
-  autoSaveInterval: 5
+  autoSaveInterval: 5,
+  // Whisper model settings
+  microphoneWhisperModel: 'tiny',
+  loopbackWhisperModel: 'base'
 })
 
 // Audio device enumeration functions
@@ -232,8 +235,25 @@ watch(audioSettings, () => {
 }, { deep: true })
 
 // Watch general settings changes and auto-save
-watch(generalSettings, () => {
+watch(generalSettings, (newSettings, oldSettings) => {
   saveGeneralSettings()
+  
+  // Check if whisper model settings changed and emit event for reinitialization
+  if (oldSettings && (
+    newSettings.microphoneWhisperModel !== oldSettings.microphoneWhisperModel ||
+    newSettings.loopbackWhisperModel !== oldSettings.loopbackWhisperModel
+  )) {
+    console.log('🔄 Whisper model settings changed, emitting reinitialize event')
+    
+    // Emit custom event that speech transcription can listen to
+    const reinitializeEvent = new CustomEvent('whisper-models-changed', {
+      detail: {
+        microphoneModel: newSettings.microphoneWhisperModel,
+        loopbackModel: newSettings.loopbackWhisperModel
+      }
+    })
+    window.dispatchEvent(reinitializeEvent)
+  }
 }, { deep: true })
 
 const closePanel = () => {
@@ -702,6 +722,30 @@ onMounted(() => {
                     <option value="zh">Chinese</option>
                   </select>
                 </label>
+              </div>
+              
+              <div class="setting-item">
+                <label class="setting-label-full">
+                  <span class="text-white/90">Microphone Whisper Model</span>
+                  <select v-model="generalSettings.microphoneWhisperModel" class="setting-select">
+                    <option value="tiny">Tiny (Fastest, Good accuracy)</option>
+                    <option value="base">Base (Balanced speed/accuracy)</option>
+                    <option value="small">Small (Best accuracy, Slower)</option>
+                  </select>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Model used for microphone transcription. Tiny is recommended for real-time performance.</p>
+              </div>
+              
+              <div class="setting-item">
+                <label class="setting-label-full">
+                  <span class="text-white/90">System Audio Whisper Model</span>
+                  <select v-model="generalSettings.loopbackWhisperModel" class="setting-select">
+                    <option value="tiny">Tiny (Fastest, Good accuracy)</option>
+                    <option value="base">Base (Balanced speed/accuracy)</option>
+                    <option value="small">Small (Best accuracy, Slower)</option>
+                  </select>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Model used for system audio loopback transcription. Base is recommended for better accuracy with recorded audio.</p>
               </div>
               
               <div class="setting-item">

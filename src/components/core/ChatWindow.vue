@@ -307,50 +307,47 @@ onUnmounted(() => {
   position: relative;
 }
 
-/* Chat Window Styles */
+/* Chat Window Styles - Matching ConversationalWindow */
 .chat-window {
-  @apply rounded-2xl relative;
+  @apply backdrop-blur-xl border border-white/15 rounded-2xl relative;
   pointer-events: auto;
   min-width: 450px;
   min-height: 500px;
   max-width: 800px;
-  max-height: calc(100vh - 100px); /* Ensure it fits within viewport with margin */
+  max-height: calc(100vh - 100px);
   overflow: visible; /* Allow menu button to be visible */
+  display: flex;
+  flex-direction: column;
   
-  /* Same glass effect as control panel with darker background */
-  background: linear-gradient(135deg, 
-    rgba(10, 10, 12, 0.90) 0%,
-    rgba(10, 10, 12, 0.80) 25%,
-    rgba(10, 10, 12, 0.75) 50%,
-    rgba(10, 10, 12, 0.80) 75%,
-    rgba(10, 10, 12, 0.90) 100%
+  /* Enhanced glass effect matching conversational window */
+  background: linear-gradient(to bottom, 
+    rgba(10, 10, 12, 0.9) 0%, 
+    rgba(5, 5, 7, 0.95) 100%
   );
-  backdrop-filter: blur(60px) saturate(180%) brightness(1.1);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(80px) saturate(180%);
   box-shadow: 
-    0 20px 60px rgba(0, 0, 0, 0.4),
-    0 8px 24px rgba(0, 0, 0, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+    0 25px 80px rgba(0, 0, 0, 0.6),
+    0 10px 30px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
 
   transition: all 0.2s ease;
 }
 
 .chat-window.resizing {
   box-shadow: 
-    0 25px 70px rgba(0, 0, 0, 0.5),
-    0 12px 30px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
-  border-color: rgba(255, 255, 255, 0.35);
+    0 30px 90px rgba(0, 0, 0, 0.7),
+    0 15px 40px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .chat-header {
-  @apply flex items-center justify-between py-3 border-b border-white/10;
+  @apply flex items-center justify-between px-4 py-3 border-b border-white/10;
+  flex-shrink: 0;
   padding-left: 56px; /* Space for drawer button */
-  padding-right: 16px;
   border-radius: 16px 16px 0 0;
-  overflow: hidden;
+  overflow: visible; /* Allow drawer button to show */
+  position: relative;
 }
 
 .chat-title {
@@ -375,13 +372,11 @@ onUnmounted(() => {
 
 .chat-drawer-trigger {
   @apply absolute z-20 rounded-full p-2 transition-all duration-200;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  /* Position it inside the chat window header */
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   top: 12px;
   left: 12px;
-  /* Ensure it's always visible */
   min-width: 36px;
   min-height: 36px;
   display: flex;
@@ -390,37 +385,30 @@ onUnmounted(() => {
 }
 
 .chat-drawer-trigger:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
   transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 .chat-messages {
   @apply flex-1 overflow-y-auto px-4 py-3;
-  max-height: calc(100% - 120px); /* Ensure it doesn't overflow the window */
-  scroll-behavior: smooth; /* Smooth scrolling animation */
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.4) rgba(255, 255, 255, 0.1);
+  max-height: calc(100% - 120px);
+  min-height: 0;
+  scroll-behavior: smooth;
 }
 
 .chat-messages::-webkit-scrollbar {
-  width: 8px; /* Made wider for better visibility */
+  width: 4px;
 }
 
 .chat-messages::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
+  background: transparent;
 }
 
 .chat-messages::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.3); /* Made more visible */
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.chat-messages::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.5); /* Even more visible on hover */
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
 }
 
 .chat-empty {
@@ -448,16 +436,19 @@ onUnmounted(() => {
 }
 
 .message-bubble {
-  @apply max-w-sm px-4 py-3 rounded-2xl; /* Increased max width and padding for better readability */
+  @apply max-w-xs px-4 py-3 rounded-2xl;
+  word-wrap: break-word;
 }
 
 .chat-message.user .message-bubble {
   @apply bg-blue-500/80 text-white;
+  border-bottom-right-radius: 6px;
 }
 
 .chat-message.assistant .message-bubble {
-  @apply text-white/90;
-  background: rgba(255, 255, 255, 0.08);
+  @apply text-white/90 border border-white/10;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom-left-radius: 6px;
 }
 
 .chat-message.transcription .message-bubble {
@@ -513,12 +504,16 @@ onUnmounted(() => {
 }
 
 .chat-input-container {
-  @apply flex items-center gap-2 px-4 py-3 border-t border-white/10;
+  @apply flex items-center gap-3 px-4 py-4 border-t border-white/10;
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.2);
 }
 
 .chat-input {
-  @apply flex-1 border border-white/10 rounded-full px-4 py-2 text-white placeholder-white/50 focus:outline-none focus:border-white/30 transition-all duration-200;
+  @apply flex-1 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/50 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200;
   background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  font-size: 14px;
 }
 
 .chat-input:hover {
@@ -526,12 +521,30 @@ onUnmounted(() => {
   border-color: rgba(255, 255, 255, 0.2);
 }
 
+.chat-input:focus {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .chat-send-btn {
-  @apply bg-blue-500/80 hover:bg-blue-500 disabled:bg-white/10 disabled:opacity-50 rounded-full p-2 transition-colors;
+  @apply rounded-xl p-3 transition-all duration-200 flex items-center justify-center;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.8), rgba(37, 99, 235, 0.8));
+  border: 1px solid rgba(59, 130, 246, 0.4);
   color: white;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.chat-send-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.9), rgba(37, 99, 235, 0.9));
+  border-color: rgba(59, 130, 246, 0.6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
 .chat-send-btn:disabled {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.3);
   cursor: not-allowed;
 }
 

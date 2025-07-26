@@ -262,15 +262,18 @@ const handleConversationalUserSpeech = (event: Event) => {
   const { text, confidence, timestamp } = customEvent.detail
   
   if (text && text.trim()) {
-    // Clear typing state
+    const finalContent = text.trim()
+    
+    // Clear typing state FIRST to prevent duplication
     isMicrophoneTyping.value = false
     microphonePreviewMessage.value = ''
     currentMicPreviewMessageId.value = null
     
+    // Then add the final message
     conversationStore.addMessage({
       type: 'user',
       source: 'microphone',
-      content: text.trim(),
+      content: finalContent,
       confidence,
       timestamp: timestamp || Date.now()
     })
@@ -349,22 +352,25 @@ const handleLoopbackTranscription = (payload: any) => {
 // Flush the loopback buffer as a complete thought
 const flushLoopbackBuffer = () => {
   if (loopbackBuffer.value.trim()) {
-    conversationStore.addMessage({
-      type: 'system',
-      source: 'loopback',
-      content: loopbackBuffer.value.trim(),
-      confidence: 0.8, // Average confidence for grouped chunks
-      timestamp: Date.now()
-    })
+    const finalContent = loopbackBuffer.value.trim()
     
-    console.log(`🎙️ Complete thought: "${loopbackBuffer.value.trim()}"`)
-    
-    // Clear buffer and typing state
+    // Clear buffer and typing state FIRST to prevent duplication
     loopbackBuffer.value = ''
     loopbackPreviewMessage.value = ''
     isLoopbackTyping.value = false
     currentPreviewMessageId.value = null
     loopbackBufferStartTime.value = 0
+    
+    // Then add the final message
+    conversationStore.addMessage({
+      type: 'system',
+      source: 'loopback',
+      content: finalContent,
+      confidence: 0.8, // Average confidence for grouped chunks
+      timestamp: Date.now()
+    })
+    
+    console.log(`🎙️ Complete thought: "${finalContent}"`)
     
     scrollToBottom()
   }

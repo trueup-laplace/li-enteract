@@ -60,8 +60,27 @@ pub async fn process_audio_for_transcription(
     
     let audio_base64 = base64::prelude::BASE64_STANDARD.encode(&pcm16_bytes);
     
+    // Load settings to get the selected loopback whisper model
+    let model_size = match crate::audio_loopback::settings::load_general_settings().await {
+        Ok(Some(settings)) => {
+            if let Some(model) = settings.get("loopbackWhisperModel") {
+                if let Some(model_str) = model.as_str() {
+                    model_str.to_string()
+                } else {
+                    "base".to_string() // Default for loopback
+                }
+            } else {
+                "base".to_string() // Default for loopback
+            }
+        }
+        Ok(None) => "base".to_string(), // No settings found, use default
+        Err(_) => "base".to_string() // Error loading settings, use default
+    };
+    
+    println!("[AUDIO_PROCESSOR] Using Whisper model: {}", model_size);
+    
     let config = crate::speech::WhisperModelConfig {
-        modelSize: "tiny".to_string(),
+        modelSize: model_size,
         language: Some("en".to_string()),
         enableVad: false,  // Matching Python script
         silenceThreshold: 0.01,

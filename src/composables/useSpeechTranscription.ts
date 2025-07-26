@@ -107,8 +107,24 @@ export function useSpeechTranscription() {
         setupSpeechRecognition()
       }
 
-      // Initialize Whisper model
-      const config = { ...defaultWhisperConfig, ...whisperConfig }
+      // Load settings to get the selected whisper model for microphone
+      let selectedModel = defaultWhisperConfig.modelSize
+      try {
+        const storedSettings = await invoke<any>('load_general_settings')
+        if (storedSettings?.microphoneWhisperModel) {
+          selectedModel = storedSettings.microphoneWhisperModel
+          console.log(`🎤 Using stored microphone Whisper model: ${selectedModel}`)
+        }
+      } catch (settingsError) {
+        console.warn('Failed to load model settings, using default:', settingsError)
+      }
+
+      // Initialize Whisper model with selected model size
+      const config = { 
+        ...defaultWhisperConfig, 
+        modelSize: selectedModel,
+        ...whisperConfig 
+      }
       
       // Check if model exists with proper error handling
       try {
@@ -785,6 +801,33 @@ export function useSpeechTranscription() {
     console.log(`🎤 Continuous mode ${enabled ? 'enabled' : 'disabled'}`)
   }
 
+  // Reinitialize with new model settings
+  async function reinitializeWithSettings() {
+    try {
+      console.log('🔄 Reinitializing speech transcription with new settings...')
+      
+      // Store current recording state
+      const wasRecording = isRecording.value
+      
+      // Stop recording if active
+      if (wasRecording) {
+        await stopRecording()
+      }
+      
+      // Reset initialization state
+      isInitialized.value = false
+      hasWhisperModel.value = false
+      
+      // Reinitialize with current settings
+      await initialize()
+      
+      console.log('✅ Speech transcription reinitialized successfully')
+    } catch (error) {
+      console.error('❌ Failed to reinitialize speech transcription:', error)
+      throw error
+    }
+  }
+
   // Get available models
   async function getAvailableModels() {
     try {
@@ -845,6 +888,7 @@ export function useSpeechTranscription() {
     getAvailableModels,
     startTranscription,
     setAutoSendToChat,
-    setContinuousMode
+    setContinuousMode,
+    reinitializeWithSettings
   }
 } 
