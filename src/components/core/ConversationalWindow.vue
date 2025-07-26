@@ -9,6 +9,7 @@ import {
 } from '@heroicons/vue/24/outline'
 import { useSpeechTranscription } from '../../composables/useSpeechTranscription'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 
 interface Props {
   showConversationalWindow: boolean
@@ -117,13 +118,26 @@ const stopAudioLoopbackCapture = async () => {
 }
 
 // Event listeners
-const setupEventListeners = () => {
+const setupEventListeners = async () => {
   // Listen for transcription events
   window.addEventListener('transcription-final', handleUserSpeech)
   window.addEventListener('send-transcribed-message', handleTranscribedMessage)
   
-  // Listen for audio loopback events from Rust backend
-  window.addEventListener('audio-chunk', handleSystemAudio)
+  // Listen for audio loopback events from Rust backend using Tauri's event system
+  console.log('🎧 Setting up Tauri audio-chunk event listener')
+  await listen('audio-chunk', (event) => {
+    console.log('🎧 Tauri audio-chunk event received:', event.payload)
+    handleSystemAudio({ detail: event.payload } as CustomEvent)
+  })
+  
+  // Listen for loopback transcription events
+  console.log('🎙️ Setting up loopback transcription listener')
+  await listen('loopback-transcription', (event) => {
+    console.log('🎙️ Loopback transcription received:', event.payload)
+    handleLoopbackTranscription(event.payload as any)
+  })
+  
+  console.log('✅ Audio event listeners set up')
 }
 
 // Handle user speech from microphone
@@ -155,29 +169,27 @@ const handleTranscribedMessage = (event: CustomEvent) => {
   }
 }
 
-// Handle system audio from loopback
-const handleSystemAudio = async (event: CustomEvent) => {
-  const { audio_data, device_id, timestamp } = event.detail
+// Handle system audio from loopback (just for monitoring audio levels)
+const handleSystemAudio = (event: CustomEvent) => {
+  console.log('🎧 Received audio-chunk event - level:', event.detail.level, 'dB')
+  // This is now just for monitoring - transcription happens in Rust backend
+}
+
+// Handle loopback transcription results
+const handleLoopbackTranscription = (payload: any) => {
+  console.log('🎙️ Loopback transcription:', payload)
+  const { text, confidence, timestamp, audioLevel } = payload
   
-  if (!audio_data) return
-  
-  try {
-    // Process audio through transcription
-    const transcription = await invoke<string>('process_audio_for_transcription', {
-      audioData: audio_data,
-      sampleRate: 16000
+  if (text && text.trim()) {
+    addMessage({
+      type: 'system',
+      source: 'loopback',
+      content: text.trim(),
+      confidence,
+      timestamp: timestamp || Date.now()
     })
     
-    if (transcription && transcription.trim() && transcription !== 'Transcribed text would go here') {
-      addMessage({
-        type: 'system',
-        source: 'loopback',
-        content: transcription.trim(),
-        timestamp: timestamp || Date.now()
-      })
-    }
-  } catch (error) {
-    console.error('Failed to process system audio:', error)
+    console.log(`🎙️ System Audio (${audioLevel?.toFixed(1)}dB): ${text}`)
   }
 }
 

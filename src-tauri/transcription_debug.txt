@@ -1,0 +1,94 @@
+=== Transcription Debug Log Started: 2025-07-26 03:46:11 ===
+
+[03:46:11.185] RMS: 0.185374 (-14.6dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:11.889] RMS: 0.185374 (-14.6dB) | [MAIN] Raw Whisper result: 'It's been happening forever.'
+[03:46:11.890] RMS: 0.185374 (-14.6dB) | [MAIN] Cleaned text: 'It's been happening forever.'
+[03:46:11.890] RMS: 0.185374 (-14.6dB) | [MAIN SUCCESS] It's been happening forever. (conf: 0.800)
+[03:46:11.991] RMS: 0.158317 (-16.0dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:12.690] RMS: 0.158317 (-16.0dB) | [MAIN] Raw Whisper result: 'happening forever.'
+[03:46:12.690] RMS: 0.158317 (-16.0dB) | [MAIN] Cleaned text: 'happening forever.'
+[03:46:12.691] RMS: 0.158317 (-16.0dB) | [MAIN SUCCESS] happening forever. (conf: 0.800)
+[03:46:12.798] RMS: 0.103869 (-19.7dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:13.533] RMS: 0.103869 (-19.7dB) | [MAIN] Raw Whisper result: 'forever.'
+[03:46:13.534] RMS: 0.103869 (-19.7dB) | [MAIN] Cleaned text: 'forever.'
+[03:46:13.534] RMS: 0.103869 (-19.7dB) | [MAIN SUCCESS] forever. (conf: 0.800)
+[03:46:13.601] RMS: 0.150751 (-16.4dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:14.323] RMS: 0.150751 (-16.4dB) | [MAIN] Raw Whisper result: 'with this approach has limited'
+[03:46:14.324] RMS: 0.150751 (-16.4dB) | [MAIN] Cleaned text: 'with this approach has limited'
+[03:46:14.325] RMS: 0.150751 (-16.4dB) | [MAIN SUCCESS] with this approach has limited (conf: 0.800)
+[03:46:14.410] RMS: 0.199142 (-14.0dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:15.112] RMS: 0.199142 (-14.0dB) | [MAIN] Raw Whisper result: 'With this approach has limitations, interprong'
+[03:46:15.113] RMS: 0.199142 (-14.0dB) | [MAIN] Cleaned text: 'With this approach has limitations, interprong'
+[03:46:15.114] RMS: 0.199142 (-14.0dB) | [MAIN SUCCESS] With this approach has limitations, interprong (conf: 0.800)
+[03:46:15.213] RMS: 0.206295 (-13.7dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:15.921] RMS: 0.206295 (-13.7dB) | [MAIN] Raw Whisper result: 'limitations, interprocess communication.'
+[03:46:15.922] RMS: 0.206295 (-13.7dB) | [MAIN] Cleaned text: 'limitations, interprocess communication.'
+[03:46:15.922] RMS: 0.206295 (-13.7dB) | [MAIN SUCCESS] limitations, interprocess communication. (conf: 0.800)
+[03:46:16.023] RMS: 0.205983 (-13.7dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:16.722] RMS: 0.205983 (-13.7dB) | [MAIN] Raw Whisper result: 'process communication is not cheap.'
+[03:46:16.723] RMS: 0.205983 (-13.7dB) | [MAIN] Cleaned text: 'process communication is not cheap.'
+[03:46:16.723] RMS: 0.205983 (-13.7dB) | [MAIN SUCCESS] process communication is not cheap. (conf: 0.800)
+[03:46:16.824] RMS: 0.185302 (-14.6dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:17.464] RMS: 0.185302 (-14.6dB) | [MAIN] Raw Whisper result: 'is not cheap, since most implemented'
+[03:46:17.464] RMS: 0.185302 (-14.6dB) | [MAIN] Cleaned text: 'is not cheap, since most implemented'
+[03:46:17.465] RMS: 0.185302 (-14.6dB) | [MAIN SUCCESS] is not cheap, since most implemented (conf: 0.800)
+[03:46:17.628] RMS: 0.166251 (-15.6dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:18.348] RMS: 0.166251 (-15.6dB) | [MAIN] Raw Whisper result: 'since most implementations copied'
+[03:46:18.349] RMS: 0.166251 (-15.6dB) | [MAIN] Cleaned text: 'since most implementations copied'
+[03:46:18.349] RMS: 0.166251 (-15.6dB) | [MAIN SUCCESS] since most implementations copied (conf: 0.800)
+[03:46:18.424] RMS: 0.172688 (-15.3dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:19.064] RMS: 0.172688 (-15.3dB) | [MAIN] Raw Whisper result: 'implementations copy data to OS'
+[03:46:19.065] RMS: 0.172688 (-15.3dB) | [MAIN] Cleaned text: 'implementations copy data to OS'
+[03:46:19.065] RMS: 0.172688 (-15.3dB) | [MAIN SUCCESS] implementations copy data to OS (conf: 0.800)
+[03:46:19.224] RMS: 0.170591 (-15.4dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:19.924] RMS: 0.170591 (-15.4dB) | [MAIN] Raw Whisper result: 'Copy data to OS memory and back.'
+[03:46:19.924] RMS: 0.170591 (-15.4dB) | [MAIN] Cleaned text: 'Copy data to OS memory and back.'
+[03:46:19.925] RMS: 0.170591 (-15.4dB) | [MAIN SUCCESS] Copy data to OS memory and back. (conf: 0.800)
+[03:46:20.033] RMS: 0.154226 (-16.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:20.848] RMS: 0.161638 (-15.8dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:20.886] RMS: 0.154226 (-16.2dB) | [MAIN] Raw Whisper result: 'memory and back. Yep.'
+[03:46:20.886] RMS: 0.154226 (-16.2dB) | [MAIN] Cleaned text: 'memory and back. Yep.'
+[03:46:20.887] RMS: 0.154226 (-16.2dB) | [MAIN SUCCESS] memory and back. Yep. (conf: 0.800)
+[03:46:21.655] RMS: 0.186873 (-14.6dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:21.732] RMS: 0.161638 (-15.8dB) | [MAIN] Raw Whisper result: 'Yep, mutex based concurring'
+[03:46:21.733] RMS: 0.161638 (-15.8dB) | [MAIN] Cleaned text: 'Yep, mutex based concurring'
+[03:46:21.733] RMS: 0.161638 (-15.8dB) | [MAIN SUCCESS] Yep, mutex based concurring (conf: 0.800)
+[03:46:22.455] RMS: 0.183940 (-14.7dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:22.473] RMS: 0.186873 (-14.6dB) | [MAIN] Raw Whisper result: 'A mutex-based concurrency considered harmful.'
+[03:46:22.474] RMS: 0.186873 (-14.6dB) | [MAIN] Cleaned text: 'A mutex-based concurrency considered harmful.'
+[03:46:22.475] RMS: 0.186873 (-14.6dB) | [MAIN SUCCESS] A mutex-based concurrency considered harmful. (conf: 0.800)
+[03:46:23.216] RMS: 0.183940 (-14.7dB) | [MAIN] Raw Whisper result: 'currency considered harmful or'
+[03:46:23.217] RMS: 0.183940 (-14.7dB) | [MAIN] Cleaned text: 'currency considered harmful or'
+[03:46:23.218] RMS: 0.183940 (-14.7dB) | [MAIN SUCCESS] currency considered harmful or (conf: 0.800)
+[03:46:23.270] RMS: 0.182775 (-14.8dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:23.981] RMS: 0.182775 (-14.8dB) | [MAIN] Raw Whisper result: 'harmful or horror was right.'
+[03:46:23.982] RMS: 0.182775 (-14.8dB) | [MAIN] Cleaned text: 'harmful or horror was right.'
+[03:46:23.982] RMS: 0.182775 (-14.8dB) | [MAIN SUCCESS] harmful or horror was right. (conf: 0.800)
+[03:46:24.078] RMS: 0.136743 (-17.3dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:24.844] RMS: 0.136743 (-17.3dB) | [MAIN] Raw Whisper result: 'horror was right.'
+[03:46:24.844] RMS: 0.136743 (-17.3dB) | [MAIN] Cleaned text: 'horror was right.'
+[03:46:24.845] RMS: 0.136743 (-17.3dB) | [MAIN SUCCESS] horror was right. (conf: 0.800)
+[03:46:24.885] RMS: 0.154168 (-16.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:25.688] RMS: 0.193905 (-14.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:25.761] RMS: 0.154168 (-16.2dB) | [MAIN] Raw Whisper result: 'Some people'
+[03:46:25.762] RMS: 0.154168 (-16.2dB) | [MAIN] Cleaned text: 'Some people'
+[03:46:25.762] RMS: 0.154168 (-16.2dB) | [MAIN SUCCESS] Some people (conf: 0.800)
+[03:46:26.490] RMS: 0.178058 (-15.0dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:26.682] RMS: 0.193905 (-14.2dB) | [MAIN] Raw Whisper result: 'Some people when confronted with the'
+[03:46:26.683] RMS: 0.193905 (-14.2dB) | [MAIN] Cleaned text: 'Some people when confronted with the'
+[03:46:26.684] RMS: 0.193905 (-14.2dB) | [MAIN SUCCESS] Some people when confronted with the (conf: 0.800)
+[03:46:27.290] RMS: 0.171986 (-15.3dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:27.676] RMS: 0.178058 (-15.0dB) | [MAIN] Raw Whisper result: 'when confronted with the problem, think.'
+[03:46:27.677] RMS: 0.178058 (-15.0dB) | [MAIN] Cleaned text: 'when confronted with the problem, think.'
+[03:46:27.678] RMS: 0.178058 (-15.0dB) | [MAIN SUCCESS] when confronted with the problem, think. (conf: 0.800)
+[03:46:28.101] RMS: 0.202667 (-13.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:28.903] RMS: 0.202555 (-13.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[03:46:29.752] RMS: 0.171986 (-15.3dB) | [MAIN] Raw Whisper result: 'with the problem. I know I'
+[03:46:29.753] RMS: 0.171986 (-15.3dB) | [MAIN] Cleaned text: 'with the problem. I know I'
+[03:46:29.754] RMS: 0.171986 (-15.3dB) | [MAIN SUCCESS] with the problem. I know I (conf: 0.667)
+[03:46:30.777] RMS: 0.202667 (-13.9dB) | [MAIN] Raw Whisper result: 'I know I'll use threads.'
+[03:46:30.778] RMS: 0.202667 (-13.9dB) | [MAIN] Cleaned text: 'I know I'll use threads.'
+[03:46:30.779] RMS: 0.202667 (-13.9dB) | [MAIN SUCCESS] I know I'll use threads. (conf: 0.800)
+[03:46:31.825] RMS: 0.202555 (-13.9dB) | [MAIN] Raw Whisper result: 'I'll use threads and then they have'
+[03:46:31.825] RMS: 0.202555 (-13.9dB) | [MAIN] Cleaned text: 'I'll use threads and then they have'
+[03:46:31.826] RMS: 0.202555 (-13.9dB) | [MAIN SUCCESS] I'll use threads and then they have (conf: 0.800)
