@@ -16,13 +16,25 @@ export interface LiveAIResponse {
   sessionId: string
 }
 
+export interface SuggestionItem {
+  id: string
+  text: string
+  timestamp: number
+  contextLength: number
+}
+
 export function useLiveAI() {
   const isActive = ref(false)
   const sessionId = ref<string | null>(null)
   const response = ref('')
+  const suggestions = ref<SuggestionItem[]>([])
   const isProcessing = ref(false)
   const error = ref<string | null>(null)
   let streamListener: any = null
+  let analysisTimeout: NodeJS.Timeout | null = null
+  let lastAnalysisTime = 0
+  const ANALYSIS_DEBOUNCE_MS = 3000 // Wait 3 seconds after last message before analyzing
+  const MIN_ANALYSIS_INTERVAL_MS = 5000 // Minimum 5 seconds between analyses
 
   const startLiveAI = async (messages: any[]): Promise<void> => {
     try {
@@ -46,6 +58,22 @@ export function useLiveAI() {
         } else if (data.type === 'complete') {
           console.log('✅ Live AI streaming completed')
           isProcessing.value = false
+          
+          // Add the completed response to suggestions list
+          if (response.value.trim()) {
+            const suggestion: SuggestionItem = {
+              id: `suggestion-${Date.now()}`,
+              text: response.value.trim(),
+              timestamp: Date.now(),
+              contextLength: 0 // Will be set by caller
+            }
+            suggestions.value.unshift(suggestion) // Add to beginning of list
+            
+            // Keep only last 5 suggestions to prevent UI overflow
+            if (suggestions.value.length > 5) {
+              suggestions.value = suggestions.value.slice(0, 5)
+            }
+          }
         } else if (data.type === 'error') {
           console.error('❌ Live AI streaming error:', data.error)
           error.value = data.error
@@ -60,7 +88,14 @@ export function useLiveAI() {
       if (messages.length > 0) {
         await analyzeConversationContext(messages)
       } else {
-        response.value = "Live AI Response Assistant is now active. The AI will provide real-time response suggestions when you're in a conversation."
+        // Add welcome message to suggestions
+        const welcomeSuggestion: SuggestionItem = {
+          id: 'welcome',
+          text: "Live AI Response Assistant is now active. The AI will provide response suggestions when there are pauses in the conversation.",
+          timestamp: Date.now(),
+          contextLength: 0
+        }
+        suggestions.value = [welcomeSuggestion]
       }
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to start Live AI'
@@ -84,7 +119,14 @@ export function useLiveAI() {
       
       isActive.value = false
       response.value = ''
+      suggestions.value = []
       sessionId.value = null
+      
+      // Clear any pending analysis
+      if (analysisTimeout) {
+        clearTimeout(analysisTimeout)
+        analysisTimeout = null
+      }
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to stop Live AI'
       console.error('Failed to stop Live AI:', err)
@@ -131,17 +173,44 @@ export function useLiveAI() {
     }
   }
 
-  // Function to continuously analyze conversation changes
+  // Function to continuously analyze conversation changes with debouncing
   const onConversationChange = async (messages: any[]): Promise<void> => {
-    if (!isActive.value || isProcessing.value) return
+    if (!isActive.value) return
     
     // Filter out preview messages and get recent context
     const realMessages = messages.filter(msg => !msg.isPreview)
     if (realMessages.length === 0) return
     
-    // Only analyze if there are actual messages and we're not already processing
-    console.log('💭 Conversation updated, analyzing for response suggestions...')
-    await analyzeConversationContext(realMessages)
+    // Clear any existing analysis timeout
+    if (analysisTimeout) {
+      clearTimeout(analysisTimeout)
+    }
+    
+    // Check if enough time has passed since last analysis
+    const now = Date.now()
+    const timeSinceLastAnalysis = now - lastAnalysisTime
+    
+    if (timeSinceLastAnalysis < MIN_ANALYSIS_INTERVAL_MS && suggestions.value.length > 0) {
+      console.log('⏳ Skipping analysis - too soon since last update')
+      return
+    }
+    
+    // Set a debounced timeout to analyze after conversation pause
+    analysisTimeout = setTimeout(async () => {
+      if (!isActive.value || isProcessing.value) return
+      
+      console.log('💭 Conversation paused, analyzing for response suggestions...')
+      lastAnalysisTime = Date.now()
+      
+      // Update context length for the upcoming suggestion
+      const contextLength = realMessages.length
+      await analyzeConversationContext(realMessages)
+      
+      // Update the context length of the most recent suggestion
+      if (suggestions.value.length > 0) {
+        suggestions.value[0].contextLength = contextLength
+      }
+    }, ANALYSIS_DEBOUNCE_MS)
   }
 
   const reset = () => {
@@ -149,17 +218,24 @@ export function useLiveAI() {
       streamListener()
       streamListener = null
     }
+    if (analysisTimeout) {
+      clearTimeout(analysisTimeout)
+      analysisTimeout = null
+    }
     isActive.value = false
     sessionId.value = null
     response.value = ''
+    suggestions.value = []
     isProcessing.value = false
     error.value = null
+    lastAnalysisTime = 0
   }
 
   return {
     isActive,
     sessionId,
     response,
+    suggestions,
     isProcessing,
     error,
     startLiveAI,

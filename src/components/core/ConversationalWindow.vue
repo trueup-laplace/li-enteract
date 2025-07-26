@@ -102,6 +102,7 @@ const {
 const {
   isActive: isLiveAIActive,
   response: liveAIResponse,
+  suggestions: liveAISuggestions,
   isProcessing: liveAIIsProcessing,
   error: liveAIError,
   startLiveAI,
@@ -576,6 +577,7 @@ const getActionSubtitle = () => {
           :is-active="isLiveAIActive"
           :processing="liveAIIsProcessing"
           :response="liveAIResponse"
+          :suggestions="liveAISuggestions"
           :error="liveAIError"
           @close="showLiveAI = false"
           @toggle-live="toggleLiveAIActive"

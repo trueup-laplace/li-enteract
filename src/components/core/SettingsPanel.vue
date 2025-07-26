@@ -843,31 +843,64 @@ onMounted(() => {
 /* Settings Navigation (Left Sidebar) */
 .settings-nav {
   @apply border-r border-white/10;
-  background: rgba(0, 0, 0, 0.4);
-  width: 280px;
+  background: linear-gradient(135deg, 
+    rgba(0, 0, 0, 0.6) 0%, 
+    rgba(10, 10, 15, 0.5) 50%,
+    rgba(0, 0, 0, 0.6) 100%
+  );
+  width: 300px;
   flex-shrink: 0;
-  padding: 20px 0;
+  padding: 24px 0;
 }
 
 .nav-item {
-  @apply flex items-center gap-4 px-6 py-4 text-left transition-all duration-200 border-l-2 border-transparent;
-  width: 100%;
-  background: rgba(255, 255, 255, 0.03);
+  @apply flex items-center gap-4 px-6 py-4 text-left transition-all duration-300 relative;
+  width: calc(100% - 24px);
   margin: 0 12px;
-  border-radius: 12px;
-  margin-bottom: 4px;
+  border-radius: 16px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.nav-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
 .nav-item.nav-active {
-  @apply border-l-blue-500;
-  background: rgba(59, 130, 246, 0.15);
-  border-left: none;
-  box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.2);
+  background: linear-gradient(135deg, 
+    rgba(59, 130, 246, 0.2) 0%, 
+    rgba(37, 99, 235, 0.15) 50%,
+    rgba(59, 130, 246, 0.1) 100%
+  );
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 
+    0 8px 32px rgba(59, 130, 246, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.nav-item.nav-active::before {
+  opacity: 1;
 }
 
 .nav-item:hover {
   background: rgba(255, 255, 255, 0.08);
-  transform: translateX(2px);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateX(4px) translateY(-1px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.nav-item:hover::before {
+  opacity: 1;
 }
 
 .nav-icon {
@@ -897,19 +930,56 @@ onMounted(() => {
 }
 
 .status-dot {
-  @apply w-2.5 h-2.5 rounded-full;
+  @apply w-2.5 h-2.5 rounded-full relative;
+  filter: drop-shadow(0 0 4px currentColor);
 }
 
 .status-success .status-dot {
   @apply bg-green-400;
+  animation: pulse-green 2s infinite;
 }
 
 .status-error .status-dot {
   @apply bg-red-400;
+  animation: pulse-red 2s infinite;
 }
 
 .status-warning .status-dot {
   @apply bg-yellow-400;
+  animation: pulse-yellow 2s infinite;
+}
+
+@keyframes pulse-green {
+  0%, 100% { 
+    opacity: 1; 
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+  }
+  50% { 
+    opacity: 0.7; 
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.6);
+  }
+}
+
+@keyframes pulse-red {
+  0%, 100% { 
+    opacity: 1; 
+    box-shadow: 0 0 8px rgba(248, 113, 113, 0.4);
+  }
+  50% { 
+    opacity: 0.7; 
+    box-shadow: 0 0 12px rgba(248, 113, 113, 0.6);
+  }
+}
+
+@keyframes pulse-yellow {
+  0%, 100% { 
+    opacity: 1; 
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
+  }
+  50% { 
+    opacity: 0.7; 
+    box-shadow: 0 0 12px rgba(251, 191, 36, 0.6);
+  }
 }
 
 /* Settings Content Area */
@@ -973,15 +1043,43 @@ onMounted(() => {
 }
 
 .model-item {
-  @apply flex items-center justify-between p-4 rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200;
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(10px);
+  @apply flex items-center justify-between p-5 rounded-2xl border transition-all duration-300 relative overflow-hidden;
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.06) 0%, 
+    rgba(255, 255, 255, 0.02) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+}
+
+.model-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.03) 0%, rgba(147, 51, 234, 0.02) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
 .model-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.12) 0%, 
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.model-item:hover::before {
+  opacity: 1;
 }
 
 .model-info {
@@ -1038,15 +1136,36 @@ onMounted(() => {
 }
 
 .model-pull-btn {
-  @apply flex items-center gap-2 p-2 rounded-lg border border-blue-400/20 text-blue-300 hover:text-blue-200 transition-all duration-200 text-sm;
-  background: rgba(59, 130, 246, 0.1);
+  @apply flex items-center gap-2 p-3 rounded-xl border text-sm font-medium transition-all duration-300 relative overflow-hidden;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  color: rgb(147, 197, 253);
+}
+
+.model-pull-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
 .model-pull-btn:hover {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.4);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(37, 99, 235, 0.15) 100%);
+  border-color: rgba(59, 130, 246, 0.5);
+  color: rgb(191, 219, 254);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 
+    0 8px 24px rgba(59, 130, 246, 0.25),
+    0 0 0 1px rgba(59, 130, 246, 0.1);
+}
+
+.model-pull-btn:hover::before {
+  opacity: 1;
 }
 
 .model-pull-btn:disabled {
@@ -1054,45 +1173,69 @@ onMounted(() => {
 }
 
 .model-pull-btn.recommended {
-  @apply border-green-400/30 text-green-200;
-  background: rgba(34, 197, 94, 0.15);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(22, 163, 74, 0.1) 100%);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: rgb(187, 247, 208);
 }
 
 .model-pull-btn.recommended:hover {
-  background: rgba(34, 197, 94, 0.25);
-  border-color: rgba(34, 197, 94, 0.5);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.3) 0%, rgba(22, 163, 74, 0.2) 100%);
+  border-color: rgba(34, 197, 94, 0.6);
+  color: rgb(220, 252, 231);
+  box-shadow: 
+    0 8px 24px rgba(34, 197, 94, 0.25),
+    0 0 0 1px rgba(34, 197, 94, 0.1);
 }
 
 .recommended-badge {
-  @apply text-xs bg-green-400/80 text-green-900 px-1 py-0.5 rounded-md font-medium;
+  @apply text-xs px-2 py-1 rounded-lg font-bold;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(22, 163, 74, 0.8) 100%);
+  color: rgb(20, 83, 45);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
 }
 
 .vision-badge {
-  @apply text-xs bg-purple-400/80 text-purple-900 px-1 py-0.5 rounded-md font-medium;
+  @apply text-xs px-2 py-1 rounded-lg font-bold;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.9) 0%, rgba(147, 51, 234, 0.8) 100%);
+  color: rgb(76, 29, 149);
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.3);
 }
 
 .research-badge {
-  @apply text-xs bg-blue-400/80 text-blue-900 px-1 py-0.5 rounded-md font-medium;
+  @apply text-xs px-2 py-1 rounded-lg font-bold;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.9) 0%, rgba(37, 99, 235, 0.8) 100%);
+  color: rgb(30, 58, 138);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
 .model-pull-btn.vision-model {
-  @apply border-purple-400/30 text-purple-200;
-  background: rgba(168, 85, 247, 0.15);
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(147, 51, 234, 0.1) 100%);
+  border-color: rgba(168, 85, 247, 0.3);
+  color: rgb(221, 179, 255);
 }
 
 .model-pull-btn.vision-model:hover {
-  background: rgba(168, 85, 247, 0.25);
-  border-color: rgba(168, 85, 247, 0.5);
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.3) 0%, rgba(147, 51, 234, 0.2) 100%);
+  border-color: rgba(168, 85, 247, 0.6);
+  color: rgb(237, 201, 255);
+  box-shadow: 
+    0 8px 24px rgba(168, 85, 247, 0.25),
+    0 0 0 1px rgba(168, 85, 247, 0.1);
 }
 
 .model-pull-btn.research-model {
-  @apply border-blue-400/30 text-blue-200;
-  background: rgba(59, 130, 246, 0.15);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.1) 100%);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: rgb(147, 197, 253);
 }
 
 .model-pull-btn.research-model:hover {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: rgba(59, 130, 246, 0.5);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(37, 99, 235, 0.2) 100%);
+  border-color: rgba(59, 130, 246, 0.6);
+  color: rgb(191, 219, 254);
+  box-shadow: 
+    0 8px 24px rgba(59, 130, 246, 0.25),
+    0 0 0 1px rgba(59, 130, 246, 0.1);
 }
 
 /* Audio Device Styles */
@@ -1107,15 +1250,43 @@ onMounted(() => {
 }
 
 .audio-device-item {
-  @apply flex items-center justify-between p-4 rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200;
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(10px);
+  @apply flex items-center justify-between p-5 rounded-2xl border transition-all duration-300 relative overflow-hidden;
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.06) 0%, 
+    rgba(255, 255, 255, 0.02) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+}
+
+.audio-device-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.03) 0%, rgba(236, 72, 153, 0.02) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
 .audio-device-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.12) 0%, 
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.audio-device-item:hover::before {
+  opacity: 1;
 }
 
 .device-info {

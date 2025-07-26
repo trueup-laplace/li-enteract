@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, nextTick, watch } from 'vue'
 import { 
   RocketLaunchIcon, 
   XMarkIcon, 
@@ -7,11 +7,19 @@ import {
   StopIcon 
 } from '@heroicons/vue/24/outline'
 
+interface SuggestionItem {
+  id: string
+  text: string
+  timestamp: number
+  contextLength: number
+}
+
 interface Props {
   show: boolean
   isActive?: boolean
   processing?: boolean
   response?: string
+  suggestions?: SuggestionItem[]
   error?: string | null
   sessionId?: string | null
 }
@@ -37,16 +45,34 @@ const statusMessage = computed(() => {
   return 'Click Start to enable live AI responses'
 })
 
-const copyToClipboard = async () => {
-  if (!props.response) return
+const copyToClipboard = async (text: string) => {
+  if (!text) return
   
   try {
-    await navigator.clipboard.writeText(props.response)
+    await navigator.clipboard.writeText(text)
     console.log('✅ Response suggestion copied to clipboard')
   } catch (error) {
     console.error('❌ Failed to copy to clipboard:', error)
   }
 }
+
+const formatTimestamp = (timestamp: number) => {
+  const date = new Date(timestamp)
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+// Ref for suggestions container to enable auto-scroll
+const suggestionsContainer = ref<HTMLElement>()
+
+// Auto-scroll to newest suggestion when suggestions update
+watch(() => props.suggestions, async (newSuggestions) => {
+  if (newSuggestions && newSuggestions.length > 0) {
+    await nextTick()
+    if (suggestionsContainer.value) {
+      suggestionsContainer.value.scrollTop = 0 // Scroll to top since newest is first
+    }
+  }
+}, { deep: true })
 </script>
 
 <template>
@@ -66,18 +92,25 @@ const copyToClipboard = async () => {
     </div>
     
     <div class="live-ai-content">
-      <!-- Control Section -->
-      <div class="live-control-section">
-        <button 
-          @click="handleToggleLive"
-          class="live-toggle-btn"
-          :class="{ 'active': isActive }"
-        >
-          <StopIcon v-if="isActive" class="w-5 h-5" />
-          <PlayIcon v-else class="w-5 h-5" />
-          {{ isActive ? 'Stop Live AI' : 'Start Live AI' }}
-        </button>
-        <p class="text-xs text-white/60 mt-2 text-center">{{ statusMessage }}</p>
+      <!-- Status Section -->
+      <div class="live-status-section">
+        <div v-if="!isActive" class="start-section">
+          <button 
+            @click="handleToggleLive"
+            class="live-start-btn"
+          >
+            <PlayIcon class="w-4 h-4" />
+            Start Live AI
+          </button>
+          <p class="text-xs text-white/60 mt-2 text-center">{{ statusMessage }}</p>
+        </div>
+        <div v-else class="active-status">
+          <div class="flex items-center gap-2 justify-center">
+            <div class="status-dot active"></div>
+            <span class="text-sm text-green-400 font-medium">Live Response Assistant Active</span>
+          </div>
+          <p class="text-xs text-white/60 mt-1 text-center">{{ statusMessage }}</p>
+        </div>
       </div>
       
       <!-- Response Area -->
@@ -101,26 +134,40 @@ const copyToClipboard = async () => {
           </div>
         </div>
         
-        <div v-else-if="response" class="live-response">
-          <div class="response-header">
+        <div v-else-if="suggestions && suggestions.length > 0" class="suggestions-list">
+          <div class="suggestions-header">
             <RocketLaunchIcon class="w-4 h-4 text-orange-400" />
             <span class="text-sm text-orange-400">Response Suggestions</span>
+            <span class="text-xs text-white/40">({{ suggestions.length }})</span>
           </div>
-          <div class="response-content">
-            <div class="response-text">
-              <p class="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">{{ response }}</p>
-            </div>
-            <div class="response-actions">
-              <button 
-                class="action-btn copy-btn"
-                @click="copyToClipboard"
-                title="Copy suggestion to clipboard"
-              >
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                Copy
-              </button>
+          
+          <div ref="suggestionsContainer" class="suggestions-content">
+            <div 
+              v-for="suggestion in suggestions" 
+              :key="suggestion.id"
+              class="suggestion-item"
+            >
+              <div class="suggestion-meta">
+                <span class="suggestion-time">{{ formatTimestamp(suggestion.timestamp) }}</span>
+                <span v-if="suggestion.contextLength > 0" class="suggestion-context">
+                  {{ suggestion.contextLength }} messages
+                </span>
+              </div>
+              <div class="suggestion-text">
+                <p class="text-sm text-white/90 leading-relaxed">{{ suggestion.text }}</p>
+              </div>
+              <div class="suggestion-actions">
+                <button 
+                  class="action-btn copy-btn"
+                  @click="copyToClipboard(suggestion.text)"
+                  title="Copy this suggestion"
+                >
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Copy
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -132,6 +179,17 @@ const copyToClipboard = async () => {
             Start recording to enable AI-powered response suggestions
           </p>
         </div>
+      </div>
+      
+      <!-- Floating Stop Button (only when active) -->
+      <div v-if="isActive" class="floating-stop-btn">
+        <button 
+          @click="handleToggleLive"
+          class="stop-btn"
+          title="Stop Live AI"
+        >
+          <StopIcon class="w-3 h-3" />
+        </button>
       </div>
     </div>
   </div>
@@ -179,40 +237,45 @@ const copyToClipboard = async () => {
 }
 
 .live-ai-content {
-  @apply flex-1 overflow-hidden flex flex-col p-4 gap-4;
+  @apply flex-1 overflow-hidden flex flex-col relative;
 }
 
-.live-control-section {
+.live-status-section {
+  @apply p-4 border-b border-white/10;
+}
+
+.start-section {
   @apply flex flex-col items-center;
 }
 
-.live-toggle-btn {
-  @apply flex items-center gap-2 px-6 py-3 rounded-lg font-medium text-sm transition-all duration-200;
+.live-start-btn {
+  @apply flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200;
   background: linear-gradient(135deg, rgba(251, 146, 60, 0.8), rgba(245, 124, 0, 0.8));
   border: 1px solid rgba(251, 146, 60, 0.4);
   color: white;
 }
 
-.live-toggle-btn:hover {
+.live-start-btn:hover {
   background: linear-gradient(135deg, rgba(251, 146, 60, 0.9), rgba(245, 124, 0, 0.9));
   border-color: rgba(251, 146, 60, 0.6);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(251, 146, 60, 0.3);
 }
 
-.live-toggle-btn.active {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.8), rgba(220, 38, 38, 0.8));
-  border-color: rgba(239, 68, 68, 0.4);
+.active-status {
+  @apply text-center;
 }
 
-.live-toggle-btn.active:hover {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.9));
-  border-color: rgba(239, 68, 68, 0.6);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+.status-dot {
+  @apply w-2 h-2 rounded-full bg-white/30 transition-all duration-200;
+}
+
+.status-dot.active {
+  @apply bg-green-400 animate-pulse;
 }
 
 .live-response-section {
-  @apply flex-1 overflow-y-auto;
+  @apply flex-1 overflow-y-auto p-4;
   min-height: 200px;
 }
 
@@ -260,24 +323,41 @@ const copyToClipboard = async () => {
   }
 }
 
-.live-response {
-  @apply p-3 rounded-lg bg-orange-500/10 border border-orange-500/30;
-}
-
-.response-header {
-  @apply flex items-center gap-2 mb-2;
-}
-
-.response-content {
+.suggestions-list {
   @apply space-y-3;
 }
 
-.response-text {
-  @apply pl-6;
+.suggestions-header {
+  @apply flex items-center gap-2 p-3 rounded-t-lg bg-orange-500/10 border border-orange-500/30;
 }
 
-.response-actions {
-  @apply flex justify-end gap-2 pt-2 border-t border-orange-500/20;
+.suggestions-content {
+  @apply space-y-2 max-h-96 overflow-y-auto;
+}
+
+.suggestion-item {
+  @apply p-3 rounded-lg bg-white/5 border border-white/10 space-y-2;
+  @apply hover:bg-white/10 transition-colors duration-200;
+}
+
+.suggestion-meta {
+  @apply flex items-center justify-between text-xs text-white/50;
+}
+
+.suggestion-time {
+  @apply font-mono;
+}
+
+.suggestion-context {
+  @apply px-1.5 py-0.5 rounded bg-white/10;
+}
+
+.suggestion-text {
+  @apply py-1;
+}
+
+.suggestion-actions {
+  @apply flex justify-end;
 }
 
 .action-btn {
@@ -292,5 +372,24 @@ const copyToClipboard = async () => {
 
 .live-empty-state {
   @apply flex flex-col items-center justify-center p-8 text-center;
+}
+
+.floating-stop-btn {
+  @apply absolute bottom-4 right-4;
+}
+
+.stop-btn {
+  @apply p-2 rounded-full transition-all duration-200;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.8), rgba(220, 38, 38, 0.8));
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: white;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.stop-btn:hover {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.9));
+  border-color: rgba(239, 68, 68, 0.6);
+  transform: translateY(-1px) scale(1.05);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
 }
 </style>
