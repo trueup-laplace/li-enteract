@@ -58,6 +58,11 @@ const THOUGHT_PAUSE_DURATION = 2000 // 2 seconds
 const MAX_BUFFER_DURATION = 10000 // 10 seconds for sizeable content
 const MIN_SIZEABLE_CONTENT = 50 // minimum characters for sizeable content
 
+// Deduplication tracking
+const lastProcessedText = ref<string>('')
+const lastProcessedTimestamp = ref<number>(0)
+const recentMessages = ref<Set<string>>(new Set())
+
 // Typing animation state
 const isLoopbackTyping = ref(false)
 const loopbackPreviewMessage = ref<string>('')
@@ -295,6 +300,20 @@ const handleLoopbackTranscription = (payload: any) => {
   
   if (text && text.trim()) {
     const currentTime = timestamp || Date.now()
+    const trimmedText = text.trim()
+    
+    // Deduplication check - ignore if we just processed the same text recently
+    const textFingerprint = `${trimmedText}_${Math.floor(currentTime / 1000)}` // Group by second
+    if (lastProcessedText.value === trimmedText && 
+        (currentTime - lastProcessedTimestamp.value) < 500) { // 500ms window
+      console.log('🎙️ Skipping duplicate transcription:', trimmedText)
+      return
+    }
+    
+    // Update last processed tracking
+    lastProcessedText.value = trimmedText
+    lastProcessedTimestamp.value = currentTime
+    
     const timeSinceLastChunk = currentTime - loopbackLastTimestamp.value
     
     // If more than 2 seconds have passed, start a new thought
@@ -308,11 +327,16 @@ const handleLoopbackTranscription = (payload: any) => {
       currentPreviewMessageId.value = `loopback-preview-${currentTime}`
     }
     
-    // Add current text to buffer
-    if (loopbackBuffer.value.trim()) {
-      loopbackBuffer.value += ' ' + text.trim()
+    // Check if this text is already in the buffer to avoid concatenating duplicates
+    if (!loopbackBuffer.value.includes(trimmedText)) {
+      // Add current text to buffer
+      if (loopbackBuffer.value.trim()) {
+        loopbackBuffer.value += ' ' + trimmedText
+      } else {
+        loopbackBuffer.value = trimmedText
+      }
     } else {
-      loopbackBuffer.value = text.trim()
+      console.log('🎙️ Text already in buffer, updating timestamp only')
     }
     
     // Update real-time preview
@@ -345,7 +369,7 @@ const handleLoopbackTranscription = (payload: any) => {
     // Auto-scroll to show typing animation
     scrollToBottom()
     
-    console.log(`🎙️ System Audio chunk (${audioLevel?.toFixed(1)}dB): ${text} [buffered: "${loopbackBuffer.value}" (${loopbackBuffer.value.length} chars, ${bufferDuration}ms)]`)
+    console.log(`🎙️ System Audio chunk (${audioLevel?.toFixed(1)}dB): ${trimmedText} [buffered: "${loopbackBuffer.value}" (${loopbackBuffer.value.length} chars, ${bufferDuration}ms)]`)
   }
 }
 
@@ -354,12 +378,49 @@ const flushLoopbackBuffer = () => {
   if (loopbackBuffer.value.trim()) {
     const finalContent = loopbackBuffer.value.trim()
     
+    // Check for duplicate messages - don't add if the last message has the same content
+    const existingMessages = conversationStore.currentMessages || []
+    const lastMessage = existingMessages[existingMessages.length - 1]
+    
+    if (lastMessage && 
+        lastMessage.source === 'loopback' && 
+        lastMessage.content === finalContent) {
+      console.log('🎙️ Skipping duplicate final message:', finalContent)
+      // Still clear the buffer state
+      loopbackBuffer.value = ''
+      loopbackPreviewMessage.value = ''
+      isLoopbackTyping.value = false
+      currentPreviewMessageId.value = null
+      loopbackBufferStartTime.value = 0
+      return
+    }
+    
+    // Add to recent messages tracking to prevent immediate duplicates
+    const messageFingerprint = finalContent.toLowerCase().replace(/[^\w\s]/g, '')
+    if (recentMessages.value.has(messageFingerprint)) {
+      console.log('🎙️ Skipping recently added message:', finalContent)
+      // Still clear the buffer state
+      loopbackBuffer.value = ''
+      loopbackPreviewMessage.value = ''
+      isLoopbackTyping.value = false
+      currentPreviewMessageId.value = null
+      loopbackBufferStartTime.value = 0
+      return
+    }
+    
     // Clear buffer and typing state FIRST to prevent duplication
     loopbackBuffer.value = ''
     loopbackPreviewMessage.value = ''
     isLoopbackTyping.value = false
     currentPreviewMessageId.value = null
     loopbackBufferStartTime.value = 0
+    
+    // Add to recent messages tracking
+    recentMessages.value.add(messageFingerprint)
+    // Clean up old entries after 30 seconds
+    setTimeout(() => {
+      recentMessages.value.delete(messageFingerprint)
+    }, 30000)
     
     // Then add the final message
     conversationStore.addMessage({
@@ -402,16 +463,25 @@ const handleMicrophoneToggle = async () => {
       // Always try to stop audio loopback when stopping recording
       await stopAudioLoopbackCapture()
       
-      // End the current session when recording stops (save the conversation)
+      // Save the current session when recording stops, but keep it active
       if (conversationStore.currentSession && conversationStore.currentSession.messages.length > 0) {
-        conversationStore.endSession()
-        console.log('💾 Recording stopped - conversation saved')
+        // Mark the session as ended but don't set currentSession to null
+        // This keeps the window open while preserving the conversation
+        conversationStore.currentSession.isActive = false
+        conversationStore.currentSession.endTime = Date.now()
+        console.log('💾 Recording stopped - conversation saved but session remains accessible')
       } else {
         console.log('🎤 Recording stopped - no messages to save')
       }
     } else {
-      // Create a new session when starting recording
-      conversationStore.createSession()
+      // Create a new session when starting recording, or reactivate the current one
+      if (!conversationStore.currentSession || conversationStore.currentSession.messages.length === 0) {
+        conversationStore.createSession()
+      } else {
+        // Reactivate existing session for continued recording
+        conversationStore.currentSession.isActive = true
+        conversationStore.currentSession.endTime = undefined
+      }
       
       // Start both microphone and audio loopback
       conversationStore.setRecordingState(true)
@@ -420,7 +490,7 @@ const handleMicrophoneToggle = async () => {
         await startAudioLoopbackCapture()
       }
       
-      console.log('🎤 Recording started - new conversation session created')
+      console.log('🎤 Recording started - conversation session ready')
     }
   } catch (error) {
     console.error('Microphone toggle error:', error)
@@ -1187,11 +1257,39 @@ onUnmounted(async () => {
 /* Typing animation */
 .typing-preview {
   animation: fadeIn 0.3s ease-in-out;
+  opacity: 0.6; /* Lower opacity for typing previews */
 }
 
 .typing-bubble {
-  opacity: 0.8;
+  opacity: 0.5; /* Even lower opacity for typing bubbles */
   border: 1px dashed rgba(255, 255, 255, 0.3) !important;
+  animation: typingPulse 2s infinite ease-in-out; /* Slow pulsing animation */
+  background: rgba(255, 255, 255, 0.02) !important; /* Subtle background to distinguish from final messages */
+  position: relative;
+}
+
+.typing-bubble::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: inherit;
+  animation: typingGlow 2s infinite ease-in-out;
+  pointer-events: none;
+}
+
+@keyframes typingGlow {
+  0%, 100% {
+    opacity: 0.2;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(1.02);
+  }
 }
 
 .typing-indicator {
@@ -1200,7 +1298,7 @@ onUnmounted(async () => {
 
 .typing-dot {
   @apply w-1 h-1 bg-current rounded-full opacity-60;
-  animation: typingPulse 1.4s infinite ease-in-out;
+  animation: typingDotPulse 1.4s infinite ease-in-out;
 }
 
 .typing-dot:nth-child(1) {
@@ -1216,6 +1314,18 @@ onUnmounted(async () => {
 }
 
 @keyframes typingPulse {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.02);
+  }
+}
+
+/* Separate animation for typing dots */
+@keyframes typingDotPulse {
   0%, 80%, 100% {
     opacity: 0.3;
     transform: scale(0.8);
