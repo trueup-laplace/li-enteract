@@ -36,7 +36,7 @@ use file_handler::{
     upload_file_base64, validate_file_upload, get_file_upload_config,
     process_clipboard_image, cleanup_temp_files
 };
-use data_store::{save_chat_sessions, load_chat_sessions};
+use data_store::{save_chat_sessions, load_chat_sessions, save_conversations, load_conversations, delete_conversation, clear_all_conversations};
 
 // Import new audio loopback commands
 use audio_loopback::{
@@ -130,6 +130,10 @@ pub fn run() {
             // Data storage
             save_chat_sessions,
             load_chat_sessions,
+            save_conversations,
+            load_conversations,
+            delete_conversation,
+            clear_all_conversations,
             
             // NEW: Audio loopback commands
             enumerate_loopback_devices,

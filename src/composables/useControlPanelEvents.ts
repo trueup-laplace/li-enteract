@@ -270,6 +270,7 @@ export function useControlPanelEvents(
     console.log('💬 Conversational window closed')
   }
 
+
   // Click outside to close panels
   const handleClickOutside = (event: Event) => {
     const target = event.target as HTMLElement

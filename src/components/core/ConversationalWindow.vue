@@ -7,7 +7,14 @@ import {
   PaperAirplaneIcon,
   StopIcon,
   ChatBubbleLeftRightIcon,
-  CheckIcon
+  CheckIcon,
+  QueueListIcon,
+  PlusIcon,
+  PlayIcon,
+  PencilIcon,
+  TrashIcon,
+  EllipsisVerticalIcon,
+  ClockIcon
 } from '@heroicons/vue/24/outline'
 import { useSpeechTranscription } from '../../composables/useSpeechTranscription'
 import { useConversationStore } from '../../stores/conversation'
@@ -34,6 +41,11 @@ const scrollContainer = ref<HTMLElement>()
 const audioLoopbackDeviceId = ref<string | null>(null)
 const selectedMessages = ref<Set<string>>(new Set())
 const showExportControls = ref(false)
+
+// Conversation sidebar state
+const showConversationSidebar = ref(false)
+const allConversations = ref<any[]>([])
+const isLoadingConversations = ref(false)
 
 // Loopback transcription buffering for complete thoughts
 const loopbackBuffer = ref<string>('')
@@ -365,7 +377,20 @@ const handleMicrophoneToggle = async () => {
       conversationStore.setRecordingState(false)
       // Always try to stop audio loopback when stopping recording
       await stopAudioLoopbackCapture()
+      
+      // End the current session if there are messages
+      if (conversationStore.currentSession && conversationStore.currentSession.messages.length > 0) {
+        conversationStore.endSession()
+        // Show the conversation sidebar so user can see the completed conversation
+        showConversationSidebar.value = true
+        await loadConversations()
+      }
     } else {
+      // Ensure we have a current session before starting recording
+      if (!conversationStore.currentSession) {
+        conversationStore.createSession()
+      }
+      
       // Start both microphone and audio loopback
       conversationStore.setRecordingState(true)
       await startRecording()
@@ -435,6 +460,85 @@ const toggleExportMode = () => {
   }
 }
 
+// Conversation sidebar functions
+const toggleConversationSidebar = () => {
+  showConversationSidebar.value = !showConversationSidebar.value
+  if (showConversationSidebar.value) {
+    loadConversations()
+  }
+}
+
+const loadConversations = async () => {
+  try {
+    isLoadingConversations.value = true
+    const response = await invoke<{conversations: any[]}>('load_conversations')
+    allConversations.value = response.conversations.sort((a, b) => b.startTime - a.startTime)
+    console.log(`📁 Loaded ${allConversations.value.length} conversations`)
+  } catch (error) {
+    console.error('Failed to load conversations:', error)
+  } finally {
+    isLoadingConversations.value = false
+  }
+}
+
+const handleNewConversation = () => {
+  conversationStore.createSession()
+  showConversationSidebar.value = false
+}
+
+const handleResumeConversation = (conversationId: string) => {
+  conversationStore.switchToSession(conversationId)
+  showConversationSidebar.value = false
+}
+
+const handleDeleteConversation = async (conversationId: string) => {
+  try {
+    await conversationStore.deleteSession(conversationId)
+    await loadConversations()
+  } catch (error) {
+    console.error('Failed to delete conversation:', error)
+  }
+}
+
+// Format conversation display helpers
+const formatTimestamp = (timestamp: number) => {
+  const date = new Date(timestamp)
+  const now = new Date()
+  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
+  
+  if (diffDays === 0) {
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  } else if (diffDays === 1) {
+    return 'Yesterday'
+  } else if (diffDays < 7) {
+    return date.toLocaleDateString('en-US', { weekday: 'short' })
+  }
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+const formatDuration = (startTime: number, endTime?: number) => {
+  const duration = (endTime || Date.now()) - startTime
+  const minutes = Math.floor(duration / 60000)
+  const seconds = Math.floor((duration % 60000) / 1000)
+  
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`
+  }
+  return `${seconds}s`
+}
+
+const getConversationSummary = (conversation: any) => {
+  const userMessages = conversation.messages.filter((m: any) => m.type === 'user').length
+  const systemMessages = conversation.messages.filter((m: any) => m.type === 'system').length
+  return `${userMessages} you, ${systemMessages} system`
+}
+
+const getLastMessagePreview = (conversation: any) => {
+  if (conversation.messages.length === 0) return 'No messages'
+  const lastMessage = conversation.messages[conversation.messages.length - 1]
+  return lastMessage.content.substring(0, 50) + (lastMessage.content.length > 50 ? '...' : '')
+}
+
 // Cleanup
 onUnmounted(async () => {
   window.removeEventListener('transcription-final', handleConversationalUserSpeech)
@@ -492,6 +596,17 @@ onUnmounted(async () => {
                   <MicrophoneIcon class="w-3 h-3" />
                 </div>
               </div>
+              
+              <!-- Conversation History Button -->
+              <button 
+                @click="toggleConversationSidebar" 
+                class="export-btn"
+                :class="{ 'active': showConversationSidebar }"
+                title="Conversation History"
+              >
+                <QueueListIcon class="w-4 h-4" />
+              </button>
+              
               <button 
                 v-if="messages.length > 0"
                 @click="toggleExportMode" 
@@ -507,6 +622,82 @@ onUnmounted(async () => {
             <XMarkIcon class="w-4 h-4 text-white/70 hover:text-white transition-colors" />
           </button>
         </div>
+        
+        <!-- Window Content Container -->
+        <div class="window-content">
+          <!-- Conversation Sidebar -->
+          <div v-if="showConversationSidebar" class="conversation-sidebar">
+            <div class="sidebar-header">
+              <div class="flex items-center gap-2">
+                <QueueListIcon class="w-4 h-4 text-purple-400" />
+                <h3 class="text-sm font-medium text-white">Conversations</h3>
+              </div>
+              <button @click="showConversationSidebar = false" class="close-sidebar-btn">
+                <XMarkIcon class="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div class="sidebar-content">
+              <!-- New Conversation Button -->
+              <button @click="handleNewConversation" class="new-conversation-btn">
+                <PlusIcon class="w-4 h-4" />
+                New Conversation
+              </button>
+              
+              <!-- Conversations List -->
+              <div class="conversations-list">
+                <div v-if="isLoadingConversations" class="loading-state">
+                  <div class="loading-spinner"></div>
+                  <span class="text-xs text-white/60">Loading...</span>
+                </div>
+                
+                <div v-else-if="allConversations.length === 0" class="empty-state">
+                  <QueueListIcon class="w-8 h-8 text-white/20 mx-auto mb-2" />
+                  <p class="text-white/60 text-xs text-center">No conversations yet</p>
+                </div>
+                
+                <div v-else class="conversations-grid">
+                  <div 
+                    v-for="conversation in allConversations" 
+                    :key="conversation.id"
+                    class="conversation-item"
+                    :class="{ 'active': conversation.isActive }"
+                    @click="handleResumeConversation(conversation.id)"
+                  >
+                    <div class="conversation-header">
+                      <span class="conversation-title">{{ conversation.name }}</span>
+                      <button 
+                        @click.stop="handleDeleteConversation(conversation.id)"
+                        class="delete-btn"
+                        title="Delete conversation"
+                      >
+                        <TrashIcon class="w-3 h-3" />
+                      </button>
+                    </div>
+                    
+                    <div class="conversation-meta">
+                      <div class="meta-row">
+                        <ClockIcon class="w-3 h-3 text-white/40" />
+                        <span class="text-xs text-white/40">{{ formatTimestamp(conversation.startTime) }}</span>
+                        <span class="text-xs text-white/40">•</span>
+                        <span class="text-xs text-white/40">{{ formatDuration(conversation.startTime, conversation.endTime) }}</span>
+                      </div>
+                      <div class="meta-row">
+                        <span class="text-xs text-white/50">{{ getConversationSummary(conversation) }}</span>
+                      </div>
+                    </div>
+                    
+                    <div class="conversation-preview">
+                      <p class="text-xs text-white/60">{{ getLastMessagePreview(conversation) }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        
+          <!-- Main Content Area -->
+          <div class="main-content" :class="{ 'with-sidebar': showConversationSidebar }">
         
         <!-- Export Controls -->
         <div v-if="showExportControls" class="export-controls">
@@ -536,7 +727,7 @@ onUnmounted(async () => {
         </div>
         
         <!-- Conversation Area -->
-        <div ref="scrollContainer" class="conversation-area">
+        <div ref="scrollContainer" class="conversation-area" :class="{ 'with-sidebar': showConversationSidebar }">
           <div v-if="messages.length === 0" class="empty-state">
             <div class="empty-icon">
               <MicrophoneIcon class="w-8 h-8 text-white/40" />
@@ -667,6 +858,8 @@ onUnmounted(async () => {
             </div>
           </div>
         </div>
+          </div> <!-- End main-content -->
+        </div> <!-- End window-content -->
     </div>
   </Transition>
 </template>
@@ -692,6 +885,24 @@ onUnmounted(async () => {
     0 25px 80px rgba(0, 0, 0, 0.6),
     0 10px 30px rgba(0, 0, 0, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+/* When sidebar is shown, make window wider and use row layout */
+.conversational-window:has(.conversation-sidebar) {
+  width: 980px;
+  max-width: 95vw;
+}
+
+.window-content {
+  @apply flex-1 flex flex-col min-h-0;
+}
+
+.conversational-window:has(.conversation-sidebar) .window-content {
+  @apply flex flex-row;
+}
+
+.main-content {
+  @apply flex-1 flex flex-col min-h-0;
 }
 
 .window-header {
@@ -975,16 +1186,95 @@ onUnmounted(async () => {
   transform: translateY(-10px) scale(0.98);
 }
 
+/* Conversation Sidebar */
+.conversation-sidebar {
+  @apply w-80 border-r border-white/10 bg-white/5 backdrop-blur-sm flex flex-col;
+  min-width: 320px;
+  max-width: 400px;
+}
+
+.sidebar-header {
+  @apply flex items-center justify-between px-4 py-3 border-b border-white/10;
+}
+
+.close-sidebar-btn {
+  @apply rounded-full p-1 hover:bg-white/10 transition-colors text-white/70 hover:text-white;
+}
+
+.sidebar-content {
+  @apply flex-1 overflow-hidden flex flex-col;
+}
+
+.new-conversation-btn {
+  @apply w-full flex items-center justify-center gap-2 mx-4 my-3 px-4 py-2 bg-purple-500/80 hover:bg-purple-500 text-white rounded-lg transition-all duration-200 font-medium text-sm;
+}
+
+.conversations-list {
+  @apply flex-1 overflow-y-auto px-4 pb-4;
+}
+
+.loading-state {
+  @apply flex flex-col items-center gap-2 py-8;
+}
+
+.loading-spinner {
+  @apply w-4 h-4 border-2 border-white/20 border-t-white/60 rounded-full animate-spin;
+}
+
+.empty-state {
+  @apply py-8 text-center;
+}
+
+.conversations-grid {
+  @apply space-y-2;
+}
+
+.conversation-item {
+  @apply rounded-lg bg-white/5 hover:bg-white/10 transition-all duration-200 cursor-pointer p-3 border border-transparent;
+}
+
+.conversation-item.active {
+  @apply border-purple-500/50 bg-purple-500/10;
+}
+
+.conversation-header {
+  @apply flex items-center justify-between mb-2;
+}
+
+.conversation-title {
+  @apply text-xs font-medium text-white truncate flex-1 mr-2;
+}
+
+.delete-btn {
+  @apply rounded-full p-1 hover:bg-red-500/20 transition-colors text-white/60 hover:text-red-400;
+}
+
+.conversation-meta {
+  @apply space-y-1 mb-2;
+}
+
+.meta-row {
+  @apply flex items-center gap-1;
+}
+
+.conversation-preview {
+  @apply line-clamp-2;
+}
+
+
 /* Scrollbar */
-.conversation-area::-webkit-scrollbar {
+.conversation-area::-webkit-scrollbar,
+.conversations-list::-webkit-scrollbar {
   width: 4px;
 }
 
-.conversation-area::-webkit-scrollbar-track {
+.conversation-area::-webkit-scrollbar-track,
+.conversations-list::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.conversation-area::-webkit-scrollbar-thumb {
+.conversation-area::-webkit-scrollbar-thumb,
+.conversations-list::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
 }

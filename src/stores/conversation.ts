@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 
 export interface ConversationMessage {
   id: string
@@ -29,25 +30,38 @@ export const useConversationStore = defineStore('conversation', () => {
   // Persistence key
   const STORAGE_KEY = 'conversation-sessions'
 
-  // Load sessions from localStorage on store creation
-  const loadSessions = () => {
+  // Load sessions from Rust backend
+  const loadSessions = async () => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        sessions.value = parsed
-        console.log(`📁 Loaded ${parsed.length} conversation sessions from storage`)
-      }
+      const response = await invoke<{conversations: ConversationSession[]}>('load_conversations')
+      sessions.value = response.conversations
+      console.log(`📁 Loaded ${sessions.value.length} conversation sessions from backend`)
     } catch (error) {
       console.error('Failed to load conversation sessions:', error)
+      // Fallback to localStorage for migration
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY)
+        if (stored) {
+          const parsed = JSON.parse(stored)
+          sessions.value = parsed
+          console.log(`📁 Migrated ${parsed.length} conversation sessions from localStorage`)
+          // Save to backend and clear localStorage
+          await saveSessions()
+          localStorage.removeItem(STORAGE_KEY)
+        }
+      } catch (migrationError) {
+        console.error('Failed to migrate from localStorage:', migrationError)
+      }
     }
   }
 
-  // Save sessions to localStorage
-  const saveSessions = () => {
+  // Save sessions to Rust backend
+  const saveSessions = async () => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions.value))
-      console.log(`💾 Saved ${sessions.value.length} conversation sessions to storage`)
+      await invoke('save_conversations', {
+        payload: { conversations: sessions.value }
+      })
+      console.log(`💾 Saved ${sessions.value.length} conversation sessions to backend`)
     } catch (error) {
       console.error('Failed to save conversation sessions:', error)
     }
@@ -57,7 +71,7 @@ export const useConversationStore = defineStore('conversation', () => {
   watch(sessions, saveSessions, { deep: true })
 
   // Initialize on store creation
-  loadSessions()
+  loadSessions().catch(console.error)
 
   // Computed
   const currentMessages = computed(() => {
@@ -162,17 +176,24 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
-  const deleteSession = (sessionId: string) => {
-    const sessionIndex = sessions.value.findIndex(s => s.id === sessionId)
-    if (sessionIndex !== -1) {
-      const deletedSession = sessions.value.splice(sessionIndex, 1)[0]
+  const deleteSession = async (sessionId: string) => {
+    try {
+      await invoke('delete_conversation', { conversationId: sessionId })
       
-      // If we deleted the current session, clear it
-      if (currentSession.value?.id === sessionId) {
-        currentSession.value = null
+      const sessionIndex = sessions.value.findIndex(s => s.id === sessionId)
+      if (sessionIndex !== -1) {
+        const deletedSession = sessions.value.splice(sessionIndex, 1)[0]
+        
+        // If we deleted the current session, clear it
+        if (currentSession.value?.id === sessionId) {
+          currentSession.value = null
+        }
+        
+        console.log(`🗑️ Deleted conversation session: ${sessionId}`)
+        return deletedSession
       }
-      
-      return deletedSession
+    } catch (error) {
+      console.error('Failed to delete conversation session:', error)
     }
     return null
   }
@@ -267,9 +288,15 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   // Clear all sessions (with confirmation)
-  const clearAllSessions = () => {
-    sessions.value = []
-    currentSession.value = null
+  const clearAllSessions = async () => {
+    try {
+      await invoke('clear_all_conversations')
+      sessions.value = []
+      currentSession.value = null
+      console.log('🗑️ Cleared all conversation sessions')
+    } catch (error) {
+      console.error('Failed to clear all conversation sessions:', error)
+    }
   }
 
   // Get storage usage info
