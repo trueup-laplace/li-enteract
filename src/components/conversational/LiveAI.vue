@@ -133,20 +133,6 @@ const copyToClipboard = async () => {
           </p>
         </div>
       </div>
-      
-      <!-- Info Section -->
-      <div class="live-info-section">
-        <div class="info-card">
-          <h4 class="text-xs font-medium text-white/80 mb-1">Response Assistance:</h4>
-          <ul class="text-xs text-white/60 space-y-1">
-            <li>• AI analyzes conversation context in real-time</li>
-            <li>• Provides thoughtful response suggestions when others speak</li>
-            <li>• Helps you contribute meaningfully to discussions</li>
-            <li>• Adapts to conversation tone and topic</li>
-            <li>• Click "Copy" to use suggested responses</li>
-          </ul>
-        </div>
-      </div>
     </div>
   </div>
 </template>
@@ -306,13 +292,5 @@ const copyToClipboard = async () => {
 
 .live-empty-state {
   @apply flex flex-col items-center justify-center p-8 text-center;
-}
-
-.live-info-section {
-  @apply border-t border-white/10 pt-3;
-}
-
-.info-card {
-  @apply p-3 rounded-lg bg-white/5;
 }
 </style>

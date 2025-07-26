@@ -131,6 +131,19 @@ export function useLiveAI() {
     }
   }
 
+  // Function to continuously analyze conversation changes
+  const onConversationChange = async (messages: any[]): Promise<void> => {
+    if (!isActive.value || isProcessing.value) return
+    
+    // Filter out preview messages and get recent context
+    const realMessages = messages.filter(msg => !msg.isPreview)
+    if (realMessages.length === 0) return
+    
+    // Only analyze if there are actual messages and we're not already processing
+    console.log('💭 Conversation updated, analyzing for response suggestions...')
+    await analyzeConversationContext(realMessages)
+  }
+
   const reset = () => {
     if (streamListener) {
       streamListener()
@@ -153,6 +166,7 @@ export function useLiveAI() {
     stopLiveAI,
     analyzeConversationContext,
     onSystemSpeaking,
+    onConversationChange,
     reset
   }
 }
