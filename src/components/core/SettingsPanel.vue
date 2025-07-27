@@ -11,6 +11,7 @@ import {
   ComputerDesktopIcon
 } from '@heroicons/vue/24/outline'
 import { useAIModels } from '../../composables/useAIModels'
+import { useTransparency } from '../../composables/useTransparency'
 import { invoke } from '@tauri-apps/api/core'
 
 interface Props {
@@ -91,8 +92,15 @@ const generalSettings = ref({
   autoSaveInterval: 5,
   // Whisper model settings
   microphoneWhisperModel: 'tiny',
-  loopbackWhisperModel: 'base'
+  loopbackWhisperModel: 'base',
+  // Transparency settings
+  enableTransparency: false,
+  defaultTransparencyLevel: 1.0,
+  autoRestoreOnError: true
 })
+
+// Transparency composable
+const transparency = useTransparency()
 
 // Audio device enumeration functions
 const enumerateAudioDevices = async () => {
@@ -176,6 +184,9 @@ const loadSettings = async () => {
     const storedGeneralSettings = await invoke<any>('load_general_settings')
     if (storedGeneralSettings) {
       generalSettings.value = { ...generalSettings.value, ...storedGeneralSettings }
+      
+      // Apply transparency settings from loaded settings
+      applyTransparencyFromSettings()
     }
   } catch (error) {
     console.error('Failed to load settings:', error)
@@ -242,7 +253,12 @@ watch(audioSettings, () => {
 
 // Watch general settings changes and auto-save
 watch(generalSettings, (newSettings, oldSettings) => {
-  saveGeneralSettings()
+  console.log('🔧 General settings watcher triggered:', {
+    newLevel: newSettings.defaultTransparencyLevel,
+    oldLevel: oldSettings?.defaultTransparencyLevel,
+    newEnabled: newSettings.enableTransparency,
+    oldEnabled: oldSettings?.enableTransparency
+  })
   
   // Check if whisper model settings changed and emit event for reinitialization
   if (oldSettings && (
@@ -260,7 +276,50 @@ watch(generalSettings, (newSettings, oldSettings) => {
     })
     window.dispatchEvent(reinitializeEvent)
   }
+  
+  // Handle transparency enable/disable changes
+  if (oldSettings && newSettings.enableTransparency !== oldSettings.enableTransparency) {
+    console.log('🔧 Transparency enable/disable changed:', {
+      oldEnabled: oldSettings.enableTransparency,
+      newEnabled: newSettings.enableTransparency
+    })
+    applyTransparencyFromSettings()
+  }
+  
+  // Auto-save all general settings changes
+  saveGeneralSettings()
 }, { deep: true })
+
+
+
+// Function to apply transparency settings from general settings
+const applyTransparencyFromSettings = () => {
+  console.log('🔧 Applying transparency from settings:', {
+    enabled: generalSettings.value.enableTransparency,
+    level: generalSettings.value.defaultTransparencyLevel
+  })
+  
+  if (generalSettings.value.enableTransparency) {
+    transparency.setLevel(generalSettings.value.defaultTransparencyLevel)
+  } else {
+    transparency.presets.solid()
+  }
+}
+
+// Function to apply transparency level immediately (for slider changes)
+const applyTransparencyLevel = () => {
+  console.log('🔧 Applying transparency level:', generalSettings.value.defaultTransparencyLevel)
+  transparency.setLevel(generalSettings.value.defaultTransparencyLevel)
+}
+
+// Handler for transparency level slider changes
+const handleTransparencyLevelChange = () => {
+  console.log('🔧 Transparency level changed via slider:', generalSettings.value.defaultTransparencyLevel)
+  if (generalSettings.value.enableTransparency) {
+    transparency.setLevel(generalSettings.value.defaultTransparencyLevel)
+  }
+  saveGeneralSettings()
+}
 
 const closePanel = () => {
   emit('close')
@@ -836,6 +895,97 @@ onMounted(() => {
                     class="setting-range"
                   >
                 </label>
+              </div>
+              
+              <div class="setting-separator"></div>
+              
+              <h4 class="text-white/80 text-sm font-medium mb-3">Transparency</h4>
+              
+              <div class="setting-item">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.enableTransparency"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Enable Transparency</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Allow window transparency effects</p>
+              </div>
+              
+              <div class="setting-item" v-if="generalSettings.enableTransparency">
+                <label class="setting-label-full">
+                  <span class="text-white/90">Default Transparency Level: {{ Math.round(generalSettings.defaultTransparencyLevel * 100) }}%</span>
+                  <input 
+                    type="range" 
+                    v-model.number="generalSettings.defaultTransparencyLevel"
+                    min="0.1"
+                    max="1.0"
+                    step="0.1"
+                    class="setting-range"
+                    @input="handleTransparencyLevelChange"
+                  >
+                </label>
+                <p class="text-white/60 text-xs mt-1">Default opacity when transparency is enabled</p>
+              </div>
+              
+
+              
+              <div class="setting-item" v-if="generalSettings.enableTransparency">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.autoRestoreOnError"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Auto-restore on Error</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Automatically restore window if transparency fails</p>
+              </div>
+              
+              <!-- Current Transparency Status -->
+              <div v-if="generalSettings.enableTransparency" class="transparency-status-section">
+                <div class="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+                  <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full" :class="{
+                      'bg-green-400': transparency.isVisible.value && !transparency.isClickThrough.value,
+                      'bg-yellow-400': transparency.isClickThrough.value,
+                      'bg-red-400': !transparency.isVisible.value
+                    }"></div>
+                    <span class="text-white/80 text-sm">Current Status: {{ transparency.getVisibilityStatus() }}</span>
+                  </div>
+                  <div class="text-white/60 text-xs">
+                    {{ transparency.getTransparencyPercentage() }}% opacity
+                  </div>
+                </div>
+                
+                <!-- Quick Transparency Controls -->
+                <div class="flex gap-2 mt-3">
+                  <button
+                    @click="() => { console.log('🔧 Solid button clicked'); generalSettings.defaultTransparencyLevel = 1.0; handleTransparencyLevelChange(); }"
+                    class="px-3 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+                  >
+                    Solid
+                  </button>
+                  <button
+                    @click="() => { console.log('🔧 Semi button clicked'); generalSettings.defaultTransparencyLevel = 0.7; handleTransparencyLevelChange(); }"
+                    class="px-3 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+                  >
+                    Semi
+                  </button>
+                  <button
+                    @click="() => { console.log('🔧 Ghost button clicked'); generalSettings.defaultTransparencyLevel = 0.3; handleTransparencyLevelChange(); }"
+                    class="px-3 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+                  >
+                    Ghost
+                  </button>
+                  <button
+                    @click="() => { console.log('🔧 Restore button clicked'); generalSettings.defaultTransparencyLevel = 1.0; handleTransparencyLevelChange(); }"
+                    class="px-3 py-1.5 text-xs rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 hover:text-red-300 transition-colors"
+                  >
+                    Restore
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1491,6 +1641,24 @@ onMounted(() => {
 /* Settings Separator */
 .setting-separator {
   @apply my-4 border-t border-white/10;
+}
+
+/* Transparency Status Section */
+.transparency-status-section {
+  @apply mt-4;
+}
+
+.transparency-status-section .flex {
+  @apply transition-all duration-200;
+}
+
+.transparency-status-section button {
+  @apply transition-all duration-200;
+}
+
+.transparency-status-section button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 /* Transitions */

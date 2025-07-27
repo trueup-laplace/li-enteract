@@ -3,7 +3,6 @@ import {
   Cog6ToothIcon,
   CommandLineIcon,
   EyeIcon,
-  AdjustmentsHorizontalIcon,
   ChatBubbleLeftRightIcon
 } from '@heroicons/vue/24/outline'
 
@@ -11,7 +10,6 @@ interface Props {
   store: any
   mlEyeTracking: any
   showChatWindow: boolean
-  showTransparencyControls: boolean
   showAIModelsWindow: boolean
   showConversationalWindow: boolean
   isGazeControlActive: boolean
@@ -20,7 +18,6 @@ interface Props {
 interface Emits {
   (e: 'toggle-ai-models', event: Event): void
   (e: 'toggle-eye-tracking', event: Event): void
-  (e: 'toggle-transparency', event: Event): void
   (e: 'toggle-chat', event: Event): void
   (e: 'toggle-conversational', event: Event): void
 }
@@ -58,16 +55,7 @@ const emit = defineEmits<Emits>()
         :class="mlEyeTracking.isActive.value ? 'text-white' : 'text-white/70 group-hover:text-white'" />
     </button>
 
-    <!-- Transparency Controls Button -->
-    <button 
-      @click="emit('toggle-transparency', $event)"
-      class="control-btn group"
-      :class="{ 'active': showTransparencyControls }"
-      title="Transparency Controls"
-    >
-      <AdjustmentsHorizontalIcon class="w-4 h-4 transition-all" 
-        :class="showTransparencyControls ? 'text-white' : 'text-white/70 group-hover:text-white'" />
-    </button>
+
 
     <!-- Conversational Window Button -->
     <button 

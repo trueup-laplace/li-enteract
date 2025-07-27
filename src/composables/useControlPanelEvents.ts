@@ -5,7 +5,6 @@ interface StateRefs {
   isDragging: Ref<boolean>
   dragStartTime: Ref<number>
   showChatWindow: Ref<boolean>
-  showTransparencyControls: Ref<boolean>
   showAIModelsWindow: Ref<boolean>
   showConversationalWindow: Ref<boolean>
   speechError: Ref<string | null>
@@ -25,7 +24,6 @@ export function useControlPanelEvents(
     isDragging,
     dragStartTime,
     showChatWindow,
-    showTransparencyControls,
     showAIModelsWindow,
     showConversationalWindow,
     speechError,
@@ -46,34 +44,13 @@ export function useControlPanelEvents(
     console.log(`🎯 Control panel drag ended (${dragDuration}ms)`)
   }
 
-  // Panel toggle functions
-  const toggleTransparencyControls = (event: Event) => {
-    event.stopPropagation()
-    
-    if (showChatWindow.value) {
-      showChatWindow.value = false
-    }
-    if (showAIModelsWindow.value) {
-      showAIModelsWindow.value = false
-    }
-    
-    showTransparencyControls.value = !showTransparencyControls.value
-    console.log(`🔍 Transparency controls ${showTransparencyControls.value ? 'opened' : 'closed'}`)
-  }
 
-  const closeTransparencyControls = () => {
-    showTransparencyControls.value = false
-    console.log('🔍 Transparency controls closed')
-  }
 
   const toggleAIModelsWindow = async (event: Event) => {
     event.stopPropagation()
     
     if (showChatWindow.value) {
       showChatWindow.value = false
-    }
-    if (showTransparencyControls.value) {
-      showTransparencyControls.value = false
     }
     
     showAIModelsWindow.value = !showAIModelsWindow.value
@@ -89,9 +66,6 @@ export function useControlPanelEvents(
     event.stopPropagation()
     
     // Close other panels first to ensure only one window is open at a time
-    if (showTransparencyControls.value) {
-      showTransparencyControls.value = false
-    }
     if (showAIModelsWindow.value) {
       showAIModelsWindow.value = false
     }
@@ -110,9 +84,6 @@ export function useControlPanelEvents(
 
   const openChatWindow = async () => {
     // Close other panels first
-    if (showTransparencyControls.value) {
-      showTransparencyControls.value = false
-    }
     if (showAIModelsWindow.value) {
       showAIModelsWindow.value = false
     }
@@ -196,11 +167,7 @@ export function useControlPanelEvents(
       console.log('💬 Keyboard shortcut: Chat window toggled')
     }
     
-    if (event.ctrlKey && event.shiftKey && event.key === 'T') {
-      event.preventDefault()
-      toggleTransparencyControls(event)
-      console.log('🔍 Keyboard shortcut: Transparency controls toggled')
-    }
+
     
     if (event.ctrlKey && event.shiftKey && event.key === 'A') {
       event.preventDefault()
@@ -213,9 +180,6 @@ export function useControlPanelEvents(
       if (showChatWindow.value) {
         await closeChatWindow()
       }
-      if (showTransparencyControls.value) {
-        closeTransparencyControls()
-      }
       if (showAIModelsWindow.value) {
         closeAIModelsWindow()
       }
@@ -227,9 +191,6 @@ export function useControlPanelEvents(
     event.stopPropagation()
     
     // Close other panels first
-    if (showTransparencyControls.value) {
-      showTransparencyControls.value = false
-    }
     if (showAIModelsWindow.value) {
       showAIModelsWindow.value = false
     }
@@ -252,7 +213,6 @@ export function useControlPanelEvents(
     const target = event.target as HTMLElement
     const chatWindow = document.querySelector('.chat-window')
     const conversationalWindow = document.querySelector('.conversational-window')
-    const transparencyPanel = document.querySelector('.transparency-controls-panel')
     const aiModelsPanel = document.querySelector('.ai-models-panel')
     const controlPanel = document.querySelector('.control-panel-glass-bar')
     
@@ -274,12 +234,6 @@ export function useControlPanelEvents(
     }
     */
     
-    if (transparencyPanel && controlPanel && showTransparencyControls.value &&
-        !transparencyPanel.contains(target) && 
-        !controlPanel.contains(target)) {
-      closeTransparencyControls()
-    }
-    
     if (aiModelsPanel && controlPanel && showAIModelsWindow.value &&
         !aiModelsPanel.contains(target) && 
         !controlPanel.contains(target)) {
@@ -290,8 +244,6 @@ export function useControlPanelEvents(
   return {
     handleDragStart,
     handleDragEnd,
-    toggleTransparencyControls,
-    closeTransparencyControls,
     toggleAIModelsWindow,
     closeAIModelsWindow,
     toggleChatWindow,

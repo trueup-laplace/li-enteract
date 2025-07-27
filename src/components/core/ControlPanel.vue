@@ -27,7 +27,6 @@ const {
   isDragging,
   dragStartTime,
   showChatWindow,
-  showTransparencyControls,
   showAIModelsWindow,
   showConversationalWindow,
   speechError,
@@ -40,8 +39,6 @@ const {
 const {
   handleDragStart,
   handleDragEnd,
-  toggleTransparencyControls,
-  closeTransparencyControls,
   toggleAIModelsWindow,
   closeAIModelsWindow,
   toggleChatWindow,
@@ -61,7 +58,6 @@ const {
     isDragging,
     dragStartTime,
     showChatWindow,
-    showTransparencyControls,
     showAIModelsWindow,
     showConversationalWindow,
     speechError,
@@ -73,22 +69,16 @@ const {
 
 // Watch for window state changes to resize window
 watch(showChatWindow, async (newValue) => {
-  await resizeWindow(newValue, showTransparencyControls.value, showAIModelsWindow.value, showConversationalWindow.value, false)
-})
-
-watch(showTransparencyControls, async (newValue) => {
-  console.log(`🔧 TRANSPARENCY WATCH: newValue=${newValue}, showChat=${showChatWindow.value}, showAI=${showAIModelsWindow.value}`)
-  await resizeWindow(showChatWindow.value, newValue, showAIModelsWindow.value, showConversationalWindow.value, false)
-  console.log('🔧 TRANSPARENCY WATCH: Skipping resize to debug issue')
+  await resizeWindow(newValue, false, showAIModelsWindow.value, showConversationalWindow.value, false)
 })
 
 watch(showAIModelsWindow, async (newValue) => {
-  await resizeWindow(showChatWindow.value, showTransparencyControls.value, newValue, showConversationalWindow.value, false)
+  await resizeWindow(showChatWindow.value, false, newValue, showConversationalWindow.value, false)
 })
 
 watch(showConversationalWindow, async (newValue) => {
   console.log(`🔧 CONVERSATIONAL WATCH: newValue=${newValue}`)
-  await resizeWindow(showChatWindow.value, showTransparencyControls.value, showAIModelsWindow.value, newValue, false)
+  await resizeWindow(showChatWindow.value, false, showAIModelsWindow.value, newValue, false)
 })
 
 // Expose the openChatWindow method for parent components
@@ -114,7 +104,7 @@ onMounted(async () => {
   console.log('   Ctrl+Shift+E = Start/Stop ML Eye Tracking + Window Movement')
   console.log('   Ctrl+Shift+S = Emergency Stop (stop all tracking)')
   console.log('   Ctrl+Shift+C = Toggle Chat Window')
-  console.log('   Ctrl+Shift+T = Toggle Transparency Controls')
+
   console.log('   Ctrl+Shift+A = Toggle AI Models Window')
   console.log('   Escape = Close any open panels')
   console.log('🎯 Control Panel is draggable - click and drag to move!')
@@ -141,13 +131,11 @@ onUnmounted(() => {
           :store="store"
           :mlEyeTracking="mlEyeTracking"
           :showChatWindow="showChatWindow"
-          :showTransparencyControls="showTransparencyControls"
           :showAIModelsWindow="showAIModelsWindow"
           :showConversationalWindow="showConversationalWindow"
           :isGazeControlActive="isGazeControlActive"
           @toggle-ai-models="toggleAIModelsWindow"
           @toggle-eye-tracking="toggleMLEyeTrackingWithMovement"
-          @toggle-transparency="toggleTransparencyControls"
           @toggle-conversational="toggleConversationalWindow"
           @toggle-chat="toggleChatWindow"
         />
@@ -166,12 +154,10 @@ onUnmounted(() => {
     <!-- Panel Windows Container -->
     <div class="panel-windows-container">
       <PanelWindows
-        :showTransparencyControls="showTransparencyControls"
         :showSettingsPanel="showAIModelsWindow"
         :showChatWindow="showChatWindow"
         :showConversationalWindow="showConversationalWindow"
         :selectedModel="selectedModel"
-        @close-transparency="closeTransparencyControls"
         @close-settings="closeAIModelsWindow"
         @close-chat="closeChatWindow"
         @close-conversational="closeConversationalWindow"

@@ -46,10 +46,6 @@ export function useTransparency() {
       
       transparencyLevel.value = clampedLevel
       
-      // Save to localStorage for persistence
-      localStorage.setItem('transparency_level', clampedLevel.toString())
-      localStorage.setItem('transparency_enabled', 'true')
-      
       console.log(`✅ TRANSPARENCY: Successfully applied ${clampedLevel}`)
       
     } catch (error) {
@@ -77,10 +73,6 @@ export function useTransparency() {
       })
       transparencyLevel.value = result
       isEnabled.value = result < 1.0
-      
-      // Save state
-      localStorage.setItem('transparency_level', result.toString())
-      localStorage.setItem('transparency_enabled', isEnabled.value.toString())
       
     } catch (error) {
       lastError.value = error instanceof Error ? error.message : 'Failed to toggle transparency'
@@ -111,10 +103,6 @@ export function useTransparency() {
       
       // Clear error state
       lastError.value = null
-      
-      // Update localStorage
-      localStorage.setItem('transparency_level', '1.0')
-      localStorage.setItem('transparency_enabled', 'false')
       
     } catch (error) {
       console.error('Emergency restore failed:', error)
@@ -155,43 +143,7 @@ export function useTransparency() {
     }
   }
 
-  // Load saved preferences
-  const loadPreferences = () => {
-    try {
-      const savedLevel = localStorage.getItem('transparency_level')
-      const savedEnabled = localStorage.getItem('transparency_enabled')
-      
-      if (savedLevel !== null) {
-        const level = parseFloat(savedLevel)
-        if (!isNaN(level)) {
-          transparencyLevel.value = Math.max(0, Math.min(1, level))
-        }
-      }
-      
-      if (savedEnabled !== null) {
-        isEnabled.value = savedEnabled === 'true'
-      }
-      
-      // Apply saved transparency if it was enabled
-      if (isEnabled.value && transparencyLevel.value < 1.0) {
-        // Don't await this to avoid blocking initialization
-        applyTransparency(transparencyLevel.value).catch(console.error)
-      }
-      
-    } catch (error) {
-      console.error('Failed to load transparency preferences:', error)
-    }
-  }
 
-  // Save preferences when state changes
-  watch([transparencyLevel, isEnabled], () => {
-    try {
-      localStorage.setItem('transparency_level', transparencyLevel.value.toString())
-      localStorage.setItem('transparency_enabled', isEnabled.value.toString())
-    } catch (error) {
-      console.error('Failed to save transparency preferences:', error)
-    }
-  })
 
   // Setup and cleanup
   onMounted(() => {
@@ -199,8 +151,8 @@ export function useTransparency() {
     console.log('🔧 TRANSPARENCY DEBUG: Skipping preference loading to debug window disappearing')
     // loadPreferences()
     
-    // Setup keyboard shortcuts
-    document.addEventListener('keydown', handleKeyDown)
+    // Keyboard shortcuts disabled - now controlled through settings panel
+    // document.addEventListener('keydown', handleKeyDown)
     
     // Setup emergency safety timer (auto-restore after 30 seconds of full invisibility)
     let invisibilityTimer: number | null = null
@@ -261,9 +213,6 @@ export function useTransparency() {
     
     // Utilities
     getTransparencyPercentage,
-    getVisibilityStatus,
-    
-    // Manual control
-    loadPreferences
+    getVisibilityStatus
   }
 } 
