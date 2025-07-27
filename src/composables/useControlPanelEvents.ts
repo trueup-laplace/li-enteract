@@ -12,6 +12,12 @@ interface StateRefs {
   compatibilityReport: Ref<any>
   isGazeControlActive: Ref<boolean>
   dragIndicatorVisible: Ref<boolean>
+  // Window management functions
+  closeAllWindows: () => void
+  openWindow: (windowType: 'chat' | 'transparency' | 'aiModels' | 'conversational') => void
+  toggleWindow: (windowType: 'chat' | 'transparency' | 'aiModels' | 'conversational') => void
+  getWindowState: (windowType: 'chat' | 'transparency' | 'aiModels' | 'conversational') => boolean
+  hasOpenWindow: Ref<boolean>
 }
 
 export function useControlPanelEvents(
@@ -193,6 +199,7 @@ export function useControlPanelEvents(
     const chatWindow = document.querySelector('.chat-window')
     const conversationalWindow = document.querySelector('.conversational-window')
     const transparencyPanel = document.querySelector('.transparency-controls-panel')
+    const settingsPanel = document.querySelector('.settings-panel-section')
     const aiModelsPanel = document.querySelector('.ai-models-panel')
     const controlPanel = document.querySelector('.control-panel-glass-bar')
     
@@ -201,6 +208,7 @@ export function useControlPanelEvents(
       (!chatWindow || !chatWindow.contains(target)) &&
       (!conversationalWindow || !conversationalWindow.contains(target)) &&
       (!transparencyPanel || !transparencyPanel.contains(target)) &&
+      (!settingsPanel || !settingsPanel.contains(target)) &&
       (!aiModelsPanel || !aiModelsPanel.contains(target)) &&
       (!controlPanel || !controlPanel.contains(target))
     )
