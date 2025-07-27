@@ -8,7 +8,8 @@ import {
   ArrowDownTrayIcon,
   SpeakerWaveIcon,
   MicrophoneIcon,
-  ComputerDesktopIcon
+  ComputerDesktopIcon,
+  CpuChipIcon
 } from '@heroicons/vue/24/outline'
 import { useAIModels } from '../../composables/useAIModels'
 import { useTransparency } from '../../composables/useTransparency'
@@ -410,7 +411,7 @@ onMounted(() => {
               class="nav-item"
             >
               <div class="nav-icon">
-                <Cog6ToothIcon class="w-5 h-5" />
+                <CpuChipIcon class="w-5 h-5" />
               </div>
               <div class="nav-content">
                 <div class="nav-title">AI Models</div>
@@ -452,7 +453,7 @@ onMounted(() => {
               class="nav-item"
             >
               <div class="nav-icon">
-                <ComputerDesktopIcon class="w-5 h-5" />
+                <Cog6ToothIcon class="w-5 h-5" />
               </div>
               <div class="nav-content">
                 <div class="nav-title">General</div>

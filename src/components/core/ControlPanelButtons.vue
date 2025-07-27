@@ -3,7 +3,8 @@ import {
   Cog6ToothIcon,
   CommandLineIcon,
   EyeIcon,
-  ChatBubbleLeftRightIcon
+  ChatBubbleLeftRightIcon,
+  CpuChipIcon
 } from '@heroicons/vue/24/outline'
 
 interface Props {
