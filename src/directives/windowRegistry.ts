@@ -12,7 +12,7 @@ interface WindowRegistryDirectiveOptions {
 }
 
 // Global registry instance for directive
-const registry = useWindowRegistry({ debugMode: false })
+const registry = useWindowRegistry()
 
 // Map to track elements registered by directive
 const directiveRegistrations = new WeakMap<HTMLElement, string>()
@@ -27,7 +27,7 @@ export const windowRegistryDirective: Directive<HTMLElement, WindowRegistryDirec
     }
 
     // Register the element
-    registry.registerWindow(options.id, el, {
+    registry.register(options.id, el, {
       closeOnClickOutside: options.closeOnClickOutside,
       isModal: options.isModal,
       priority: options.priority,
@@ -50,8 +50,8 @@ export const windowRegistryDirective: Directive<HTMLElement, WindowRegistryDirec
 
     // If ID changed, unregister old and register new
     if (oldOptions?.id && oldOptions.id !== options.id) {
-      registry.unregisterWindow(oldOptions.id)
-      registry.registerWindow(options.id, el, {
+      registry.unregister(oldOptions.id)
+      registry.register(options.id, el, {
         closeOnClickOutside: options.closeOnClickOutside,
         isModal: options.isModal,
         priority: options.priority,
@@ -60,8 +60,9 @@ export const windowRegistryDirective: Directive<HTMLElement, WindowRegistryDirec
       })
       directiveRegistrations.set(el, options.id)
     } else {
-      // Update existing registration
-      registry.updateWindow(options.id, {
+      // Update existing registration (not available in current API, so re-register)
+      registry.unregister(options.id)
+      registry.register(options.id, el, {
         closeOnClickOutside: options.closeOnClickOutside,
         isModal: options.isModal,
         priority: options.priority,
@@ -74,7 +75,7 @@ export const windowRegistryDirective: Directive<HTMLElement, WindowRegistryDirec
   beforeUnmount(el: HTMLElement) {
     const windowId = directiveRegistrations.get(el)
     if (windowId) {
-      registry.unregisterWindow(windowId)
+      registry.unregister(windowId)
       directiveRegistrations.delete(el)
     }
   }

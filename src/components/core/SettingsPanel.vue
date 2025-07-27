@@ -105,7 +105,7 @@ const generalSettings = ref({
   autoSaveInterval: 5,
   // Whisper model settings
   microphoneWhisperModel: 'tiny',
-  loopbackWhisperModel: 'base',
+  loopbackWhisperModel: 'small',
   // Transparency settings
   enableTransparency: false,
   defaultTransparencyLevel: 1.0,

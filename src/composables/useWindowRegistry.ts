@@ -1,426 +1,255 @@
-import { ref, computed, onUnmounted, nextTick } from 'vue'
+import { ref, onUnmounted, nextTick } from 'vue'
+import type { 
+  WindowRegistryConfig, 
+  RegisteredWindow, 
+  WindowId, 
+  WindowRegistryState,
+  WindowRegistryAPI 
+} from '@/types/windowTypes'
 
-// Types for window registry system
-export interface RegisteredWindow {
-  id: string
-  element: HTMLElement
-  closeOnClickOutside: boolean
-  isModal: boolean
-  zIndex?: number
-  closeHandler?: () => void
-  priority: number // Higher priority windows close first
+// Global registry state - shared across all composable instances
+const globalState: WindowRegistryState = {
+  windows: new Map(),
+  activeWindows: new Set(),
+  clickHandlers: new Set()
 }
 
-export interface WindowRegistryConfig {
-  debugMode?: boolean
-  defaultCloseOnClickOutside?: boolean
-  defaultIsModal?: boolean
-  defaultPriority?: number
-}
+let globalClickListener: ((event: MouseEvent) => void) | null = null
 
-export interface ClickOutsideOptions {
-  excludeSelectors?: string[]
-  includeDescendants?: boolean
-  stopPropagation?: boolean
-}
+// Initialize global click listener once
+const initializeGlobalClickListener = () => {
+  if (!globalClickListener) {
+    globalClickListener = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (!target) return
 
-// Global window registry state
-const windows = ref(new Map<string, RegisteredWindow>())
-const clickListenerAttached = ref(false)
-const debugMode = ref(false)
+      // Get all windows that should close on outside click
+      const windowsToClose = Array.from(globalState.windows.values())
+        .filter(window => window.config.closeOnClickOutside && window.isActive)
+        .sort((a, b) => (b.config.priority || 0) - (a.config.priority || 0)) // Higher priority first
 
-// Debug logging utility
-const debugLog = (message: string, data?: any) => {
-  if (debugMode.value) {
-    console.log(`[WindowRegistry] ${message}`, data || '')
-  }
-}
-
-// Global click handler
-const handleGlobalClick = (event: Event) => {
-  const target = event.target as HTMLElement
-  if (!target) return
-
-  debugLog('Global click detected', { target: target.tagName, className: target.className })
-
-  // Get all registered windows sorted by priority (higher priority first)
-  const sortedWindows = Array.from(windows.value.values())
-    .filter(window => window.closeOnClickOutside)
-    .sort((a, b) => b.priority - a.priority)
-
-  debugLog('Windows to check for click-outside', sortedWindows.map(w => ({ id: w.id, priority: w.priority })))
-
-  // Check each window for click-outside
-  for (const window of sortedWindows) {
-    if (isClickOutsideWindow(target, window)) {
-      debugLog(`Click outside detected for window: ${window.id}`)
-      
-      // Close the window
-      if (window.closeHandler) {
-        window.closeHandler()
-      }
-      
-      // If this is a modal window, stop checking other windows
-      if (window.isModal) {
-        debugLog(`Modal window ${window.id} closed, stopping propagation`)
-        event.stopPropagation()
-        break
+      for (const window of windowsToClose) {
+        if (!window.element.contains(target)) {
+          // Click is outside this window
+          if (window.config.closeHandler) {
+            window.config.closeHandler()
+          }
+          // Only close the highest priority window
+          break
+        }
       }
     }
+
+    document.addEventListener('click', globalClickListener, true)
   }
 }
 
-// Check if click is outside a specific window
-const isClickOutsideWindow = (target: HTMLElement, window: RegisteredWindow): boolean => {
-  const { element } = window
-  
-  if (!element || !element.parentNode) {
-    debugLog(`Window ${window.id} element not found or not in DOM`)
-    return false
+// Cleanup global listener
+const cleanupGlobalClickListener = () => {
+  if (globalClickListener && globalState.windows.size === 0) {
+    document.removeEventListener('click', globalClickListener, true)
+    globalClickListener = null
   }
-
-  // Check if target is within the window element
-  if (element.contains(target)) {
-    debugLog(`Click is inside window ${window.id}`)
-    return false
-  }
-
-  // Check if target is within any excluded elements (like control panels)
-  const controlPanel = document.querySelector('.control-panel-glass-bar')
-  if (controlPanel && controlPanel.contains(target)) {
-    debugLog(`Click is within control panel, ignoring for window ${window.id}`)
-    return false
-  }
-
-  debugLog(`Click is outside window ${window.id}`)
-  return true
 }
 
-// Attach global click listener
-const attachGlobalClickListener = () => {
-  if (clickListenerAttached.value) return
-
-  document.addEventListener('click', handleGlobalClick, true)
-  clickListenerAttached.value = true
-  debugLog('Global click listener attached')
-}
-
-// Detach global click listener
-const detachGlobalClickListener = () => {
-  if (!clickListenerAttached.value) return
-
-  document.removeEventListener('click', handleGlobalClick, true)
-  clickListenerAttached.value = false
-  debugLog('Global click listener detached')
-}
-
-// Main composable function
-export function useWindowRegistry(config: WindowRegistryConfig = {}) {
-  const {
-    debugMode: configDebugMode = false,
-    defaultCloseOnClickOutside = true,
-    defaultIsModal = false,
-    defaultPriority = 100
-  } = config
-
-  // Set debug mode
-  debugMode.value = configDebugMode
-
-  /**
-   * Register a window element in the global registry
-   */
-  const registerWindow = async (
-    id: string,
-    element: HTMLElement | null,
-    options: {
-      closeOnClickOutside?: boolean
-      isModal?: boolean
-      zIndex?: number
-      closeHandler?: () => void
-      priority?: number
-    } = {}
-  ) => {
+/**
+ * Global window registry composable
+ * Provides centralized window management with direct DOM element references
+ */
+export function useWindowRegistry(): WindowRegistryAPI {
+  const register = (id: WindowId, element: HTMLElement, config: WindowRegistryConfig = {}) => {
     if (!element) {
-      console.warn(`[WindowRegistry] Cannot register window ${id}: element is null`)
-      return false
+      console.warn(`[WindowRegistry] Cannot register window '${id}' - element is null/undefined`)
+      return
     }
 
-    await nextTick() // Ensure DOM is ready
+    const defaultConfig: WindowRegistryConfig = {
+      closeOnClickOutside: true,
+      isModal: false,
+      priority: 100,
+      zIndex: undefined,
+      closeHandler: undefined,
+      focusHandler: undefined
+    }
 
-    const windowConfig: RegisteredWindow = {
+    const finalConfig = { ...defaultConfig, ...config }
+
+    const registeredWindow: RegisteredWindow = {
       id,
       element,
-      closeOnClickOutside: options.closeOnClickOutside ?? defaultCloseOnClickOutside,
-      isModal: options.isModal ?? defaultIsModal,
-      zIndex: options.zIndex,
-      closeHandler: options.closeHandler,
-      priority: options.priority ?? defaultPriority
+      config: finalConfig,
+      isActive: true, // Newly registered windows are considered active
+      registeredAt: Date.now()
     }
 
-    windows.value.set(id, windowConfig)
-    
-    // Apply z-index if provided
-    if (windowConfig.zIndex) {
-      element.style.zIndex = windowConfig.zIndex.toString()
+    globalState.windows.set(id, registeredWindow)
+    globalState.activeWindows.add(id)
+
+    // Apply z-index if specified
+    if (finalConfig.zIndex !== undefined) {
+      element.style.zIndex = finalConfig.zIndex.toString()
     }
 
-    // Attach global click listener if we have windows that need click-outside detection
-    if (windowConfig.closeOnClickOutside) {
-      attachGlobalClickListener()
-    }
+    // Initialize global click listener if needed
+    initializeGlobalClickListener()
 
-    debugLog(`Window registered: ${id}`, windowConfig)
-    return true
+    console.log(`[WindowRegistry] Registered window '${id}'`, {
+      element: element.tagName,
+      config: finalConfig,
+      totalWindows: globalState.windows.size
+    })
   }
 
-  /**
-   * Unregister a window from the global registry
-   */
-  const unregisterWindow = (id: string) => {
-    const wasRegistered = windows.value.has(id)
-    windows.value.delete(id)
-
-    // If no more windows need click-outside detection, remove global listener
-    const hasClickOutsideWindows = Array.from(windows.value.values())
-      .some(window => window.closeOnClickOutside)
-
-    if (!hasClickOutsideWindows) {
-      detachGlobalClickListener()
-    }
-
-    debugLog(`Window unregistered: ${id}`, { wasRegistered })
-    return wasRegistered
-  }
-
-  /**
-   * Update window configuration
-   */
-  const updateWindow = (id: string, updates: Partial<RegisteredWindow>) => {
-    const existingWindow = windows.value.get(id)
-    if (!existingWindow) {
-      console.warn(`[WindowRegistry] Cannot update window ${id}: not found`)
-      return false
-    }
-
-    const updatedWindow = { ...existingWindow, ...updates }
-    windows.value.set(id, updatedWindow)
-
-    // Update z-index if changed
-    if (updates.zIndex && existingWindow.element) {
-      existingWindow.element.style.zIndex = updates.zIndex.toString()
-    }
-
-    debugLog(`Window updated: ${id}`, updates)
-    return true
-  }
-
-  /**
-   * Check if a click target is outside all registered windows
-   */
-  const isClickOutsideAll = (target: HTMLElement, options: ClickOutsideOptions = {}): boolean => {
-    const {
-      excludeSelectors = ['.control-panel-glass-bar']
-    } = options
-
-    // Check if target is within any excluded elements
-    for (const selector of excludeSelectors) {
-      const excludedElement = document.querySelector(selector)
-      if (excludedElement && excludedElement.contains(target)) {
-        debugLog('Click is within excluded element', selector)
-        return false
-      }
-    }
-
-    // Check if target is within any registered window
-    for (const window of windows.value.values()) {
-      if (window.element && window.element.contains(target)) {
-        debugLog('Click is within registered window', window.id)
-        return false
-      }
-    }
-
-    debugLog('Click is outside all registered windows')
-    return true
-  }
-
-  /**
-   * Check if a specific window exists in the registry
-   */
-  const hasWindow = (id: string): boolean => {
-    return windows.value.has(id)
-  }
-
-  /**
-   * Get window configuration by ID
-   */
-  const getWindow = (id: string): RegisteredWindow | undefined => {
-    return windows.value.get(id)
-  }
-
-  /**
-   * Get all registered windows
-   */
-  const getAllWindows = (): RegisteredWindow[] => {
-    return Array.from(windows.value.values())
-  }
-
-  /**
-   * Close all registered windows with smooth transitions
-   */
-  const closeAllWindows = async () => {
-    const sortedWindows = getAllWindows().sort((a, b) => b.priority - a.priority)
-    
-    // Close windows sequentially for better visual effect
-    for (const window of sortedWindows) {
-      if (window.closeHandler) {
-        debugLog(`Closing window: ${window.id}`)
-        window.closeHandler()
-        // Small delay between closures for smooth transitions
-        await new Promise(resolve => setTimeout(resolve, 50))
-      }
-    }
-  }
-
-  /**
-   * Close specific windows by ID
-   */
-  const closeWindows = (ids: string[]) => {
-    const windowsToClose = ids
-      .map(id => windows.value.get(id))
-      .filter(Boolean) as RegisteredWindow[]
+  const unregister = (id: WindowId) => {
+    const window = globalState.windows.get(id)
+    if (window) {
+      globalState.windows.delete(id)
+      globalState.activeWindows.delete(id)
       
-    const sortedWindows = windowsToClose.sort((a, b) => b.priority - a.priority)
-    
-    for (const window of sortedWindows) {
-      if (window.closeHandler) {
-        debugLog(`Closing specific window: ${window.id}`)
-        window.closeHandler()
+      console.log(`[WindowRegistry] Unregistered window '${id}'`, {
+        remainingWindows: globalState.windows.size
+      })
+
+      // Cleanup global listener if no windows remain
+      cleanupGlobalClickListener()
+    }
+  }
+
+  const getWindow = (id: WindowId): RegisteredWindow | undefined => {
+    return globalState.windows.get(id)
+  }
+
+  const getAllWindows = (): RegisteredWindow[] => {
+    return Array.from(globalState.windows.values())
+  }
+
+  const getActiveWindows = (): RegisteredWindow[] => {
+    return Array.from(globalState.windows.values()).filter(w => w.isActive)
+  }
+
+  const isRegistered = (id: WindowId): boolean => {
+    return globalState.windows.has(id)
+  }
+
+  const isActive = (id: WindowId): boolean => {
+    return globalState.activeWindows.has(id)
+  }
+
+  const setActive = (id: WindowId) => {
+    const window = globalState.windows.get(id)
+    if (window) {
+      window.isActive = true
+      globalState.activeWindows.add(id)
+      
+      if (window.config.focusHandler) {
+        window.config.focusHandler()
       }
     }
   }
 
-  /**
-   * Get the highest z-index among registered windows
-   */
-  const getHighestZIndex = (): number => {
-    let highest = 1000 // Base z-index
-    
-    for (const window of windows.value.values()) {
-      if (window.zIndex && window.zIndex > highest) {
-        highest = window.zIndex
-      }
+  const setInactive = (id: WindowId) => {
+    const window = globalState.windows.get(id)
+    if (window) {
+      window.isActive = false
+      globalState.activeWindows.delete(id)
     }
-    
-    return highest
   }
 
-  /**
-   * Bring window to front by setting highest z-index
-   */
-  const bringToFront = (id: string): boolean => {
-    const window = windows.value.get(id)
-    if (!window || !window.element) {
-      return false
+  const bringToFront = (id: WindowId) => {
+    const window = globalState.windows.get(id)
+    if (window && window.config.zIndex !== undefined) {
+      // Find the highest z-index among all windows
+      const maxZIndex = Math.max(
+        ...Array.from(globalState.windows.values())
+          .map(w => parseInt(w.element.style.zIndex || '0'))
+          .filter(z => !isNaN(z))
+      )
+      
+      window.element.style.zIndex = (maxZIndex + 1).toString()
     }
-
-    const newZIndex = getHighestZIndex() + 1
-    window.element.style.zIndex = newZIndex.toString()
-    window.zIndex = newZIndex
-
-    debugLog(`Brought window to front: ${id}`, { zIndex: newZIndex })
-    return true
   }
 
-  /**
-   * Enable or disable debug mode
-   */
-  const setDebugMode = (enabled: boolean) => {
-    debugMode.value = enabled
-    debugLog(`Debug mode ${enabled ? 'enabled' : 'disabled'}`)
+  const isClickOutside = (target: HTMLElement, windowId?: WindowId): boolean => {
+    if (windowId) {
+      const window = globalState.windows.get(windowId)
+      return window ? !window.element.contains(target) : true
+    }
+    return false
   }
 
-  // Computed values
-  const registeredWindowCount = computed(() => windows.value.size)
-  const hasModalWindows = computed(() => 
-    Array.from(windows.value.values()).some(window => window.isModal)
-  )
-  const windowIds = computed(() => Array.from(windows.value.keys()))
+  const isClickOutsideAll = (target: HTMLElement): boolean => {
+    return Array.from(globalState.windows.values()).every(window => 
+      !window.element.contains(target)
+    )
+  }
 
-  // Cleanup on unmount
-  onUnmounted(() => {
-    debugLog('Cleaning up window registry')
-    
-    // Clear all windows for this instance
-    windows.value.clear()
-    
-    // Detach global listener if no windows remain
-    if (windows.value.size === 0) {
-      detachGlobalClickListener()
-    }
-  })
+  const cleanup = () => {
+    globalState.windows.clear()
+    globalState.activeWindows.clear()
+    cleanupGlobalClickListener()
+  }
 
   return {
-    // Registration methods
-    registerWindow,
-    unregisterWindow,
-    updateWindow,
-    
-    // Query methods
-    hasWindow,
+    register,
+    unregister,
     getWindow,
     getAllWindows,
-    isClickOutsideAll,
-    
-    // Control methods
-    closeAllWindows,
-    closeWindows,
+    getActiveWindows,
+    isRegistered,
+    isActive,
+    setActive,
+    setInactive,
     bringToFront,
-    getHighestZIndex,
-    
-    // Configuration
-    setDebugMode,
-    
-    // Computed state
-    registeredWindowCount,
-    hasModalWindows,
-    windowIds,
-    
-    // Direct access to registry (for debugging)
-    windows: computed(() => windows.value)
+    isClickOutside,
+    isClickOutsideAll,
+    cleanup
   }
 }
 
-// Utility function for components to easily register themselves
+/**
+ * Convenience composable for individual window components
+ * Automatically handles registration/unregistration lifecycle
+ */
 export function useWindowRegistration(
-  windowId: string,
-  options: {
-    closeOnClickOutside?: boolean
-    isModal?: boolean
-    priority?: number
-    closeHandler?: () => void
-  } = {}
+  windowId: WindowId, 
+  config?: WindowRegistryConfig
 ) {
   const registry = useWindowRegistry()
-  
-  const registerSelf = (element: HTMLElement | null) => {
-    if (element) {
-      return registry.registerWindow(windowId, element, options)
+  let currentElement: HTMLElement | null = null
+
+  const registerSelf = (element: HTMLElement) => {
+    if (currentElement && currentElement !== element) {
+      // Unregister old element first
+      registry.unregister(windowId)
     }
-    return Promise.resolve(false)
+    
+    currentElement = element
+    registry.register(windowId, element, config)
   }
-  
+
   const unregisterSelf = () => {
-    return registry.unregisterWindow(windowId)
+    if (currentElement) {
+      registry.unregister(windowId)
+      currentElement = null
+    }
   }
-  
-  // Auto-unregister on unmount
+
+  const updateConfig = (newConfig: WindowRegistryConfig) => {
+    if (currentElement) {
+      registry.unregister(windowId)
+      registry.register(windowId, currentElement, { ...config, ...newConfig })
+    }
+  }
+
+  // Auto-cleanup on unmount
   onUnmounted(() => {
     unregisterSelf()
   })
-  
+
   return {
     registerSelf,
     unregisterSelf,
+    updateConfig,
     ...registry
   }
 }

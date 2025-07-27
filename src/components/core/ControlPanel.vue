@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useAppStore } from '../../stores/app'
 import { useMLEyeTracking } from '../../composables/useMLEyeTracking'
 import { useWindowManager } from '../../composables/useWindowManager'
@@ -53,8 +53,7 @@ const {
   toggleConversationalWindow,
   closeConversationalWindow,
   toggleMLEyeTrackingWithMovement,
-  handleKeydown,
-  handleClickOutside
+  handleKeydown
 } = useControlPanelEvents(
   store,
   mlEyeTracking,
@@ -123,11 +122,14 @@ defineExpose({
   openChatWindow
 })
 
+// Ref for the control panel element
+const controlPanelRef = ref<HTMLElement>()
+
 onMounted(async () => {
   document.addEventListener('keydown', handleKeydown)
   // Removed global click listener - let window registry handle click-outside detection
   
-  const controlPanel = document.querySelector('.control-panel-glass-bar') as HTMLElement
+  const controlPanel = controlPanelRef.value
   if (controlPanel) {
     controlPanel.addEventListener('mousedown', handleDragStart)
     document.addEventListener('mouseup', handleDragEnd)
@@ -160,6 +162,7 @@ onUnmounted(() => {
     <!-- Control Panel Section -->
     <div class="control-panel-section">
       <div 
+        ref="controlPanelRef"
         class="control-panel-glass-bar" 
         :class="{ 'dragging': isDragging }"
         data-tauri-drag-region

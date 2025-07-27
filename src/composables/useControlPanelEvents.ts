@@ -15,7 +15,7 @@ export function useControlPanelEvents(
 ) {
   // Get state management (use provided refs if available, otherwise create new)
   const stateRefs = providedStateRefs || useControlPanelState()
-  const windowRegistry = useWindowRegistry({ debugMode: false })
+  const windowRegistry = useWindowRegistry()
   const { resizeWindow } = useWindowResizing()
 
   // Extract reactive refs for easier access
@@ -27,12 +27,14 @@ export function useControlPanelEvents(
 
   // Window control handlers
   const closeAllWindows = async () => {
-    await windowRegistry.closeAllWindows()
+    // Close all registered windows via their close handlers
+    const allWindows = windowRegistry.getAllWindows()
+    for (const window of allWindows) {
+      if (window.config.closeHandler) {
+        window.config.closeHandler()
+      }
+    }
     await stateRefs.closeAllWindows()
-  }
-
-  const closeSpecificWindows = (windowIds: string[]) => {
-    windowRegistry.closeWindows(windowIds)
   }
 
   // AI Models window handlers - using centralized state management
@@ -158,7 +160,7 @@ export function useControlPanelEvents(
       priority?: number
     } = {}
   ) => {
-    return windowRegistry.registerWindow(id, element, {
+    return windowRegistry.register(id, element, {
       closeHandler,
       closeOnClickOutside: options.closeOnClickOutside ?? true,
       isModal: options.isModal ?? false,
@@ -167,7 +169,7 @@ export function useControlPanelEvents(
   }
 
   const unregisterWindow = (id: string) => {
-    return windowRegistry.unregisterWindow(id)
+    return windowRegistry.unregister(id)
   }
 
   // Focus management
@@ -192,19 +194,33 @@ export function useControlPanelEvents(
 
   // Registry debugging helpers
   const getRegistryInfo = () => {
+    const allWindows = windowRegistry.getAllWindows()
     return {
-      windowCount: windowRegistry.registeredWindowCount.value,
-      windowIds: windowRegistry.windowIds.value,
-      hasModals: windowRegistry.hasModalWindows.value
+      windowCount: allWindows.length,
+      windowIds: allWindows.map(w => w.id),
+      hasModals: allWindows.some(w => w.config.isModal)
     }
   }
 
-  const enableRegistryDebugMode = () => {
-    windowRegistry.setDebugMode(true)
-  }
-
-  const disableRegistryDebugMode = () => {
-    windowRegistry.setDebugMode(false)
+  // Close specific windows by IDs
+  const closeSpecificWindows = async (windowIds: string[]) => {
+    const allWindows = windowRegistry.getAllWindows()
+    for (const windowId of windowIds) {
+      const window = allWindows.find(w => w.id === windowId)
+      if (window && window.config.closeHandler) {
+        window.config.closeHandler()
+      }
+    }
+    // Also update state for known windows
+    for (const windowId of windowIds) {
+      if (windowId === 'aiModels' || windowId === 'ai-models-window') {
+        showAIModelsWindow.value = false
+      } else if (windowId === 'chat' || windowId === 'chat-window') {
+        showChatWindow.value = false
+      } else if (windowId === 'conversational' || windowId === 'conversational-window') {
+        showConversationalWindow.value = false
+      }
+    }
   }
 
   // Additional methods for backward compatibility
@@ -272,8 +288,6 @@ export function useControlPanelEvents(
     
     // Registry debugging
     getRegistryInfo,
-    enableRegistryDebugMode,
-    disableRegistryDebugMode,
     
     // Direct access to registry for advanced use cases
     windowRegistry,

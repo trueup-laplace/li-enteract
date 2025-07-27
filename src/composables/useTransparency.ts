@@ -159,8 +159,8 @@ export function useTransparency() {
     
     watch(transparencyLevel, (newLevel) => {
       if (newLevel <= 0.05) {
-        // Start timer for emergency restore
-        invisibilityTimer = setTimeout(() => {
+        // Start timer for emergency restore 
+        invisibilityTimer = window.setTimeout(() => {
           console.warn('Auto-restoring visibility after 30 seconds of invisibility')
           emergencyRestore()
         }, 30000)
