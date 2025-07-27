@@ -14,10 +14,10 @@ import {
   EllipsisVerticalIcon,
   ClockIcon,
   MicrophoneIcon,
-  StopIcon
+  StopIcon,
+  QueueListIcon
 } from '@heroicons/vue/24/outline'
 import { useChatManagement } from '../../composables/useChatManagement'
-import { useWindowResizing } from '../../composables/useWindowResizing'
 import { useSpeechEvents } from '../../composables/useSpeechEvents'
 import { useSpeechTranscription } from '../../composables/useSpeechTranscription'
 import AgentActionButtons from './AgentActionButtons.vue'
@@ -105,12 +105,12 @@ const { setupSpeechTranscriptionListeners, removeSpeechTranscriptionListeners } 
   sendMessage
 )
 
-// Window resizing composable
-const {
-  chatWindowSize,
-  isResizing,
-  startResize
-} = useWindowResizing()
+// Window resizing composable - not currently used in this component
+// const {
+//   chatWindowSize,
+//   isResizing,
+//   startResize
+// } = useWindowResizing()
 
 // Speech transcription for microphone button
 const {
@@ -316,11 +316,11 @@ onUnmounted(() => {
             <!-- Chat History Button -->
             <button 
               @click="toggleChatSidebar" 
-              class="header-btn"
+              class="export-btn"
               :class="{ 'active': showChatSidebar }"
-              title="Chat History"
+              title="Show chat history"
             >
-              <ChatBubbleLeftRightIcon class="w-4 h-4" />
+              <QueueListIcon class="w-3 h-3" />
             </button>
           </div>
         </div>
@@ -608,6 +608,14 @@ onUnmounted(() => {
 }
 
 .header-btn.active {
+  @apply bg-blue-500/20 text-blue-400 hover:bg-blue-500/30;
+}
+
+.export-btn {
+  @apply rounded-full p-1 hover:bg-white/10 transition-all duration-200 text-white/60 hover:text-white/90;
+}
+
+.export-btn.active {
   @apply bg-blue-500/20 text-blue-400 hover:bg-blue-500/30;
 }
 
