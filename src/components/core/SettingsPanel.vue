@@ -307,11 +307,6 @@ const applyTransparencyFromSettings = () => {
   }
 }
 
-// Function to apply transparency level immediately (for slider changes)
-const applyTransparencyLevel = () => {
-  console.log('🔧 Applying transparency level:', generalSettings.value.defaultTransparencyLevel)
-  transparency.setLevel(generalSettings.value.defaultTransparencyLevel)
-}
 
 // Handler for transparency level slider changes
 const handleTransparencyLevelChange = () => {

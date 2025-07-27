@@ -5,7 +5,6 @@ import {
   XMarkIcon,
   PlusIcon,
   TrashIcon,
-  ClockIcon,
   PencilIcon,
   EllipsisVerticalIcon
 } from '@heroicons/vue/24/outline'

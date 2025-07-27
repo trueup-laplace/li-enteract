@@ -1,10 +1,5 @@
 <script setup lang="ts">
 import {
-  CameraIcon,
-  MagnifyingGlassIcon,
-  ChatBubbleLeftIcon,
-  CodeBracketIcon,
-  ComputerDesktopIcon,
   DocumentIcon,
   PhotoIcon
 } from '@heroicons/vue/24/outline'

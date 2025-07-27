@@ -1,4 +1,4 @@
-import { ref, Ref } from 'vue'
+import { ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 
@@ -31,7 +31,7 @@ export function useLiveAI() {
   const isProcessing = ref(false)
   const error = ref<string | null>(null)
   let streamListener: any = null
-  let analysisTimeout: NodeJS.Timeout | null = null
+  let analysisTimeout: number | null = null
   let lastAnalysisTime = 0
   const ANALYSIS_DEBOUNCE_MS = 3000 // Wait 3 seconds after last message before analyzing
   const MIN_ANALYSIS_INTERVAL_MS = 5000 // Minimum 5 seconds between analyses

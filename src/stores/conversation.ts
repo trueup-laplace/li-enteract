@@ -9,6 +9,8 @@ export interface ConversationMessage {
   content: string
   timestamp: number
   confidence?: number
+  isPreview?: boolean
+  isTyping?: boolean
 }
 
 export interface ConversationSession {
@@ -84,7 +86,7 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   // Watch for changes and auto-save (debounced)
-  let saveTimeout: NodeJS.Timeout | null = null
+  let saveTimeout: number | null = null
   watch(sessions, () => {
     if (saveTimeout) clearTimeout(saveTimeout)
     saveTimeout = setTimeout(() => {
