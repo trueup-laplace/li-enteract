@@ -36,7 +36,7 @@ const emit = defineEmits<Emits>()
       @click="emit('toggle-ai-models', $event)"
       class="control-btn group"
       :class="{ 'active': showAIModelsWindow }"
-      title="AI Settings (Ollama)"
+      title="AI Settings"
     >
       <Cog6ToothIcon class="w-4 h-4 transition-all" 
         :class="showAIModelsWindow ? 'text-white' : 'text-white/70 group-hover:text-white'" />

@@ -23,9 +23,9 @@ import LiveAI from '../conversational/LiveAI.vue'
 import ExportControls from '../conversational/ExportControls.vue'
 
 // Composables
-import { useLoopbackTranscription } from './composables/useLoopbackTranscription'
-import { useConversationManagement } from './composables/useConversationManagement'
-import { useAIAssistant } from './composables/useAIAssistant'
+import { useLoopbackTranscription } from '../../composables/useLoopbackTranscription'
+import { useConversationManagement } from '../../composables/useConversationManagement'
+import { useAIAssistant } from '../../composables/useAIAssistant'
 
 interface Props {
   showConversationalWindow: boolean

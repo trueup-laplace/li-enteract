@@ -1,6 +1,6 @@
 import { ref, Ref, onUnmounted } from 'vue'
 import { listen } from '@tauri-apps/api/event'
-import { useConversationStore } from '../../../stores/conversation'
+import { useConversationStore } from '../stores/conversation'
 
 export function useLoopbackTranscription() {
   const conversationStore = useConversationStore()
