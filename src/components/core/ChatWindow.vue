@@ -22,6 +22,7 @@ import { useSpeechEvents } from '../../composables/useSpeechEvents'
 import { useSpeechTranscription } from '../../composables/useSpeechTranscription'
 import AgentActionButtons from './AgentActionButtons.vue'
 import ModelSelector from './ModelSelector.vue'
+import ChatWindowSidebar from '../conversational/ChatWindowSidebar.vue'
 
 interface Props {
   showChatWindow: boolean
@@ -43,9 +44,6 @@ const chatMessages = ref<HTMLElement>()
 
 // Chat sidebar state
 const showChatSidebar = ref(false)
-const renamingChatId = ref<string | null>(null)
-const newChatTitle = ref('')
-const showMenuForChat = ref<string | null>(null)
 
 // Agent and model selection state
 const currentAgent = ref('enteract')
@@ -325,6 +323,7 @@ const handleMicrophoneToggle = async () => {
 // Sidebar functions
 const toggleChatSidebar = () => {
   showChatSidebar.value = !showChatSidebar.value
+  console.log(`💬 Chat sidebar ${showChatSidebar.value ? 'opened' : 'closed'}`)
 }
 
 const handleCreateNewChat = () => {
@@ -334,56 +333,15 @@ const handleCreateNewChat = () => {
 
 const handleSwitchChat = (chatId: string) => {
   switchChat(chatId)
-  showMenuForChat.value = null
   showChatSidebar.value = false
-}
-
-const startRenaming = (chatId: string, currentTitle: string) => {
-  renamingChatId.value = chatId
-  newChatTitle.value = currentTitle
-  showMenuForChat.value = null
-}
-
-const finishRenaming = () => {
-  if (renamingChatId.value && newChatTitle.value.trim()) {
-    renameChat(renamingChatId.value, newChatTitle.value.trim())
-  }
-  renamingChatId.value = null
-  newChatTitle.value = ''
-}
-
-const cancelRenaming = () => {
-  renamingChatId.value = null
-  newChatTitle.value = ''
 }
 
 const handleDeleteChat = (chatId: string) => {
   deleteChat(chatId)
-  showMenuForChat.value = null
 }
 
 const handleClearChat = () => {
   clearChat()
-  showMenuForChat.value = null
-}
-
-const toggleChatMenu = (chatId: string) => {
-  showMenuForChat.value = showMenuForChat.value === chatId ? null : chatId
-}
-
-const formatRelativeTime = (dateString: string) => {
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / (1000 * 60))
-  const diffHours = Math.floor(diffMins / 60)
-  const diffDays = Math.floor(diffHours / 24)
-  
-  if (diffMins < 1) return 'Just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-  if (diffHours < 24) return `${diffHours}h ago`
-  if (diffDays < 7) return `${diffDays}d ago`
-  return date.toLocaleDateString()
 }
 
 
@@ -462,95 +420,16 @@ onUnmounted(() => {
       <!-- Window Content Container -->
       <div class="window-content">
         <!-- Chat Sidebar -->
-        <div v-if="showChatSidebar" class="chat-sidebar">
-          <div class="sidebar-header">
-            <div class="flex items-center gap-2">
-              <ChatBubbleLeftRightIcon class="w-4 h-4 text-blue-400" />
-              <h3 class="text-sm font-medium text-white">Chat Sessions</h3>
-            </div>
-            <button @click="showChatSidebar = false" class="close-sidebar-btn">
-              <XMarkIcon class="w-4 h-4" />
-            </button>
-          </div>
-          
-          <div class="sidebar-content">
-            <!-- New Chat Button -->
-            <button @click="handleCreateNewChat" class="new-chat-btn">
-              <PlusIcon class="w-4 h-4" />
-              New Chat
-            </button>
-            
-            <!-- Chat List -->
-            <div class="chat-list">
-              <div v-if="sortedChats.length === 0" class="empty-state">
-                <ChatBubbleLeftRightIcon class="w-8 h-8 text-white/20 mx-auto mb-2" />
-                <p class="text-white/60 text-xs text-center">No chat sessions yet</p>
-              </div>
-              
-              <div v-else class="chats-grid">
-                <div 
-                  v-for="chat in sortedChats" 
-                  :key="chat.id"
-                  class="chat-item"
-                  :class="{ 'active': chat.id === currentChatId }"
-                  @click="handleSwitchChat(chat.id)"
-                >
-                  <div class="chat-header">
-                    <!-- Chat title (editable) -->
-                    <div v-if="renamingChatId === chat.id" class="w-full">
-                      <input
-                        v-model="newChatTitle"
-                        @keyup.enter="finishRenaming"
-                        @keyup.escape="cancelRenaming"
-                        @blur="finishRenaming"
-                        class="w-full px-2 py-1 text-xs bg-white/10 border border-white/20 rounded text-white/90 focus:outline-none focus:border-blue-500/50"
-                        autofocus
-                      />
-                    </div>
-                    <span v-else class="chat-title">{{ chat.title }}</span>
-                    <button 
-                      @click.stop="toggleChatMenu(chat.id)"
-                      class="menu-btn"
-                      title="Chat options"
-                    >
-                      <EllipsisVerticalIcon class="w-3 h-3" />
-                    </button>
-                  </div>
-                  
-                  <div class="chat-meta">
-                    <div class="meta-row">
-                      <ClockIcon class="w-3 h-3 text-white/40" />
-                      <span class="text-xs text-white/40">{{ formatRelativeTime(chat.updatedAt) }}</span>
-                      <span class="text-xs text-white/40">•</span>
-                      <span class="text-xs text-white/40">{{ chat.history.length }} messages</span>
-                    </div>
-                  </div>
-                  
-                  <!-- Dropdown menu -->
-                  <div v-if="showMenuForChat === chat.id" class="chat-menu">
-                    <button @click.stop="startRenaming(chat.id, chat.title)" class="menu-item">
-                      <PencilIcon class="w-3 h-3" />
-                      <span>Rename</span>
-                    </button>
-                    <button 
-                      v-if="chat.id === currentChatId && chat.history.length > 0"
-                      @click.stop="handleClearChat" 
-                      class="menu-item"
-                    >
-                      <TrashIcon class="w-3 h-3" />
-                      <span>Clear History</span>
-                    </button>
-                    <button @click.stop="handleDeleteChat(chat.id)" class="menu-item danger">
-                      <TrashIcon class="w-3 h-3" />
-                      <span>Delete Chat</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      
+        <ChatWindowSidebar
+          :show="showChatSidebar"
+          :selected-model="selectedModel"
+          @close="showChatSidebar = false"
+          @new-chat="handleCreateNewChat"
+          @switch-chat="handleSwitchChat"
+          @delete-chat="handleDeleteChat"
+          @clear-chat="handleClearChat"
+        />
+        
         <!-- Main Content Area -->
         <div class="main-content" :class="{ 'with-sidebar': showChatSidebar }">
           <!-- Chat Messages Area -->
@@ -722,7 +601,7 @@ onUnmounted(() => {
 }
 
 /* When sidebar is shown, make window wider and use row layout */
-.chat-window:has(.chat-sidebar) {
+.chat-window:has(.chat-window-sidebar) {
   width: 1200px;
   max-width: 95vw;
 }
@@ -731,7 +610,7 @@ onUnmounted(() => {
   @apply flex-1 flex flex-col min-h-0;
 }
 
-.chat-window:has(.chat-sidebar) .window-content {
+.chat-window:has(.chat-window-sidebar) .window-content {
   @apply flex flex-row;
 }
 
@@ -780,33 +659,6 @@ onUnmounted(() => {
   @apply rounded-full p-1 hover:bg-white/10 transition-colors;
 }
 
-/* Chat Sidebar */
-.chat-sidebar {
-  @apply w-80 border-r border-white/10 bg-white/5 backdrop-blur-sm flex flex-col;
-  min-width: 320px;
-  max-width: 400px;
-}
-
-.sidebar-header {
-  @apply flex items-center justify-between px-4 py-3 border-b border-white/10;
-}
-
-.close-sidebar-btn {
-  @apply rounded-full p-1 hover:bg-white/10 transition-colors text-white/70 hover:text-white;
-}
-
-.sidebar-content {
-  @apply flex-1 overflow-hidden flex flex-col;
-}
-
-.new-chat-btn {
-  @apply w-full flex items-center justify-center gap-2 mx-4 my-3 px-4 py-2 bg-blue-500/80 hover:bg-blue-500 text-white rounded-lg transition-all duration-200 font-medium text-sm;
-}
-
-.chat-list {
-  @apply flex-1 overflow-y-auto px-4 pb-4;
-}
-
 .empty-state {
   @apply flex flex-col items-center justify-center h-full text-center p-8;
 }
@@ -815,49 +667,7 @@ onUnmounted(() => {
   @apply mb-4 p-4 rounded-full bg-white/5;
 }
 
-.chats-grid {
-  @apply space-y-2;
-}
 
-.chat-item {
-  @apply rounded-lg bg-white/5 hover:bg-white/10 transition-all duration-200 cursor-pointer p-3 border border-transparent relative;
-}
-
-.chat-item.active {
-  @apply border-blue-500/50 bg-blue-500/10;
-}
-
-.chat-header {
-  @apply flex items-center justify-between mb-2;
-}
-
-.chat-title {
-  @apply text-xs font-medium text-white truncate flex-1 mr-2;
-}
-
-.menu-btn {
-  @apply rounded-full p-1 hover:bg-white/10 transition-colors text-white/60 hover:text-white/90;
-}
-
-.chat-meta {
-  @apply space-y-1 mb-2;
-}
-
-.meta-row {
-  @apply flex items-center gap-1;
-}
-
-.chat-menu {
-  @apply absolute right-3 top-12 bg-black/95 border border-white/20 rounded-lg shadow-xl z-50 py-1 min-w-32;
-}
-
-.menu-item {
-  @apply w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-white/10 transition-colors text-white/80 hover:text-white/90;
-}
-
-.menu-item.danger {
-  @apply text-red-400 hover:text-red-300 hover:bg-red-500/10;
-}
 
 /* Chat Area */
 .chat-area {
