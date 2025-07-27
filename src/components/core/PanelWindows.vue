@@ -88,105 +88,89 @@ const emit = defineEmits<Emits>()
   position: relative;
 }
 
-/* Enhanced Settings Panel Transitions */
+/* Smooth Fade Transitions for Settings Panel */
 .settings-panel-enter-active {
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  transition-delay: 0.1s;
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition-delay: 0.05s;
 }
 
 .settings-panel-leave-active {
-  transition: all 0.25s cubic-bezier(0.55, 0.085, 0.68, 0.53);
+  transition: all 0.2s cubic-bezier(0.55, 0.085, 0.68, 0.53);
 }
 
 .settings-panel-enter-from {
   opacity: 0;
-  transform: translateY(-20px) scale(0.9) rotateX(15deg);
-  filter: blur(8px);
+  transform: translateY(-8px) scale(0.98);
 }
 
 .settings-panel-leave-to {
   opacity: 0;
-  transform: translateY(-15px) scale(0.92);
-  filter: blur(4px);
+  transform: translateY(-5px) scale(0.99);
 }
 
-/* Enhanced Conversational Panel Transitions */
+/* Smooth Fade Transitions for Conversational Panel */
 .conversational-panel-enter-active {
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  transition-delay: 0.1s;
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition-delay: 0.05s;
 }
 
 .conversational-panel-leave-active {
-  transition: all 0.25s cubic-bezier(0.55, 0.085, 0.68, 0.53);
+  transition: all 0.2s cubic-bezier(0.55, 0.085, 0.68, 0.53);
 }
 
 .conversational-panel-enter-from {
   opacity: 0;
-  transform: translateY(-20px) scale(0.9) rotateX(15deg);
-  filter: blur(8px);
+  transform: translateY(-8px) scale(0.98);
 }
 
 .conversational-panel-leave-to {
   opacity: 0;
-  transform: translateY(-15px) scale(0.92);
-  filter: blur(4px);
+  transform: translateY(-5px) scale(0.99);
 }
 
-/* Enhanced Chat Panel Transitions */
+/* Smooth Fade Transitions for Chat Panel */
 .chat-panel-enter-active {
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  transition-delay: 0.1s;
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition-delay: 0.05s;
 }
 
 .chat-panel-leave-active {
-  transition: all 0.25s cubic-bezier(0.55, 0.085, 0.68, 0.53);
+  transition: all 0.2s cubic-bezier(0.55, 0.085, 0.68, 0.53);
 }
 
 .chat-panel-enter-from {
   opacity: 0;
-  transform: translateY(-20px) scale(0.9) rotateX(15deg);
-  filter: blur(8px);
+  transform: translateY(-8px) scale(0.98);
 }
 
 .chat-panel-leave-to {
   opacity: 0;
-  transform: translateY(-15px) scale(0.92);
-  filter: blur(4px);
+  transform: translateY(-5px) scale(0.99);
 }
 
-/* Smooth morphing between windows */
+/* Optimized window containers */
 .settings-panel-section,
 .conversational-panel-section,
 .chat-panel-section {
-  transform-origin: center top;
-  will-change: transform, opacity, filter;
+  will-change: transform, opacity;
   backface-visibility: hidden;
-  perspective: 1000px;
 }
 
-/* Additional spring effect for entering elements */
+/* Additional subtle fade effect for inner content */
 .settings-panel-enter-active .settings-drawer,
 .conversational-panel-enter-active > *,
 .chat-panel-enter-active > * {
-  animation: spring-in 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  animation: gentle-fade-in 0.4s ease-out forwards;
 }
 
-@keyframes spring-in {
+@keyframes gentle-fade-in {
   0% {
-    transform: scale(0.3) translateY(-50px);
     opacity: 0;
-  }
-  50% {
-    transform: scale(1.05) translateY(-10px);
-    opacity: 0.8;
-  }
-  70% {
-    transform: scale(0.98) translateY(-2px);
-    opacity: 0.95;
+    transform: translateY(-5px);
   }
   100% {
-    transform: scale(1) translateY(0);
     opacity: 1;
+    transform: translateY(0);
   }
 }
 </style>
