@@ -201,7 +201,7 @@ const {
   triggerFileUpload,
   handleFileUpload,
   estimateTokens
-} = useChatManagement(props.selectedModel, scrollChatToBottom)
+} = useChatManagement(props.selectedModel, scrollChatToBottom, currentAgent)
 
 // Context truncation detection
 const MAX_TOKENS = 4000
@@ -228,7 +228,7 @@ const { setupSpeechTranscriptionListeners, removeSpeechTranscriptionListeners } 
   toRef(props, 'showChatWindow'),
   scrollChatToBottom,
   chatMessage,
-  sendMessage
+  (agentType?: string) => sendMessage(agentType || currentAgent.value)
 )
 
 // Window resizing composable
@@ -704,10 +704,10 @@ onUnmounted(() => {
     rgba(10, 10, 12, 0.9) 0%, 
     rgba(5, 5, 7, 0.95) 100%
   );
-  width: 600px;
-  height: 700px;
+  width: 800px;
+  height: 900px;
   max-width: 95vw;
-  max-height: calc(100vh - 100px);
+  max-height: calc(100vh - 80px);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -722,7 +722,7 @@ onUnmounted(() => {
 
 /* When sidebar is shown, make window wider and use row layout */
 .chat-window:has(.chat-sidebar) {
-  width: 980px;
+  width: 1200px;
   max-width: 95vw;
 }
 

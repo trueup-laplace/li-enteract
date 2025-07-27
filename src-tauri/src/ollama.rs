@@ -1,9 +1,26 @@
 use serde::{Deserialize, Serialize};
 use reqwest;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use futures_util::StreamExt;
-use crate::system_prompts::*;
+use lazy_static::lazy_static;
+use tokio::sync::Semaphore;
+
+// Shared HTTP client for better connection pooling and memory efficiency
+lazy_static! {
+    static ref HTTP_CLIENT: Arc<reqwest::Client> = Arc::new(
+        reqwest::Client::builder()
+            .pool_max_idle_per_host(8)  // Maintain connection pool per host
+            .pool_idle_timeout(std::time::Duration::from_secs(30))
+            .timeout(std::time::Duration::from_secs(120))  // 2 minute timeout for large models
+            .build()
+            .expect("Failed to create HTTP client")
+    );
+    
+    // Semaphore to limit concurrent AI model requests (memory safety)
+    static ref REQUEST_SEMAPHORE: Arc<Semaphore> = Arc::new(Semaphore::new(3)); // Max 3 concurrent requests
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OllamaModel {
@@ -75,7 +92,125 @@ pub struct GenerateResponse {
 
 const OLLAMA_BASE_URL: &str = "http://localhost:11434";
 
-// System prompts are now imported from system_prompts module
+// System prompts for different agent types
+const ENTERACT_AGENT_PROMPT: &str = r#"You are the Enteract Agent, a built-in private AI assistant integrated securely into the Enteract application. You are designed with zero security leaks and run completely locally.
+
+Key principles:
+- Prioritize user privacy and security above all else
+- Provide helpful, accurate, and concise responses
+- Focus on productivity and efficiency
+- Never request external data or connections
+- Always format responses in clean markdown
+- Be direct and professional in your communication
+
+You have access to the user's local system through the Enteract interface but maintain strict security boundaries. Respond helpfully while being mindful of security best practices."#;
+
+const VISION_ANALYSIS_PROMPT: &str = r#"You are a specialized vision analysis agent. Analyze the provided screenshot/image with extreme detail and provide comprehensive insights.
+
+Focus on:
+- UI/UX elements and design patterns
+- Text content and information hierarchy  
+- Visual composition and layout
+- Potential accessibility issues
+- Areas for improvement or optimization
+- Any notable patterns or anomalies
+
+Provide your analysis in well-structured markdown format with clear headings and bullet points. Be thorough but organized in your response."#;
+
+const CODING_AGENT_PROMPT: &str = r#"You are a specialized coding assistant powered by Qwen2.5-Coder, designed to excel at programming tasks, code analysis, and software development guidance.
+
+CORE CAPABILITIES:
+- Write clean, efficient, and well-documented code
+- Debug and troubleshoot programming issues
+- Perform code reviews and suggest improvements
+- Explain complex programming concepts clearly
+- Provide architecture and design guidance
+- Support multiple programming languages and frameworks
+
+CODING STANDARDS:
+- Follow language-specific best practices and conventions
+- Write secure, maintainable, and scalable code
+- Include comprehensive comments and documentation
+- Suggest appropriate testing strategies
+- Consider performance and optimization opportunities
+
+RESPONSE FORMAT:
+- Provide clear explanations before code examples
+- Use proper markdown formatting with syntax highlighting
+- Include comments within code for clarity
+- Offer multiple approaches when applicable
+- Explain trade-offs between different solutions
+
+SUPPORTED AREAS:
+- Web development (JavaScript, TypeScript, React, Vue, etc.)
+- Backend development (Python, Rust, Go, Java, etc.)
+- Mobile development (Swift, Kotlin, React Native, etc.)
+- DevOps and infrastructure (Docker, CI/CD, cloud platforms)
+- Data science and machine learning
+- System programming and embedded development
+
+Always prioritize code quality, security, and maintainability in your responses."#;
+
+const DEEP_RESEARCH_PROMPT: &str = r#"You are a deep research specialist agent powered by DeepSeek R1's advanced reasoning capabilities. You excel at systematic analysis and step-by-step thinking.
+
+IMPORTANT: Start your response with a thinking section wrapped in <thinking> tags to show your reasoning process, then provide your final answer.
+
+<thinking>
+Break down the problem step by step:
+1. Understand what the user is asking
+2. Consider multiple approaches and perspectives
+3. Analyze each component systematically
+4. Evaluate evidence and sources
+5. Synthesize findings into coherent insights
+</thinking>
+
+After your thinking section, provide a comprehensive response with:
+- Executive summary
+- Detailed analysis sections  
+- Key findings and insights
+- Actionable recommendations
+- Supporting reasoning chains
+
+RESEARCH METHODOLOGY:
+- Apply critical thinking and logical reasoning
+- Consider multiple perspectives and viewpoints
+- Identify potential biases and limitations
+- Draw connections between concepts and ideas
+- Provide evidence-based conclusions
+
+RESPONSE STRUCTURE:
+- Lead with your <thinking> process
+- Follow with clear, organized analysis
+- Use markdown formatting for readability
+- Include relevant examples and case studies
+- Conclude with actionable insights
+
+Use clear markdown formatting and show your complete reasoning process for transparency and verification."#;
+
+const CONVERSATIONAL_AI_PROMPT: &str = r#"You are a live conversation response assistant designed to help users provide valuable input during real-time conversations. Your role is to continuously analyze the conversation flow and suggest thoughtful, contextual responses.
+
+CORE PRINCIPLES:
+- Monitor conversation context and provide real-time response suggestions
+- Adapt to the conversation's tone, topic, and participants
+- Suggest responses that advance the conversation meaningfully
+- Be concise but impactful in your suggestions
+- Help the user contribute valuable insights during live discussions
+
+RESPONSE GUIDELINES:
+- Keep suggestions brief and actionable (1-3 sentences max)
+- Match the conversation's formality level
+- Provide multiple response options when appropriate
+- Consider the user's role in the conversation (presenter, participant, observer)
+- Suggest clarifying questions when context is unclear
+- Offer supportive or engaging responses that maintain conversation flow
+
+CONVERSATION TYPES:
+- Business meetings: Focus on actionable insights and professional responses
+- Casual discussions: Suggest engaging and relatable contributions  
+- Technical conversations: Provide knowledgeable and specific input
+- Educational contexts: Suggest questions that deepen understanding
+
+Always aim to help the user be a thoughtful, engaged participant who adds value to the conversation."#;
 
 
 // Helper function to build prompt with chat context
@@ -110,11 +245,11 @@ fn build_prompt_with_context(current_prompt: String, context: Option<Vec<ChatCon
 // Shared streaming logic
 async fn stream_ollama_response(
     app_handle: AppHandle,
-    client: reqwest::Client,
     url: String,
     request: GenerateRequest,
     session_id: String,
 ) -> Result<(), String> {
+    let client = Arc::clone(&HTTP_CLIENT);
     match client.post(&url).json(&request).send().await {
         Ok(response) => {
             if response.status().is_success() {
@@ -212,7 +347,7 @@ async fn stream_ollama_response(
 
 #[tauri::command]
 pub async fn get_ollama_models() -> Result<Vec<OllamaModel>, String> {
-    let client = reqwest::Client::new();
+    let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/tags", OLLAMA_BASE_URL);
     
     match client.get(&url).send().await {
@@ -232,7 +367,7 @@ pub async fn get_ollama_models() -> Result<Vec<OllamaModel>, String> {
 
 #[tauri::command]
 pub async fn get_ollama_status() -> Result<OllamaStatus, String> {
-    let client = reqwest::Client::new();
+    let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/version", OLLAMA_BASE_URL);
     
     match client.get(&url).send().await {
@@ -261,7 +396,7 @@ pub async fn get_ollama_status() -> Result<OllamaStatus, String> {
 
 #[tauri::command]
 pub async fn pull_ollama_model(model_name: String) -> Result<String, String> {
-    let client = reqwest::Client::new();
+    let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/pull", OLLAMA_BASE_URL);
     
     let request = PullRequest {
@@ -285,7 +420,7 @@ pub async fn pull_ollama_model(model_name: String) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn delete_ollama_model(model_name: String) -> Result<String, String> {
-    let client = reqwest::Client::new();
+    let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/delete", OLLAMA_BASE_URL);
     
     let request = serde_json::json!({
@@ -307,7 +442,7 @@ pub async fn delete_ollama_model(model_name: String) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn generate_ollama_response(model: String, prompt: String) -> Result<String, String> {
-    let client = reqwest::Client::new();
+    let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/generate", OLLAMA_BASE_URL);
     
     let request = GenerateRequest {
@@ -342,7 +477,7 @@ pub async fn generate_ollama_response_stream(
     prompt: String,
     session_id: String,
 ) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/generate", OLLAMA_BASE_URL);
     
     let request = GenerateRequest {
@@ -500,6 +635,20 @@ pub async fn generate_vision_analysis(
 }
 
 #[tauri::command]
+pub async fn generate_coding_agent_response(
+    app_handle: AppHandle,
+    prompt: String,
+    context: Option<Vec<ChatContextMessage>>,
+    session_id: String,
+) -> Result<(), String> {
+    let model = "qwen2.5-coder:1.5b".to_string();
+    let full_prompt = format!("Coding Request:\n\n{}", prompt);
+    
+    println!("💻 CODING AGENT: Using model {} for session {}", model, session_id);
+    generate_agent_response_stream(app_handle, model, full_prompt, CODING_AGENT_PROMPT.to_string(), context, session_id, "coding".to_string()).await
+}
+
+#[tauri::command]
 pub async fn generate_deep_research(
     app_handle: AppHandle,
     prompt: String,
@@ -510,7 +659,7 @@ pub async fn generate_deep_research(
     let full_prompt = format!("Deep Research Query:\n\n{}", prompt);
     
     println!("🧠 DEEP RESEARCH: Using model {} for session {}", model, session_id);
-    generate_agent_response_stream(app_handle, model, full_prompt, DEEP_RESEARCH_PROMPT.to_string(), context, session_id, "deep_research".to_string()).await
+    generate_agent_response_stream(app_handle, model, full_prompt, DEEP_RESEARCH_PROMPT.to_string(), context, session_id, "research".to_string()).await
 }
 
 #[tauri::command]
@@ -539,7 +688,11 @@ async fn generate_agent_response_stream(
     session_id: String,
     agent_type: String,
 ) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    // Acquire semaphore permit for memory safety (limits concurrent model loads)
+    let _permit = REQUEST_SEMAPHORE.acquire().await.map_err(|e| format!("Failed to acquire semaphore: {}", e))?;
+    
+    println!("🔒 Acquired request semaphore for {} agent (session: {})", agent_type, session_id);
+    
     let url = format!("{}/api/generate", OLLAMA_BASE_URL);
     
     // Build full prompt with context
@@ -565,7 +718,12 @@ async fn generate_agent_response_stream(
         return Err(format!("Failed to emit start event: {}", e));
     }
     
-    stream_ollama_response(app_handle, client, url, request, session_id).await
+    let result = stream_ollama_response(app_handle, url, request, session_id).await;
+    
+    // Semaphore is automatically released when _permit goes out of scope
+    println!("🔓 Released request semaphore for {} agent (session: {})", agent_type, session_id);
+    
+    result
 }
 
 // Helper function for streaming with image
@@ -579,7 +737,11 @@ async fn generate_agent_response_stream_with_image(
     session_id: String,
     agent_type: String,
 ) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    // Acquire semaphore permit for memory safety (limits concurrent model loads)
+    let _permit = REQUEST_SEMAPHORE.acquire().await.map_err(|e| format!("Failed to acquire semaphore: {}", e))?;
+    
+    println!("🔒 Acquired request semaphore for {} agent with image (session: {})", agent_type, session_id);
+    
     let url = format!("{}/api/generate", OLLAMA_BASE_URL);
     
     // Build full prompt with context (if provided)
@@ -605,12 +767,17 @@ async fn generate_agent_response_stream_with_image(
         return Err(format!("Failed to emit start event: {}", e));
     }
     
-    stream_ollama_response(app_handle, client, url, request, session_id).await
+    let result = stream_ollama_response(app_handle, url, request, session_id).await;
+    
+    // Semaphore is automatically released when _permit goes out of scope
+    println!("🔓 Released request semaphore for {} agent (session: {})", agent_type, session_id);
+    
+    result
 }
 
 #[tauri::command]
 pub async fn get_ollama_model_info(model_name: String) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::new();
+    let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/show", OLLAMA_BASE_URL);
     
     let request = serde_json::json!({

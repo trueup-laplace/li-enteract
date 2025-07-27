@@ -77,6 +77,17 @@ const currentAgentData = computed(() => {
   return agents.find(agent => agent.id === props.currentAgent) || agents[0]
 })
 
+// Obfuscated model display names
+const getObfuscatedModelName = (agentId: string): string => {
+  const modelMap: Record<string, string> = {
+    'enteract': 'Neural Core v1',
+    'coding': 'Code Catalyst v2.5', 
+    'research': 'DeepThink R1',
+    'vision': 'Vision Pro v2.5'
+  }
+  return modelMap[agentId] || 'AI Model'
+}
+
 const availableModels = computed(() => {
   return ollamaModels.value.map(model => ({
     name: model.name,
@@ -145,7 +156,7 @@ watch(isOpen, (newValue) => {
         </div>
         <div class="selector-text">
           <div class="agent-name">{{ currentAgentData.name }}</div>
-          <div v-if="selectedModel" class="model-name">{{ selectedModel.split(':')[0] }}</div>
+          <div class="model-name">{{ getObfuscatedModelName(currentAgent) }}</div>
         </div>
       </div>
       <ChevronDownIcon class="w-4 h-4 text-white/60 transition-transform duration-200" 
@@ -252,7 +263,17 @@ watch(isOpen, (newValue) => {
 }
 
 .dropdown-menu {
-  @apply absolute top-full left-0 right-0 mt-2 bg-black/95 border border-white/20 rounded-xl shadow-xl backdrop-blur-sm z-50 max-h-96 overflow-y-auto;
+  @apply absolute top-full left-0 right-0 mt-2 border rounded-xl shadow-xl backdrop-blur-sm z-50 max-h-96 overflow-y-auto;
+  background: linear-gradient(to bottom, 
+    rgba(0, 0, 0, 0.95) 0%, 
+    rgba(10, 10, 15, 0.98) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.6),
+    0 8px 20px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px) saturate(180%);
 }
 
 .dropdown-section {
@@ -278,11 +299,14 @@ watch(isOpen, (newValue) => {
 .agent-option {
   @apply w-full p-3 rounded-lg border transition-all duration-200 text-left;
   background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .agent-option:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .agent-option.selected {

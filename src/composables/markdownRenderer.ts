@@ -25,13 +25,16 @@ export class MarkdownRenderer {
         .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
         .replace(/\*(.*?)\*/g, '<em class="italic text-white/90">$1</em>')
         
-        // Code blocks with syntax highlighting hints
+        // Code blocks with enhanced syntax highlighting
         .replace(/```(\w+)?\n?([\s\S]*?)```/g, (match, lang, code) => {
           const language = lang || 'text'
-          const langClass = this.getLanguageClass(language)
-          return `<div class="bg-black/30 border border-white/20 rounded-lg p-3 my-2 font-mono text-sm overflow-x-auto">
-            <div class="text-xs text-white/60 mb-2 uppercase tracking-wide">${language}</div>
-            <div class="${langClass}">${code}</div>
+          const highlightedCode = this.highlightCode(code.trim(), language)
+          return `<div class="code-block bg-black/40 border border-white/20 rounded-lg p-4 my-3 font-mono text-sm overflow-x-auto">
+            <div class="code-header flex items-center justify-between mb-3">
+              <div class="text-xs text-white/60 uppercase tracking-wide font-semibold">${language}</div>
+              <button onclick="navigator.clipboard.writeText(\`${code.trim().replace(/`/g, '\\`')}\`)" class="text-xs text-white/40 hover:text-white/70 transition-colors">Copy</button>
+            </div>
+            <div class="code-content leading-relaxed">${highlightedCode}</div>
           </div>`
         })
         .replace(/`(.*?)`/g, '<code class="bg-black/40 px-1.5 py-0.5 rounded text-sm font-mono text-cyan-300">$1</code>')
@@ -67,6 +70,97 @@ export class MarkdownRenderer {
         // Line breaks
         .replace(/\n\n/g, '<br/><br/>')
         .replace(/\n/g, '<br/>')
+    }
+    
+    private static highlightCode(code: string, language: string): string {
+      if (!code) return ''
+      
+      // Escape HTML
+      const escapedCode = code
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+      
+      switch (language.toLowerCase()) {
+        case 'python':
+          return this.highlightPython(escapedCode)
+        case 'javascript':
+        case 'js':
+          return this.highlightJavaScript(escapedCode)
+        case 'typescript':
+        case 'ts':
+          return this.highlightTypeScript(escapedCode)
+        case 'rust':
+          return this.highlightRust(escapedCode)
+        case 'json':
+          return this.highlightJSON(escapedCode)
+        default:
+          return `<span class="text-gray-300">${escapedCode}</span>`
+      }
+    }
+    
+    private static highlightPython(code: string): string {
+      return code
+        // Keywords
+        .replace(/\b(def|class|if|elif|else|for|while|try|except|finally|with|as|import|from|return|yield|break|continue|pass|raise|assert|global|nonlocal|lambda|and|or|not|in|is|True|False|None)\b/g, 
+          '<span class="text-purple-400 font-semibold">$1</span>')
+        // Built-in functions
+        .replace(/\b(print|len|range|enumerate|zip|map|filter|sum|max|min|sorted|reversed|any|all|isinstance|type|str|int|float|list|dict|set|tuple)\b(?=\s*\()/g, 
+          '<span class="text-blue-400">$1</span>')
+        // Strings
+        .replace(/(["'`])([^"'`]*?)\1/g, '<span class="text-green-300">$1$2$1</span>')
+        // Comments
+        .replace(/#.*/g, '<span class="text-gray-500 italic">$&</span>')
+        // Numbers
+        .replace(/\b\d+\.?\d*\b/g, '<span class="text-orange-400">$&</span>')
+        // Decorators
+        .replace(/@\w+/g, '<span class="text-pink-400">$&</span>')
+        // Self
+        .replace(/\bself\b/g, '<span class="text-cyan-400">$&</span>')
+        // Function names in definitions
+        .replace(/def\s+(\w+)/g, 'def <span class="text-yellow-400 font-semibold">$1</span>')
+        // Class names in definitions
+        .replace(/class\s+(\w+)/g, 'class <span class="text-yellow-400 font-semibold">$1</span>')
+    }
+    
+    private static highlightJavaScript(code: string): string {
+      return code
+        .replace(/\b(const|let|var|function|class|if|else|for|while|do|switch|case|default|try|catch|finally|return|break|continue|throw|new|this|super|extends|import|export|from|async|await|typeof|instanceof)\b/g, 
+          '<span class="text-purple-400 font-semibold">$1</span>')
+        .replace(/(["'`])([^"'`]*?)\1/g, '<span class="text-green-300">$1$2$1</span>')
+        .replace(/\/\/.*$/gm, '<span class="text-gray-500 italic">$&</span>')
+        .replace(/\/\*[\s\S]*?\*\//g, '<span class="text-gray-500 italic">$&</span>')
+        .replace(/\b\d+\.?\d*\b/g, '<span class="text-orange-400">$&</span>')
+    }
+    
+    private static highlightTypeScript(code: string): string {
+      return code
+        .replace(/\b(const|let|var|function|class|interface|type|enum|if|else|for|while|do|switch|case|default|try|catch|finally|return|break|continue|throw|new|this|super|extends|implements|import|export|from|async|await|typeof|instanceof|public|private|protected|readonly|static)\b/g, 
+          '<span class="text-purple-400 font-semibold">$1</span>')
+        .replace(/(["'`])([^"'`]*?)\1/g, '<span class="text-green-300">$1$2$1</span>')
+        .replace(/\/\/.*$/gm, '<span class="text-gray-500 italic">$&</span>')
+        .replace(/\/\*[\s\S]*?\*\//g, '<span class="text-gray-500 italic">$&</span>')
+        .replace(/\b\d+\.?\d*\b/g, '<span class="text-orange-400">$&</span>')
+    }
+    
+    private static highlightRust(code: string): string {
+      return code
+        .replace(/\b(fn|let|mut|const|struct|enum|impl|trait|pub|use|mod|crate|super|self|if|else|match|for|while|loop|break|continue|return|async|await|unsafe|extern|static|type|where)\b/g, 
+          '<span class="text-purple-400 font-semibold">$1</span>')
+        .replace(/(["'])([^"']*?)\1/g, '<span class="text-green-300">$1$2$1</span>')
+        .replace(/\/\/.*$/gm, '<span class="text-gray-500 italic">$&</span>')
+        .replace(/\/\*[\s\S]*?\*\//g, '<span class="text-gray-500 italic">$&</span>')
+        .replace(/\b\d+\.?\d*\b/g, '<span class="text-orange-400">$&</span>')
+    }
+    
+    private static highlightJSON(code: string): string {
+      return code
+        .replace(/"([^"]+)":/g, '<span class="text-blue-400">"$1"</span>:')
+        .replace(/:\s*"([^"]*)"/g, ': <span class="text-green-300">"$1"</span>')
+        .replace(/:\s*(true|false|null)\b/g, ': <span class="text-purple-400">$1</span>')
+        .replace(/:\s*(\d+\.?\d*)/g, ': <span class="text-orange-400">$1</span>')
     }
     
     private static getLanguageClass(language: string): string {

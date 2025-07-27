@@ -134,13 +134,28 @@ export class AgentService {
       // Generate unique session ID for streaming
       const sessionId = `chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       
-      // Get appropriate model and agent name
+      // Get appropriate model and agent name based on agent type
       let modelToUse = selectedModel || 'gemma3:1b-it-qat'
       let agentName = 'Enteract AI'
       
-      if (agentType === 'deep_research') {
-        modelToUse = 'deepseek-r1:1.5b'
-        agentName = 'Deep Research AI'
+      switch (agentType) {
+        case 'coding':
+          modelToUse = 'qwen2.5-coder:1.5b'
+          agentName = 'Coding Assistant'
+          break
+        case 'research':
+          modelToUse = 'deepseek-r1:1.5b'
+          agentName = 'Deep Research AI'
+          break
+        case 'vision':
+          modelToUse = 'qwen2.5vl:3b'
+          agentName = 'Vision Analysis AI'
+          break
+        case 'enteract':
+        default:
+          modelToUse = selectedModel || 'gemma3:1b-it-qat'
+          agentName = 'Enteract AI'
+          break
       }
       
       // Add streaming response placeholder
@@ -188,7 +203,7 @@ export class AgentService {
               fullResponse += data.text
               
               // For deep research, handle thinking vs response separately
-              if (agentType === 'deep_research') {
+              if (agentType === 'research') {
                 // Improved thinking tag detection
                 const thinkingStartMatch = data.text.match(/<thinking>/i)
                 const thinkingEndMatch = data.text.match(/<\/thinking>/i)
@@ -223,8 +238,12 @@ export class AgentService {
               if (currentHistory[streamingMessageIndex]) {
                 let displayText = ''
                 
-                if (agentType === 'deep_research') {
+                if (agentType === 'research') {
                   displayText = `🧠 **Deep Research Analysis**\n\n${actualResponse.trim()}${isTyping ? '▋' : ''}`
+                } else if (agentType === 'coding') {
+                  displayText = `💻 **Coding Assistant**\n\n${actualResponse.trim()}${isTyping ? '▋' : ''}`
+                } else if (agentType === 'vision') {
+                  displayText = `👁️ **Vision Analysis**\n\n${actualResponse.trim()}${isTyping ? '▋' : ''}`
                 } else {
                   displayText = `🤖 **${agentName}**\n\n${actualResponse.trim()}${isTyping ? '▋' : ''}`
                 }
@@ -242,7 +261,7 @@ export class AgentService {
               if (currentHistory[streamingMessageIndex]) {
                 let finalText = ''
                 
-                if (agentType === 'deep_research') {
+                if (agentType === 'research') {
                   if (thinkingContent.trim()) {
                     // Create collapsible thinking section with better styling
                     const thinkingDisplay = `<details style="margin: 15px 0; border: 1px solid rgba(147, 51, 234, 0.3); border-radius: 12px; padding: 15px; background: rgba(147, 51, 234, 0.05);">
@@ -255,6 +274,10 @@ export class AgentService {
                   } else {
                     finalText = `🧠 **Deep Research Analysis**\n\n${actualResponse.trim()}`
                   }
+                } else if (agentType === 'coding') {
+                  finalText = `💻 **Coding Assistant**\n\n${actualResponse.trim()}`
+                } else if (agentType === 'vision') {
+                  finalText = `👁️ **Vision Analysis**\n\n${actualResponse.trim()}`
                 } else {
                   // Clean formatting for other agents
                   const agentDisplayName = agentName === 'Enteract AI' ? 'AI Assistant' : agentName
@@ -273,8 +296,12 @@ export class AgentService {
             // Update message to show error
             if (currentHistory[streamingMessageIndex]) {
               let errorMessage = `❌ Error: ${data.error}`
-              if (data.error.includes('deepseek-r1:1.5b') && agentType === 'deep_research') {
+              if (data.error.includes('deepseek-r1:1.5b') && agentType === 'research') {
                 errorMessage = `❌ DeepSeek R1 model not found. Please install it first:\n\n\`\`\`bash\nollama pull deepseek-r1:1.5b\n\`\`\``
+              } else if (data.error.includes('qwen2.5-coder:1.5b') && agentType === 'coding') {
+                errorMessage = `❌ Qwen2.5-Coder model not found. Please install it first:\n\n\`\`\`bash\nollama pull qwen2.5-coder:1.5b\n\`\`\``
+              } else if (data.error.includes('qwen2.5vl:3b') && agentType === 'vision') {
+                errorMessage = `❌ Qwen2.5-VL model not found. Please install it first:\n\n\`\`\`bash\nollama pull qwen2.5vl:3b\n\`\`\``
               } else if (data.error.includes('connection refused') || data.error.includes('ECONNREFUSED')) {
                 errorMessage = `❌ Cannot connect to Ollama. Please make sure Ollama is running:\n\n\`\`\`bash\nollama serve\n\`\`\``
               }
@@ -309,21 +336,44 @@ export class AgentService {
       console.log(`📊 Context prepared: ${truncatedContext.length} messages, estimated ~${truncatedContext.reduce((sum, msg) => sum + ContextManager.estimateTokens(msg.content), 0)} tokens`)
       
       // Route to appropriate agent based on type
-      if (agentType === 'deep_research') {
-        console.log('🧠 FRONTEND: Calling generate_deep_research (should use deepseek-r1:1.5b)')
-        await invoke('generate_deep_research', {
-          prompt: userMessage,
-          context: truncatedContext,
-          sessionId: sessionId
-        })
-      } else {
-        console.log('🛡️ FRONTEND: Calling generate_enteract_agent_response (should use gemma3:1b-it-qat)')
-        // Default to Enteract agent (gemma with security focus)
-        await invoke('generate_enteract_agent_response', {
-          prompt: userMessage,
-          context: truncatedContext,
-          sessionId: sessionId
-        })
+      switch (agentType) {
+        case 'coding':
+          console.log('💻 FRONTEND: Calling generate_coding_agent_response (should use qwen2.5-coder:1.5b)')
+          await invoke('generate_coding_agent_response', {
+            prompt: userMessage,
+            context: truncatedContext,
+            sessionId: sessionId
+          })
+          break
+          
+        case 'research':
+          console.log('🧠 FRONTEND: Calling generate_deep_research (should use deepseek-r1:1.5b)')
+          await invoke('generate_deep_research', {
+            prompt: userMessage,
+            context: truncatedContext,
+            sessionId: sessionId
+          })
+          break
+          
+        case 'vision':
+          console.log('👁️ FRONTEND: Calling generate_vision_analysis (should use qwen2.5vl:3b)')
+          // Note: Vision analysis typically needs an image, but we'll call it anyway
+          await invoke('generate_vision_analysis', {
+            prompt: userMessage,
+            imageBase64: '', // Empty for text-only requests
+            sessionId: sessionId
+          })
+          break
+          
+        case 'enteract':
+        default:
+          console.log('🛡️ FRONTEND: Calling generate_enteract_agent_response (should use gemma3:1b-it-qat)')
+          await invoke('generate_enteract_agent_response', {
+            prompt: userMessage,
+            context: truncatedContext,
+            sessionId: sessionId
+          })
+          break
       }
       
       // Clear the loading timeout
