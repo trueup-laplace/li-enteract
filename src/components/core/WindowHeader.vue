@@ -52,7 +52,7 @@ const onMouseOver = () => {
     <!-- Left: App Title (draggable) -->
     <div class="header-section draggable-area">
       <div class="w-2 h-2 rounded-full bg-gradient-to-r from-blue-400 to-purple-500"></div>
-      <span class="text-xs text-white/60 select-none font-medium">Agentic Assistant</span>
+      <span class="text-xs text-white/60 select-none font-medium">Enteract</span>
     </div>
 
     <!-- Center: Status (draggable) -->
