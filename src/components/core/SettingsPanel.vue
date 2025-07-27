@@ -68,6 +68,7 @@ const {
 const audioDevices = ref<AudioLoopbackDevice[]>([])
 const isLoadingAudioDevices = ref(false)
 const audioDevicesError = ref<string | null>(null)
+const testingDeviceId = ref<string | null>(null)
 const audioSettings = ref<AudioDeviceSettings>({
   selectedLoopbackDevice: null,
   loopbackEnabled: false,
@@ -164,7 +165,12 @@ const loadSettings = async () => {
   try {
     const storedAudioSettings = await invoke<AudioDeviceSettings | null>('load_audio_settings')
     if (storedAudioSettings) {
-      audioSettings.value = storedAudioSettings
+      // Make sure to preserve the loaded selected device
+      audioSettings.value = {
+        ...audioSettings.value,
+        ...storedAudioSettings
+      }
+      console.log('📂 Loaded audio settings:', storedAudioSettings)
     }
     
     const storedGeneralSettings = await invoke<any>('load_general_settings')
@@ -270,12 +276,49 @@ const clearAudioError = () => {
 }
 
 const selectAudioDevice = async (deviceId: string) => {
-  const testResult = await testAudioDevice(deviceId)
-  if (testResult) {
+  console.log('🔊 selectAudioDevice called with:', deviceId)
+  
+  // Check if already selected
+  if (audioSettings.value.selectedLoopbackDevice === deviceId) {
+    console.log('🔊 Device already selected:', deviceId)
+    return
+  }
+  
+  // Clear any previous errors
+  audioDevicesError.value = null
+  
+  // Set testing state
+  testingDeviceId.value = deviceId
+  
+  try {
+    // For now, let's skip the test and directly select the device
+    // This will help us determine if the issue is with the test function
+    console.log('🔊 Selecting audio device:', deviceId)
+    
+    // Update the selected device directly
     audioSettings.value.selectedLoopbackDevice = deviceId
-    console.log('🔊 Selected audio device:', deviceId)
-  } else {
-    audioDevicesError.value = 'Failed to initialize selected audio device'
+    console.log('🔊 Successfully selected audio device:', deviceId)
+    
+    // Save settings immediately
+    await saveAudioSettings()
+    
+    // Optional: Test the device after selection (non-blocking)
+    testAudioDevice(deviceId).then(testResult => {
+      if (!testResult) {
+        console.warn('⚠️ Audio device test failed, but device remains selected:', deviceId)
+      } else {
+        console.log('✅ Audio device test passed:', deviceId)
+      }
+    }).catch(error => {
+      console.error('❌ Audio device test error:', error)
+    })
+    
+  } catch (error) {
+    console.error('❌ Error selecting audio device:', error)
+    audioDevicesError.value = `Error: ${error instanceof Error ? error.message : 'Failed to select device'}`
+  } finally {
+    // Clear testing state
+    testingDeviceId.value = null
   }
 }
 
@@ -557,12 +600,15 @@ onMounted(() => {
                 
                 <div class="device-actions">
                   <button
-                    @click="selectAudioDevice(device.id)"
+                    @click="() => { console.log('Button clicked!', device.id); selectAudioDevice(device.id) }"
                     :class="{ 'active': audioSettings.selectedLoopbackDevice === device.id }"
                     class="select-btn"
                     title="Select Device"
+                    :disabled="isLoadingAudioDevices || testingDeviceId !== null"
+                    type="button"
                   >
-                    {{ audioSettings.selectedLoopbackDevice === device.id ? '✓' : '○' }}
+                    <span v-if="testingDeviceId === device.id" class="animate-spin">⟳</span>
+                    <span v-else>{{ audioSettings.selectedLoopbackDevice === device.id ? '✓' : '○' }}</span>
                   </button>
                 </div>
               </div>
@@ -1107,11 +1153,34 @@ onMounted(() => {
 }
 
 .select-btn {
-  @apply w-6 h-6 rounded-full border border-white/30 text-xs flex items-center justify-center hover:bg-white/10 transition-colors;
+  @apply w-8 h-8 rounded-full border-2 border-white/30 text-sm flex items-center justify-center transition-all duration-200;
+  font-weight: bold;
+  position: relative;
+  z-index: 20;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.select-btn:hover:not(:disabled) {
+  @apply border-white/50 transform scale-110;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.select-btn:active:not(:disabled) {
+  @apply transform scale-95;
+}
+
+.select-btn:disabled {
+  @apply opacity-50 cursor-not-allowed;
 }
 
 .select-btn.active {
-  @apply bg-green-500/80 border-green-400 text-white;
+  @apply bg-green-500/80 border-green-400 text-white shadow-lg;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+}
+
+.select-btn.active:hover:not(:disabled) {
+  @apply bg-green-500 border-green-300;
 }
 
 .delete-btn {
@@ -1270,6 +1339,8 @@ onMounted(() => {
   background: linear-gradient(135deg, rgba(168, 85, 247, 0.03) 0%, rgba(236, 72, 153, 0.02) 100%);
   opacity: 0;
   transition: opacity 0.3s ease;
+  pointer-events: none; /* Allow clicks to pass through */
+  z-index: 1;
 }
 
 .audio-device-item:hover {
@@ -1291,6 +1362,8 @@ onMounted(() => {
 
 .device-info {
   @apply flex-1;
+  position: relative;
+  z-index: 2;
 }
 
 .device-header {
@@ -1319,6 +1392,8 @@ onMounted(() => {
 
 .device-actions {
   @apply flex items-center gap-2;
+  position: relative;
+  z-index: 10;
 }
 
 .no-devices {
