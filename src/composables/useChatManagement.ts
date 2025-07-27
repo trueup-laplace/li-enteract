@@ -1,5 +1,5 @@
 // useChatManagement.ts - Main composable that orchestrates all chat functionality
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted, type Ref } from 'vue'
 import type { ChatMessage } from '../types/chat'
 import { sharedChatState } from './sharedState'
 import { StorageService } from './storageService'
@@ -10,7 +10,7 @@ import { FileService } from './fileService'
 import { ContextManager } from './contextManager'
 import { MarkdownRenderer } from './markdownRenderer'
 
-export const useChatManagement = (selectedModel: string | null, scrollChatToBottom: () => void) => {
+export const useChatManagement = (selectedModel: string | null, scrollChatToBottom: () => void, currentAgent?: Ref<string>) => {
   const chatMessage = ref('')
   const fileInput = ref<HTMLInputElement>()
   
@@ -29,20 +29,26 @@ export const useChatManagement = (selectedModel: string | null, scrollChatToBott
   const currentChatSession = SessionManager.getCurrentChatSession()
 
   // Send message function that uses AgentService
-  const sendMessage = async (agentType: string = 'enteract') => {
-    if (!chatMessage.value.trim()) return
+  const sendMessage = async (agentType: string = 'enteract', customMessage?: string) => {
+    // Use custom message if provided, otherwise use chatMessage.value
+    const messageToSend = customMessage || chatMessage.value.trim()
+    if (!messageToSend) return
     
-    const userMessage = chatMessage.value.trim()
-    chatMessage.value = ''
+    // Only clear chatMessage if we're using it (not a custom message)
+    if (!customMessage) {
+      chatMessage.value = ''
+    }
     
-    await AgentService.sendMessage(userMessage, selectedModel, agentType)
+    await AgentService.sendMessage(messageToSend, selectedModel, agentType)
   }
 
   // Keyboard handler
   const handleChatKeydown = (event: KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
-      sendMessage()
+      // Use the current agent if provided, otherwise default to 'enteract'
+      const agentToUse = currentAgent?.value || 'enteract'
+      sendMessage(agentToUse)
     }
   }
 

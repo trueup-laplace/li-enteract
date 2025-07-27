@@ -17,7 +17,8 @@
       "Bash(move \"C:\\_dev\\enteract\\src\\components\\core\\ConversationalWindow.vue\" \"C:\\_dev\\enteract\\src\\components\\core\\ConversationalWindow.vue.backup\")",
       "Bash(mv:*)",
       "Bash(npm run type-check:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(rustc:*)"
     ],
     "deny": []
   }

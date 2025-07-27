@@ -409,7 +409,7 @@ onMounted(() => {
             <div class="section-header">
               <h2 class="section-title">AI Models</h2>
               <p class="section-description">
-                Manage AI models for transcription analysis and intelligent responses. Enteract uses Ollama to run models locally for privacy and performance.
+                Manage AI models for transcription analysis and intelligent responses. Enteract runs models locally for privacy and performance.
               </p>
             </div>
             
@@ -503,7 +503,7 @@ onMounted(() => {
                 <h4 class="text-white/80 text-sm font-medium mb-2">Pull New Model</h4>
                 <div class="popular-models">
                   <button 
-                    v-for="modelName in ['gemma3:1b-it-qat', 'qwen2.5vl:3b', 'deepseek-r1:1.5b', 'llama3.2']" 
+                    v-for="modelName in ['gemma3:1b-it-qat', 'qwen2.5vl:3b', 'qwen2.5-coder:1.5b', 'deepseek-r1:1.5b', 'llama3.2']" 
                     :key="modelName"
                     @click="pullModel(modelName)"
                     :disabled="pullingModel === modelName"
@@ -511,6 +511,7 @@ onMounted(() => {
                     :class="{ 
                       'recommended': modelName === 'gemma3:1b-it-qat',
                       'vision-model': modelName === 'qwen2.5vl:3b',
+                      'coding-model': modelName === 'qwen2.5-coder:1.5b',
                       'research-model': modelName === 'deepseek-r1:1.5b'
                     }"
                   >
@@ -519,6 +520,7 @@ onMounted(() => {
                     <span>{{ modelName }}</span>
                     <span v-if="modelName === 'gemma3:1b-it-qat'" class="recommended-badge">Enteract Agent</span>
                     <span v-if="modelName === 'qwen2.5vl:3b'" class="vision-badge">Vision</span>
+                    <span v-if="modelName === 'qwen2.5-coder:1.5b'" class="coding-badge">Coding</span>
                     <span v-if="modelName === 'deepseek-r1:1.5b'" class="research-badge">Research</span>
                   </button>
                 </div>
@@ -1270,6 +1272,13 @@ onMounted(() => {
   box-shadow: 0 2px 8px rgba(168, 85, 247, 0.3);
 }
 
+.coding-badge {
+  @apply text-xs px-2 py-1 rounded-lg font-bold;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(22, 163, 74, 0.8) 100%);
+  color: rgb(20, 83, 45);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+}
+
 .research-badge {
   @apply text-xs px-2 py-1 rounded-lg font-bold;
   background: linear-gradient(135deg, rgba(59, 130, 246, 0.9) 0%, rgba(37, 99, 235, 0.8) 100%);
@@ -1290,6 +1299,21 @@ onMounted(() => {
   box-shadow: 
     0 8px 24px rgba(168, 85, 247, 0.25),
     0 0 0 1px rgba(168, 85, 247, 0.1);
+}
+
+.model-pull-btn.coding-model {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(22, 163, 74, 0.1) 100%);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: rgb(187, 247, 208);
+}
+
+.model-pull-btn.coding-model:hover {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.3) 0%, rgba(22, 163, 74, 0.2) 100%);
+  border-color: rgba(34, 197, 94, 0.6);
+  color: rgb(220, 252, 231);
+  box-shadow: 
+    0 8px 24px rgba(34, 197, 94, 0.25),
+    0 0 0 1px rgba(34, 197, 94, 0.1);
 }
 
 .model-pull-btn.research-model {

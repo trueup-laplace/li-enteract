@@ -1,9 +1,34 @@
 use serde::{Deserialize, Serialize};
+use serde_json;
 use reqwest;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use futures_util::StreamExt;
-use crate::system_prompts::*;
+use lazy_static::lazy_static;
+use tokio::sync::Semaphore;
+use crate::system_prompts::{
+    ENTERACT_AGENT_PROMPT, 
+    VISION_ANALYSIS_PROMPT, 
+    DEEP_RESEARCH_PROMPT, 
+    CONVERSATIONAL_AI_PROMPT,
+    CODING_AGENT_PROMPT
+};
+
+// Shared HTTP client for better connection pooling and memory efficiency
+lazy_static! {
+    static ref HTTP_CLIENT: Arc<reqwest::Client> = Arc::new(
+        reqwest::Client::builder()
+            .pool_max_idle_per_host(8)  // Maintain connection pool per host
+            .pool_idle_timeout(std::time::Duration::from_secs(30))
+            .timeout(std::time::Duration::from_secs(120))  // 2 minute timeout for large models
+            .build()
+            .expect("Failed to create HTTP client")
+    );
+    
+    // Semaphore to limit concurrent AI model requests (memory safety)
+    static ref REQUEST_SEMAPHORE: Arc<Semaphore> = Arc::new(Semaphore::new(3)); // Max 3 concurrent requests
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OllamaModel {
@@ -75,7 +100,6 @@ pub struct GenerateResponse {
 
 const OLLAMA_BASE_URL: &str = "http://localhost:11434";
 
-// System prompts are now imported from system_prompts module
 
 
 // Helper function to build prompt with chat context
@@ -110,11 +134,11 @@ fn build_prompt_with_context(current_prompt: String, context: Option<Vec<ChatCon
 // Shared streaming logic
 async fn stream_ollama_response(
     app_handle: AppHandle,
-    client: reqwest::Client,
     url: String,
     request: GenerateRequest,
     session_id: String,
 ) -> Result<(), String> {
+    let client = Arc::clone(&HTTP_CLIENT);
     match client.post(&url).json(&request).send().await {
         Ok(response) => {
             if response.status().is_success() {
@@ -212,7 +236,7 @@ async fn stream_ollama_response(
 
 #[tauri::command]
 pub async fn get_ollama_models() -> Result<Vec<OllamaModel>, String> {
-    let client = reqwest::Client::new();
+    let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/tags", OLLAMA_BASE_URL);
     
     match client.get(&url).send().await {
@@ -232,7 +256,7 @@ pub async fn get_ollama_models() -> Result<Vec<OllamaModel>, String> {
 
 #[tauri::command]
 pub async fn get_ollama_status() -> Result<OllamaStatus, String> {
-    let client = reqwest::Client::new();
+    let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/version", OLLAMA_BASE_URL);
     
     match client.get(&url).send().await {
@@ -261,7 +285,7 @@ pub async fn get_ollama_status() -> Result<OllamaStatus, String> {
 
 #[tauri::command]
 pub async fn pull_ollama_model(model_name: String) -> Result<String, String> {
-    let client = reqwest::Client::new();
+    let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/pull", OLLAMA_BASE_URL);
     
     let request = PullRequest {
@@ -285,7 +309,7 @@ pub async fn pull_ollama_model(model_name: String) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn delete_ollama_model(model_name: String) -> Result<String, String> {
-    let client = reqwest::Client::new();
+    let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/delete", OLLAMA_BASE_URL);
     
     let request = serde_json::json!({
@@ -307,7 +331,7 @@ pub async fn delete_ollama_model(model_name: String) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn generate_ollama_response(model: String, prompt: String) -> Result<String, String> {
-    let client = reqwest::Client::new();
+    let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/generate", OLLAMA_BASE_URL);
     
     let request = GenerateRequest {
@@ -342,7 +366,7 @@ pub async fn generate_ollama_response_stream(
     prompt: String,
     session_id: String,
 ) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/generate", OLLAMA_BASE_URL);
     
     let request = GenerateRequest {
@@ -500,6 +524,20 @@ pub async fn generate_vision_analysis(
 }
 
 #[tauri::command]
+pub async fn generate_coding_agent_response(
+    app_handle: AppHandle,
+    prompt: String,
+    context: Option<Vec<ChatContextMessage>>,
+    session_id: String,
+) -> Result<(), String> {
+    let model = "qwen2.5-coder:1.5b".to_string();
+    let full_prompt = format!("Coding Request:\n\n{}", prompt);
+    
+    println!("💻 CODING AGENT: Using model {} for session {}", model, session_id);
+    generate_agent_response_stream(app_handle, model, full_prompt, CODING_AGENT_PROMPT.to_string(), context, session_id, "coding".to_string()).await
+}
+
+#[tauri::command]
 pub async fn generate_deep_research(
     app_handle: AppHandle,
     prompt: String,
@@ -510,7 +548,7 @@ pub async fn generate_deep_research(
     let full_prompt = format!("Deep Research Query:\n\n{}", prompt);
     
     println!("🧠 DEEP RESEARCH: Using model {} for session {}", model, session_id);
-    generate_agent_response_stream(app_handle, model, full_prompt, DEEP_RESEARCH_PROMPT.to_string(), context, session_id, "deep_research".to_string()).await
+    generate_agent_response_stream(app_handle, model, full_prompt, DEEP_RESEARCH_PROMPT.to_string(), context, session_id, "research".to_string()).await
 }
 
 #[tauri::command]
@@ -539,7 +577,11 @@ async fn generate_agent_response_stream(
     session_id: String,
     agent_type: String,
 ) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    // Acquire semaphore permit for memory safety (limits concurrent model loads)
+    let _permit = REQUEST_SEMAPHORE.acquire().await.map_err(|e| format!("Failed to acquire semaphore: {}", e))?;
+    
+    println!("🔒 Acquired request semaphore for {} agent (session: {})", agent_type, session_id);
+    
     let url = format!("{}/api/generate", OLLAMA_BASE_URL);
     
     // Build full prompt with context
@@ -565,7 +607,12 @@ async fn generate_agent_response_stream(
         return Err(format!("Failed to emit start event: {}", e));
     }
     
-    stream_ollama_response(app_handle, client, url, request, session_id).await
+    let result = stream_ollama_response(app_handle, url, request, session_id.clone()).await;
+    
+    // Semaphore is automatically released when _permit goes out of scope
+    println!("🔓 Released request semaphore for {} agent (session: {})", agent_type, session_id);
+    
+    result
 }
 
 // Helper function for streaming with image
@@ -579,7 +626,11 @@ async fn generate_agent_response_stream_with_image(
     session_id: String,
     agent_type: String,
 ) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    // Acquire semaphore permit for memory safety (limits concurrent model loads)
+    let _permit = REQUEST_SEMAPHORE.acquire().await.map_err(|e| format!("Failed to acquire semaphore: {}", e))?;
+    
+    println!("🔒 Acquired request semaphore for {} agent with image (session: {})", agent_type, session_id);
+    
     let url = format!("{}/api/generate", OLLAMA_BASE_URL);
     
     // Build full prompt with context (if provided)
@@ -605,12 +656,17 @@ async fn generate_agent_response_stream_with_image(
         return Err(format!("Failed to emit start event: {}", e));
     }
     
-    stream_ollama_response(app_handle, client, url, request, session_id).await
+    let result = stream_ollama_response(app_handle, url, request, session_id.clone()).await;
+    
+    // Semaphore is automatically released when _permit goes out of scope
+    println!("🔓 Released request semaphore for {} agent (session: {})", agent_type, session_id);
+    
+    result
 }
 
 #[tauri::command]
 pub async fn get_ollama_model_info(model_name: String) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::new();
+    let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/show", OLLAMA_BASE_URL);
     
     let request = serde_json::json!({

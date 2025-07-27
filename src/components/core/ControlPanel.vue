@@ -178,6 +178,7 @@ onUnmounted(() => {
         @update:show-settings-panel="showAIModelsWindow = $event"
         @update:show-chat-window="showChatWindow = $event"
         @update:show-conversational-window="showConversationalWindow = $event"
+        @update:selected-model="selectedModel = $event"
         @toggle-chat-drawer="emit('toggle-chat-drawer')"
       />
     </div>
