@@ -21,6 +21,7 @@ interface Emits {
   (e: 'update:show-settings-panel', value: boolean): void  // Renamed
   (e: 'update:show-chat-window', value: boolean): void
   (e: 'update:show-conversational-window', value: boolean): void
+  (e: 'update:selected-model', value: string): void
   (e: 'toggle-chat-drawer'): void
 }
 
@@ -79,6 +80,7 @@ const emit = defineEmits<Emits>()
         :selected-model="selectedModel"
         @close="emit('close-chat')"
         @update:show-chat-window="emit('update:show-chat-window', $event)"
+        @update:selected-model="emit('update:selected-model', $event)"
         @toggle-chat-drawer="emit('toggle-chat-drawer')"
       />
     </div>

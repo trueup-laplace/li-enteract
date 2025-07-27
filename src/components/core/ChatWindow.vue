@@ -21,6 +21,7 @@ import { useWindowResizing } from '../../composables/useWindowResizing'
 import { useSpeechEvents } from '../../composables/useSpeechEvents'
 import { useSpeechTranscription } from '../../composables/useSpeechTranscription'
 import AgentActionButtons from './AgentActionButtons.vue'
+import ModelSelector from './ModelSelector.vue'
 
 interface Props {
   showChatWindow: boolean
@@ -30,6 +31,7 @@ interface Props {
 interface Emits {
   (e: 'close'): void
   (e: 'update:showChatWindow', value: boolean): void
+  (e: 'update:selectedModel', value: string): void
   (e: 'toggle-chat-drawer'): void
 }
 
@@ -44,6 +46,130 @@ const showChatSidebar = ref(false)
 const renamingChatId = ref<string | null>(null)
 const newChatTitle = ref('')
 const showMenuForChat = ref<string | null>(null)
+
+// Agent and model selection state
+const currentAgent = ref('enteract')
+const showMentionSuggestions = ref(false)
+const mentionSuggestions = ref<Array<{id: string, name: string, description: string}>>([])
+const mentionStartPos = ref(-1)
+
+// Available agents for @ mentions
+const availableAgents = [
+  { id: 'enteract', name: '@enteract', description: 'General purpose AI assistant' },
+  { id: 'coding', name: '@coding', description: 'Programming assistance and code review' },
+  { id: 'research', name: '@research', description: 'Advanced research with step-by-step thinking' },
+  { id: 'vision', name: '@vision', description: 'Visual content analysis' }
+]
+
+// Handle @ mention input
+const handleInput = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const value = target.value
+  const cursorPos = target.selectionStart || 0
+  
+  // Check for @ mention
+  const beforeCursor = value.substring(0, cursorPos)
+  const lastAtIndex = beforeCursor.lastIndexOf('@')
+  
+  if (lastAtIndex !== -1) {
+    const afterAt = beforeCursor.substring(lastAtIndex + 1)
+    
+    // If there's no space after @, show suggestions
+    if (!afterAt.includes(' ') && afterAt.length >= 0) {
+      const filtered = availableAgents.filter(agent => 
+        agent.name.toLowerCase().includes(('@' + afterAt).toLowerCase())
+      )
+      
+      if (filtered.length > 0) {
+        mentionSuggestions.value = filtered
+        mentionStartPos.value = lastAtIndex
+        showMentionSuggestions.value = true
+        return
+      }
+    }
+  }
+  
+  showMentionSuggestions.value = false
+}
+
+// Select mention suggestion
+const selectMention = (agent: {id: string, name: string, description: string}) => {
+  const input = document.querySelector('.chat-input') as HTMLInputElement
+  if (input && mentionStartPos.value !== -1) {
+    const beforeMention = chatMessage.value.substring(0, mentionStartPos.value)
+    const afterCursor = chatMessage.value.substring(input.selectionStart || 0)
+    
+    chatMessage.value = beforeMention + agent.name + ' ' + afterCursor
+    currentAgent.value = agent.id
+    showMentionSuggestions.value = false
+    
+    // Focus input and position cursor after mention
+    setTimeout(() => {
+      input.focus()
+      const newPos = beforeMention.length + agent.name.length + 1
+      input.setSelectionRange(newPos, newPos)
+    }, 0)
+  }
+}
+
+// Parse message for agent mentions before sending
+const parseAgentFromMessage = (message: string): string => {
+  const mentionMatch = message.match(/@(\w+)/)
+  if (mentionMatch) {
+    const mentionedAgent = mentionMatch[1]
+    const agent = availableAgents.find(a => a.id === mentionedAgent)
+    if (agent) {
+      currentAgent.value = agent.id
+      // Remove the mention from the message
+      return message.replace(/@\w+\s*/, '').trim()
+    }
+  }
+  return message
+}
+
+// Enhanced keyboard handler
+const handleEnhancedKeydown = (event: KeyboardEvent) => {
+  if (showMentionSuggestions.value) {
+    if (event.key === 'Escape') {
+      showMentionSuggestions.value = false
+      return
+    }
+    if (event.key === 'Tab' || event.key === 'Enter') {
+      event.preventDefault()
+      if (mentionSuggestions.value.length > 0) {
+        selectMention(mentionSuggestions.value[0])
+      }
+      return
+    }
+  }
+  
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    sendMessageWithAgent()
+  }
+}
+
+// Enhanced send message with agent detection
+const sendMessageWithAgent = async () => {
+  if (!chatMessage.value.trim()) return
+  
+  const originalMessage = chatMessage.value.trim()
+  const cleanedMessage = parseAgentFromMessage(originalMessage)
+  
+  chatMessage.value = ''
+  showMentionSuggestions.value = false
+  
+  await sendMessage(currentAgent.value, cleanedMessage || originalMessage)
+}
+
+// Handle model and agent selection
+const handleModelUpdate = (modelName: string) => {
+  emit('update:selectedModel', modelName)
+}
+
+const handleAgentUpdate = (agentId: string) => {
+  currentAgent.value = agentId
+}
 
 // Helper function to scroll chat to bottom
 const scrollChatToBottom = () => {
@@ -302,9 +428,13 @@ onUnmounted(() => {
           <div class="flex items-center gap-2">
             <CommandLineIcon class="w-4 h-4 text-white/80" />
             <span class="text-sm font-medium text-white/90">AI Assistant</span>
-            <div class="model-indicator" v-if="selectedModel">
-              <span class="text-xs text-green-400">{{ selectedModel.split(':')[0] || selectedModel }}</span>
-            </div>
+            <!-- Model Selector -->
+            <ModelSelector
+              :selected-model="selectedModel"
+              :current-agent="currentAgent"
+              @update:selected-model="handleModelUpdate"
+              @update:current-agent="handleAgentUpdate"
+            />
             
             <!-- Context Truncation Indicator -->
             <div v-if="isContextTruncated" class="truncation-indicator" title="Chat history is being truncated to fit AI context limits">
@@ -516,13 +646,31 @@ onUnmounted(() => {
           
           <!-- Chat Input -->
           <div class="chat-input-container">
-            <input 
-              v-model="chatMessage"
-              @keydown="handleChatKeydown"
-              class="chat-input"
-              placeholder="Ask any AI agent..."
-              type="text"
-            />
+            <div class="input-wrapper">
+              <input 
+                v-model="chatMessage"
+                @input="handleInput"
+                @keydown="handleEnhancedKeydown"
+                class="chat-input"
+                placeholder="Ask any AI agent... (use @ to mention specific agents)"
+                type="text"
+              />
+              
+              <!-- @ Mention Suggestions -->
+              <Transition name="mention-suggestions">
+                <div v-if="showMentionSuggestions" class="mention-suggestions">
+                  <button
+                    v-for="agent in mentionSuggestions"
+                    :key="agent.id"
+                    @click="selectMention(agent)"
+                    class="mention-suggestion"
+                  >
+                    <div class="mention-name">{{ agent.name }}</div>
+                    <div class="mention-description">{{ agent.description }}</div>
+                  </button>
+                </div>
+              </Transition>
+            </div>
             
             <!-- Microphone Button -->
             <button 
@@ -539,7 +687,7 @@ onUnmounted(() => {
               <MicrophoneIcon v-else class="w-4 h-4" />
             </button>
             
-            <button @click="() => sendMessage()" class="chat-send-btn" :disabled="!chatMessage.trim()">
+            <button @click="sendMessageWithAgent" class="chat-send-btn" :disabled="!chatMessage.trim()">
               <ShieldCheckIcon class="w-4 h-4" />
             </button>
           </div>
@@ -820,8 +968,12 @@ onUnmounted(() => {
   background: rgba(0, 0, 0, 0.2);
 }
 
+.input-wrapper {
+  @apply flex-1 relative;
+}
+
 .chat-input {
-  @apply flex-1 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/50 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200;
+  @apply w-full border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/50 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200;
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
   font-size: 14px;
@@ -834,6 +986,47 @@ onUnmounted(() => {
 
 .chat-input:focus {
   background: rgba(255, 255, 255, 0.1);
+}
+
+/* @ Mention Suggestions */
+.mention-suggestions {
+  @apply absolute bottom-full left-0 right-0 mb-2 bg-black/95 border border-white/20 rounded-xl shadow-xl backdrop-blur-sm z-50 max-h-32 overflow-y-auto;
+}
+
+.mention-suggestion {
+  @apply w-full p-3 text-left hover:bg-white/10 transition-colors duration-200 border-b border-white/10 last:border-b-0;
+}
+
+.mention-suggestion:first-child {
+  @apply rounded-t-xl;
+}
+
+.mention-suggestion:last-child {
+  @apply rounded-b-xl;
+}
+
+.mention-name {
+  @apply text-sm font-medium text-blue-400;
+}
+
+.mention-description {
+  @apply text-xs text-white/60 mt-0.5;
+}
+
+/* Mention Suggestions Transition */
+.mention-suggestions-enter-active,
+.mention-suggestions-leave-active {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mention-suggestions-enter-from {
+  opacity: 0;
+  transform: translateY(10px) scale(0.95);
+}
+
+.mention-suggestions-leave-to {
+  opacity: 0;
+  transform: translateY(10px) scale(0.95);
 }
 
 /* Chat Microphone Button */
