@@ -208,6 +208,12 @@ export function useControlPanelEvents(
       console.log('🤖 Keyboard shortcut: AI Models window toggled')
     }
     
+    if (event.ctrlKey && event.shiftKey && event.key === 'V') {
+      event.preventDefault()
+      await toggleConversationalWindow(event)
+      console.log('💬 Keyboard shortcut: Conversational window toggled')
+    }
+    
     if (event.key === 'Escape') {
       event.preventDefault()
       if (showChatWindow.value) {
@@ -218,6 +224,9 @@ export function useControlPanelEvents(
       }
       if (showAIModelsWindow.value) {
         closeAIModelsWindow()
+      }
+      if (showConversationalWindow.value) {
+        await closeConversationalWindow()
       }
     }
   }

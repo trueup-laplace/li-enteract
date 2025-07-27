@@ -91,6 +91,37 @@ watch(showConversationalWindow, async (newValue) => {
   await resizeWindow(showChatWindow.value, showTransparencyControls.value, showAIModelsWindow.value, newValue, false)
 })
 
+// Window update handlers that enforce exclusivity
+const handleSettingsPanelUpdate = (value: boolean) => {
+  if (value) {
+    // Close other windows before opening this one
+    showChatWindow.value = false
+    showTransparencyControls.value = false
+    showConversationalWindow.value = false
+  }
+  showAIModelsWindow.value = value
+}
+
+const handleChatWindowUpdate = (value: boolean) => {
+  if (value) {
+    // Close other windows before opening this one
+    showAIModelsWindow.value = false
+    showTransparencyControls.value = false
+    showConversationalWindow.value = false
+  }
+  showChatWindow.value = value
+}
+
+const handleConversationalWindowUpdate = (value: boolean) => {
+  if (value) {
+    // Close other windows before opening this one
+    showAIModelsWindow.value = false
+    showTransparencyControls.value = false
+    showChatWindow.value = false
+  }
+  showConversationalWindow.value = value
+}
+
 // Expose the openChatWindow method for parent components
 defineExpose({
   openChatWindow
@@ -175,9 +206,9 @@ onUnmounted(() => {
         @close-settings="closeAIModelsWindow"
         @close-chat="closeChatWindow"
         @close-conversational="closeConversationalWindow"
-        @update:show-settings-panel="showAIModelsWindow = $event"
-        @update:show-chat-window="showChatWindow = $event"
-        @update:show-conversational-window="showConversationalWindow = $event"
+        @update:show-settings-panel="handleSettingsPanelUpdate($event)"
+        @update:show-chat-window="handleChatWindowUpdate($event)"
+        @update:show-conversational-window="handleConversationalWindowUpdate($event)"
         @update:selected-model="selectedModel = $event"
         @toggle-chat-drawer="emit('toggle-chat-drawer')"
       />
