@@ -55,8 +55,12 @@ export function useControlPanelEvents(
   const toggleAIModelsWindow = async (event: Event) => {
     event.stopPropagation()
     
+    // Close other panels first to ensure only one window is open at a time
     if (showChatWindow.value) {
       showChatWindow.value = false
+    }
+    if (showConversationalWindow.value) {
+      showConversationalWindow.value = false
     }
     
     showAIModelsWindow.value = !showAIModelsWindow.value
@@ -87,7 +91,7 @@ export function useControlPanelEvents(
   }
 
   const openChatWindow = async () => {
-    // Close other panels first
+    // Close other panels first to ensure only one window is open at a time
     if (showAIModelsWindow.value) {
       showAIModelsWindow.value = false
     }
