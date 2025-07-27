@@ -2,7 +2,7 @@
 import { 
   Cog6ToothIcon,
   CommandLineIcon,
-  CpuChipIcon,
+  EyeIcon,
   AdjustmentsHorizontalIcon,
   ChatBubbleLeftRightIcon
 } from '@heroicons/vue/24/outline'
@@ -54,7 +54,7 @@ const emit = defineEmits<Emits>()
       :disabled="mlEyeTracking.isLoading.value"
       title="ML Eye Tracking + Window Movement"
     >
-      <CpuChipIcon class="w-4 h-4 transition-all"
+      <EyeIcon class="w-4 h-4 transition-all"
         :class="mlEyeTracking.isActive.value ? 'text-white' : 'text-white/70 group-hover:text-white'" />
     </button>
 
