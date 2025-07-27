@@ -33,7 +33,13 @@ const {
   speechError,
   compatibilityReport,
   isGazeControlActive,
-  dragIndicatorVisible
+  dragIndicatorVisible,
+  // Window management functions
+  closeAllWindows,
+  openWindow,
+  toggleWindow,
+  getWindowState,
+  hasOpenWindow
 } = useControlPanelState()
 
 // Event handlers
@@ -67,7 +73,13 @@ const {
     speechError,
     compatibilityReport,
     isGazeControlActive,
-    dragIndicatorVisible
+    dragIndicatorVisible,
+    // Window management functions
+    closeAllWindows,
+    openWindow,
+    toggleWindow,
+    getWindowState,
+    hasOpenWindow
   }
 )
 
@@ -91,35 +103,29 @@ watch(showConversationalWindow, async (newValue) => {
   await resizeWindow(showChatWindow.value, showTransparencyControls.value, showAIModelsWindow.value, newValue, false)
 })
 
-// Window update handlers that enforce exclusivity
+// Window update handlers that enforce exclusivity using centralized window manager
 const handleSettingsPanelUpdate = (value: boolean) => {
   if (value) {
-    // Close other windows before opening this one
-    showChatWindow.value = false
-    showTransparencyControls.value = false
-    showConversationalWindow.value = false
+    openWindow('aiModels')
+  } else {
+    closeAllWindows()
   }
-  showAIModelsWindow.value = value
 }
 
 const handleChatWindowUpdate = (value: boolean) => {
   if (value) {
-    // Close other windows before opening this one
-    showAIModelsWindow.value = false
-    showTransparencyControls.value = false
-    showConversationalWindow.value = false
+    openWindow('chat')
+  } else {
+    closeAllWindows()
   }
-  showChatWindow.value = value
 }
 
 const handleConversationalWindowUpdate = (value: boolean) => {
   if (value) {
-    // Close other windows before opening this one
-    showAIModelsWindow.value = false
-    showTransparencyControls.value = false
-    showChatWindow.value = false
+    openWindow('conversational')
+  } else {
+    closeAllWindows()
   }
-  showConversationalWindow.value = value
 }
 
 // Expose the openChatWindow method for parent components

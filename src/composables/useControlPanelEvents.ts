@@ -49,79 +49,33 @@ export function useControlPanelEvents(
   // Panel toggle functions
   const toggleTransparencyControls = (event: Event) => {
     event.stopPropagation()
-    
-    if (showChatWindow.value) {
-      showChatWindow.value = false
-    }
-    if (showAIModelsWindow.value) {
-      showAIModelsWindow.value = false
-    }
-    
-    showTransparencyControls.value = !showTransparencyControls.value
-    console.log(`🔍 Transparency controls ${showTransparencyControls.value ? 'opened' : 'closed'}`)
+    stateRefs.toggleWindow('transparency')
   }
 
   const closeTransparencyControls = () => {
-    showTransparencyControls.value = false
-    console.log('🔍 Transparency controls closed')
+    stateRefs.closeAllWindows()
   }
 
   const toggleAIModelsWindow = async (event: Event) => {
     event.stopPropagation()
-    
-    if (showChatWindow.value) {
-      showChatWindow.value = false
-    }
-    if (showTransparencyControls.value) {
-      showTransparencyControls.value = false
-    }
-    
-    showAIModelsWindow.value = !showAIModelsWindow.value
-    console.log(`🤖 AI Models window ${showAIModelsWindow.value ? 'opened' : 'closed'}`)
+    stateRefs.toggleWindow('aiModels')
   }
 
   const closeAIModelsWindow = () => {
-    showAIModelsWindow.value = false
-    console.log('🤖 AI Models window closed')
+    stateRefs.closeAllWindows()
   }
 
   const toggleChatWindow = async (event: Event) => {
     event.stopPropagation()
-    
-    // Close other panels first to ensure only one window is open at a time
-    if (showTransparencyControls.value) {
-      showTransparencyControls.value = false
-    }
-    if (showAIModelsWindow.value) {
-      showAIModelsWindow.value = false
-    }
-    if (showConversationalWindow.value) {
-      showConversationalWindow.value = false
-    }
-    
-    showChatWindow.value = !showChatWindow.value
-    console.log(`💬 Chat window ${showChatWindow.value ? 'opened' : 'closed'}`)
+    stateRefs.toggleWindow('chat')
   }
 
   const closeChatWindow = async () => {
-    showChatWindow.value = false
-    console.log('💬 Chat window closed')
+    stateRefs.closeAllWindows()
   }
 
   const openChatWindow = async () => {
-    // Close other panels first
-    if (showTransparencyControls.value) {
-      showTransparencyControls.value = false
-    }
-    if (showAIModelsWindow.value) {
-      showAIModelsWindow.value = false
-    }
-    if (showConversationalWindow.value) {
-      showConversationalWindow.value = false
-    }
-    
-    showChatWindow.value = true
-    console.log('💬 Chat window opened')
+    stateRefs.openWindow('chat')
   }
 
   // Speech transcription functionality removed - now handled in chat interface
@@ -216,43 +170,20 @@ export function useControlPanelEvents(
     
     if (event.key === 'Escape') {
       event.preventDefault()
-      if (showChatWindow.value) {
-        await closeChatWindow()
-      }
-      if (showTransparencyControls.value) {
-        closeTransparencyControls()
-      }
-      if (showAIModelsWindow.value) {
-        closeAIModelsWindow()
-      }
-      if (showConversationalWindow.value) {
-        await closeConversationalWindow()
-      }
+      // Close all windows when escape is pressed
+      stateRefs.closeAllWindows()
+      console.log('🪟 Window Manager: Escape key pressed - closed all windows')
     }
   }
 
   // Conversational window handlers
   const toggleConversationalWindow = async (event: Event) => {
     event.stopPropagation()
-    
-    // Close other panels first
-    if (showTransparencyControls.value) {
-      showTransparencyControls.value = false
-    }
-    if (showAIModelsWindow.value) {
-      showAIModelsWindow.value = false
-    }
-    if (showChatWindow.value) {
-      showChatWindow.value = false
-    }
-    
-    showConversationalWindow.value = !showConversationalWindow.value
-    console.log(`💬 Conversational window ${showConversationalWindow.value ? 'opened' : 'closed'}`)
+    stateRefs.toggleWindow('conversational')
   }
 
   const closeConversationalWindow = async () => {
-    showConversationalWindow.value = false
-    console.log('💬 Conversational window closed')
+    stateRefs.closeAllWindows()
   }
 
 
@@ -265,34 +196,24 @@ export function useControlPanelEvents(
     const aiModelsPanel = document.querySelector('.ai-models-panel')
     const controlPanel = document.querySelector('.control-panel-glass-bar')
     
-    if (chatWindow && controlPanel && showChatWindow.value &&
-        !chatWindow.contains(target) && 
-        !controlPanel.contains(target)) {
-      closeChatWindow()
-    }
+    // Check if click is outside any window and control panel
+    const isOutsideAllWindows = (
+      (!chatWindow || !chatWindow.contains(target)) &&
+      (!conversationalWindow || !conversationalWindow.contains(target)) &&
+      (!transparencyPanel || !transparencyPanel.contains(target)) &&
+      (!aiModelsPanel || !aiModelsPanel.contains(target)) &&
+      (!controlPanel || !controlPanel.contains(target))
+    )
     
-    // IMPORTANT: Disable click-outside closing for conversational window
-    // The conversational window should only close via explicit user action (X button)
-    // This prevents accidental closing when using controls inside the window
-    // The original logic is commented out below:
-    /*
-    if (conversationalWindow && controlPanel && showConversationalWindow.value &&
-        !conversationalWindow.contains(target) && 
-        !controlPanel.contains(target)) {
-      closeConversationalWindow()
-    }
-    */
-    
-    if (transparencyPanel && controlPanel && showTransparencyControls.value &&
-        !transparencyPanel.contains(target) && 
-        !controlPanel.contains(target)) {
-      closeTransparencyControls()
-    }
-    
-    if (aiModelsPanel && controlPanel && showAIModelsWindow.value &&
-        !aiModelsPanel.contains(target) && 
-        !controlPanel.contains(target)) {
-      closeAIModelsWindow()
+    // Only close windows if user clicked outside all windows AND control panel
+    // AND there's actually a window open
+    if (isOutsideAllWindows && stateRefs.hasOpenWindow.value) {
+      // Exception: Don't close conversational window on outside clicks
+      // It should only close via explicit user action (X button)
+      if (!showConversationalWindow.value) {
+        stateRefs.closeAllWindows()
+        console.log('🪟 Window Manager: Clicked outside - closed all windows')
+      }
     }
   }
 
