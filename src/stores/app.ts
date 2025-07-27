@@ -11,10 +11,7 @@ export const useAppStore = defineStore('app', () => {
   const isRecording = ref(false)
   const recordingTime = ref(0)
   
-  // Transparency state
-  const transparencyEnabled = ref(false)
-  const transparencyLevel = ref(1.0)
-  const showTransparencyControls = ref(false)
+
   
   // Speech transcription state
   const speechTranscription = useSpeechTranscription()
@@ -63,15 +60,7 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  // Transparency actions
-  const toggleTransparencyControls = () => {
-    showTransparencyControls.value = !showTransparencyControls.value
-  }
 
-  const updateTransparencyState = (enabled: boolean, level: number) => {
-    transparencyEnabled.value = enabled
-    transparencyLevel.value = level
-  }
 
   const startRecordingTimer = () => {
     recordingTime.value = 0
@@ -310,7 +299,7 @@ export const useAppStore = defineStore('app', () => {
   }
 
   // Set up event listener for whisper model changes
-  window.addEventListener('whisper-models-changed', handleWhisperModelChange as EventListener)
+  window.addEventListener('whisper-models-changed', handleWhisperModelChange as unknown as EventListener)
 
   return {
     // State
@@ -321,9 +310,6 @@ export const useAppStore = defineStore('app', () => {
     recordingTime,
     chatMessages,
     windowPosition,
-    transparencyEnabled,
-    transparencyLevel,
-    showTransparencyControls,
     isTranscriptionEnabled,
     speechStatus,
     // Actions
@@ -336,8 +322,6 @@ export const useAppStore = defineStore('app', () => {
     finalizeTranscription,
     updateWindowPosition,
     formatRecordingTime,
-    toggleTransparencyControls,
-    updateTransparencyState,
     // Speech transcription actions
     initializeSpeechTranscription,
     startSpeechTranscription,

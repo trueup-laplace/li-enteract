@@ -8,7 +8,6 @@ export function useControlPanelState() {
 
   // Window state
   const showChatWindow = ref(false)
-  const showTransparencyControls = ref(false)
   const showAIModelsWindow = ref(false)
   const showConversationalWindow = ref(false)
 
@@ -95,7 +94,6 @@ export function useControlPanelState() {
     isDragging,
     dragStartTime,
     showChatWindow,
-    showTransparencyControls,
     showAIModelsWindow,
     showConversationalWindow,
     speechError,
