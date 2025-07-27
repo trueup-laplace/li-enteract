@@ -33,7 +33,13 @@ const {
   speechError,
   compatibilityReport,
   isGazeControlActive,
-  dragIndicatorVisible
+  dragIndicatorVisible,
+  // Window management functions
+  closeAllWindows,
+  openWindow,
+  toggleWindow,
+  getWindowState,
+  hasOpenWindow
 } = useControlPanelState()
 
 // Event handlers
@@ -67,7 +73,13 @@ const {
     speechError,
     compatibilityReport,
     isGazeControlActive,
-    dragIndicatorVisible
+    dragIndicatorVisible,
+    // Window management functions
+    closeAllWindows,
+    openWindow,
+    toggleWindow,
+    getWindowState,
+    hasOpenWindow
   }
 )
 
@@ -90,6 +102,31 @@ watch(showConversationalWindow, async (newValue) => {
   console.log(`🔧 CONVERSATIONAL WATCH: newValue=${newValue}`)
   await resizeWindow(showChatWindow.value, showTransparencyControls.value, showAIModelsWindow.value, newValue, false)
 })
+
+// Window update handlers that enforce exclusivity using centralized window manager
+const handleSettingsPanelUpdate = (value: boolean) => {
+  if (value) {
+    openWindow('aiModels')
+  } else {
+    closeAllWindows()
+  }
+}
+
+const handleChatWindowUpdate = (value: boolean) => {
+  if (value) {
+    openWindow('chat')
+  } else {
+    closeAllWindows()
+  }
+}
+
+const handleConversationalWindowUpdate = (value: boolean) => {
+  if (value) {
+    openWindow('conversational')
+  } else {
+    closeAllWindows()
+  }
+}
 
 // Expose the openChatWindow method for parent components
 defineExpose({
@@ -175,9 +212,9 @@ onUnmounted(() => {
         @close-settings="closeAIModelsWindow"
         @close-chat="closeChatWindow"
         @close-conversational="closeConversationalWindow"
-        @update:show-settings-panel="showAIModelsWindow = $event"
-        @update:show-chat-window="showChatWindow = $event"
-        @update:show-conversational-window="showConversationalWindow = $event"
+        @update:show-settings-panel="handleSettingsPanelUpdate($event)"
+        @update:show-chat-window="handleChatWindowUpdate($event)"
+        @update:show-conversational-window="handleConversationalWindowUpdate($event)"
         @update:selected-model="selectedModel = $event"
         @toggle-chat-drawer="emit('toggle-chat-drawer')"
       />

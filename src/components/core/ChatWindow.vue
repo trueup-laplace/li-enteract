@@ -715,9 +715,10 @@ onUnmounted(() => {
   /* Enhanced glass effect similar to conversational window */
   backdrop-filter: blur(80px) saturate(180%);
   box-shadow: 
-    0 25px 80px rgba(0, 0, 0, 0.6),
-    0 10px 30px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    0 20px 60px rgba(0, 0, 0, 0.4),
+    0 8px 24px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
 }
 
 /* When sidebar is shown, make window wider and use row layout */
