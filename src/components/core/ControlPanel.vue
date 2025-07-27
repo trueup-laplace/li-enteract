@@ -94,27 +94,27 @@ watch(showConversationalWindow, async (newValue) => {
 })
 
 // Window update handlers that enforce exclusivity using centralized window manager
-const handleSettingsPanelUpdate = (value: boolean) => {
+const handleSettingsPanelUpdate = async (value: boolean) => {
   if (value) {
-    openWindow('aiModels')
+    await openWindow('aiModels')
   } else {
-    closeAllWindows()
+    await closeAllWindows()
   }
 }
 
-const handleChatWindowUpdate = (value: boolean) => {
+const handleChatWindowUpdate = async (value: boolean) => {
   if (value) {
-    openWindow('chat')
+    await openWindow('chat')
   } else {
-    closeAllWindows()
+    await closeAllWindows()
   }
 }
 
-const handleConversationalWindowUpdate = (value: boolean) => {
+const handleConversationalWindowUpdate = async (value: boolean) => {
   if (value) {
-    openWindow('conversational')
+    await openWindow('conversational')
   } else {
-    closeAllWindows()
+    await closeAllWindows()
   }
 }
 
@@ -125,7 +125,7 @@ defineExpose({
 
 onMounted(async () => {
   document.addEventListener('keydown', handleKeydown)
-  document.addEventListener('click', handleClickOutside)
+  // Removed global click listener - let window registry handle click-outside detection
   
   const controlPanel = document.querySelector('.control-panel-glass-bar') as HTMLElement
   if (controlPanel) {
@@ -150,7 +150,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
-  document.removeEventListener('click', handleClickOutside)
+  // Removed global click listener cleanup - window registry handles its own cleanup
   document.removeEventListener('mouseup', handleDragEnd)
 })
 </script>

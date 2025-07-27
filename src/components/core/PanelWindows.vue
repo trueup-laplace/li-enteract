@@ -88,51 +88,89 @@ const emit = defineEmits<Emits>()
   position: relative;
 }
 
-/* Settings Panel Transitions */
-.settings-panel-enter-active,
+/* Smooth Fade Transitions for Settings Panel */
+.settings-panel-enter-active {
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition-delay: 0.05s;
+}
+
 .settings-panel-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.55, 0.085, 0.68, 0.53);
 }
 
 .settings-panel-enter-from {
   opacity: 0;
-  transform: translateY(-10px) scale(0.95);
+  transform: translateY(-8px) scale(0.98);
 }
 
 .settings-panel-leave-to {
   opacity: 0;
-  transform: translateY(-10px) scale(0.95);
+  transform: translateY(-5px) scale(0.99);
 }
 
-/* Conversational Panel Transitions */
-.conversational-panel-enter-active,
+/* Smooth Fade Transitions for Conversational Panel */
+.conversational-panel-enter-active {
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition-delay: 0.05s;
+}
+
 .conversational-panel-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.55, 0.085, 0.68, 0.53);
 }
 
 .conversational-panel-enter-from {
   opacity: 0;
-  transform: translateY(-10px) scale(0.95);
+  transform: translateY(-8px) scale(0.98);
 }
 
 .conversational-panel-leave-to {
   opacity: 0;
-  transform: translateY(-10px) scale(0.95);
+  transform: translateY(-5px) scale(0.99);
 }
 
-/* Chat Panel Transitions */
-.chat-panel-enter-active,
+/* Smooth Fade Transitions for Chat Panel */
+.chat-panel-enter-active {
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition-delay: 0.05s;
+}
+
 .chat-panel-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.55, 0.085, 0.68, 0.53);
 }
 
 .chat-panel-enter-from {
   opacity: 0;
-  transform: translateY(-10px) scale(0.95);
+  transform: translateY(-8px) scale(0.98);
 }
 
 .chat-panel-leave-to {
   opacity: 0;
-  transform: translateY(-10px) scale(0.95);
+  transform: translateY(-5px) scale(0.99);
+}
+
+/* Optimized window containers */
+.settings-panel-section,
+.conversational-panel-section,
+.chat-panel-section {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+/* Additional subtle fade effect for inner content */
+.settings-panel-enter-active .settings-drawer,
+.conversational-panel-enter-active > *,
+.chat-panel-enter-active > * {
+  animation: gentle-fade-in 0.4s ease-out forwards;
+}
+
+@keyframes gentle-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

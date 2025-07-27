@@ -12,6 +12,7 @@ import {
 import { useChatManagement } from '../../composables/useChatManagement'
 import { useSpeechEvents } from '../../composables/useSpeechEvents'
 import { useSpeechTranscription } from '../../composables/useSpeechTranscription'
+import { useWindowRegistration } from '../../composables/useWindowRegistry'
 import AgentActionButtons from './AgentActionButtons.vue'
 import ModelSelector from './ModelSelector.vue'
 import ChatWindowSidebar from './ChatWindowSidebar.vue'
@@ -229,20 +230,40 @@ const {
   setContinuousMode
 } = useSpeechTranscription()
 
+// Window registry for centralized window management
+const windowRegistry = useWindowRegistration('chat-window', {
+  closeOnClickOutside: false, // Temporarily disabled for testing
+  isModal: false,
+  priority: 200, // Higher than settings panel
+  closeHandler: () => closeWindow()
+})
+
 const closeWindow = () => {
   emit('close')
   emit('update:showChatWindow', false)
 }
 
+// Ref for the chat window element
+const chatWindowRef = ref<HTMLElement>()
 
-// Focus input when chat window opens
+
+// Focus input when chat window opens and register/unregister with window registry
 watch(() => props.showChatWindow, async (newValue) => {
   if (newValue) {
     await nextTick()
+    
+    // Register the window element when it opens
+    if (chatWindowRef.value) {
+      windowRegistry.registerSelf(chatWindowRef.value)
+    }
+    
     setTimeout(() => {
       const input = document.querySelector('.chat-input') as HTMLInputElement
       if (input) input.focus()
     }, 150)
+  } else {
+    // Unregister when window closes
+    windowRegistry.unregisterSelf()
   }
 })
 
@@ -355,7 +376,7 @@ onUnmounted(() => {
 
 <template>
   <Transition name="chat-window">
-    <div v-if="showChatWindow" class="chat-window">
+    <div v-if="showChatWindow" ref="chatWindowRef" class="chat-window">
       <!-- Window Header -->
       <div class="window-header">
         <div class="header-title">
