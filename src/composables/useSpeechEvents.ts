@@ -1,5 +1,4 @@
-import { ref } from 'vue'
-import type { ChatMessage } from '../types'
+// Removed unused imports
 
 let messageIdCounter = 1
 

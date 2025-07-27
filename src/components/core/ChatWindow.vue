@@ -3,16 +3,8 @@ import { ref, watch, nextTick, toRef, onMounted, onUnmounted, computed } from 'v
 import {
   CommandLineIcon,
   XMarkIcon,
-  ArrowsPointingOutIcon,
   ShieldCheckIcon,
   ExclamationTriangleIcon,
-  Bars3Icon,
-  ChatBubbleLeftRightIcon,
-  PlusIcon,
-  PencilIcon,
-  TrashIcon,
-  EllipsisVerticalIcon,
-  ClockIcon,
   MicrophoneIcon,
   StopIcon,
   QueueListIcon
@@ -180,12 +172,9 @@ const scrollChatToBottom = () => {
 const {
   chatMessage,
   chatHistory,
-  chatSessions,
-  currentChatId,
   createNewChat,
   switchChat,
   deleteChat,
-  renameChat,
   clearChat,
   fileInput,
   renderMarkdown,
@@ -195,7 +184,6 @@ const {
   startCodingAgent,
   startComputerUseAgent,
   sendMessage,
-  handleChatKeydown,
   triggerFileUpload,
   handleFileUpload,
   estimateTokens
@@ -213,12 +201,6 @@ const isContextTruncated = computed(() => {
   return totalTokens > MAX_TOKENS
 })
 
-// Computed properties for sidebar
-const sortedChats = computed(() => {
-  return [...chatSessions.value].sort((a, b) => 
-    new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  )
-})
 
 // Set up speech events with real chat management functions
 const { setupSpeechTranscriptionListeners, removeSpeechTranscriptionListeners } = useSpeechEvents(
@@ -243,8 +225,6 @@ const {
   stopRecording: stopSpeechRecording,
   isRecording: isSpeechRecording,
   isInitialized: isSpeechInitialized,
-  currentTranscript: speechCurrentTranscript,
-  error: speechError,
   setAutoSendToChat,
   setContinuousMode
 } = useSpeechTranscription()
@@ -254,10 +234,6 @@ const closeWindow = () => {
   emit('update:showChatWindow', false)
 }
 
-const toggleChatDrawer = () => {
-  emit('toggle-chat-drawer')
-  console.log('💬 Chat drawer toggle requested')
-}
 
 // Focus input when chat window opens
 watch(() => props.showChatWindow, async (newValue) => {

@@ -292,7 +292,7 @@ export function useAudioLoopback() {
       if (result.text && result.text.trim().length > 0) {
         const transcription: TranscriptionResult = {
           text: result.text,
-          confidence: result.segments?.[0]?.confidence || 0.5,
+          confidence: 0.5, // Default confidence since segments is not available
           timestamp: Date.now(),
           deviceId: selectedDevice.value?.id || ''
         }

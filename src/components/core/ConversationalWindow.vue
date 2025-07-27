@@ -107,7 +107,6 @@ const {
   error: liveAIError,
   startLiveAI,
   stopLiveAI,
-  onSystemSpeaking,
   onConversationChange
 } = useLiveAI()
 
@@ -412,14 +411,6 @@ const formatSessionDuration = () => {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 }
 
-const getActionSubtitle = () => {
-  if (!isSpeechInitialized.value) return 'Initializing...'
-  if (isRecording.value) {
-    const messageCount = messages.value.filter(m => !m.isPreview).length
-    return `${messageCount} messages captured`
-  }
-  return 'Click to begin conversation'
-}
 
 </script>
 

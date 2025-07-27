@@ -29,8 +29,7 @@ const {
   canCapture,
   startCapture,
   stopCapture,
-  loadSettings,
-  saveSettings
+  loadSettings
 } = useAudioLoopback()
 
 // Local state
