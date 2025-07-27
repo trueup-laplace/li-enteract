@@ -312,7 +312,7 @@ onMounted(() => {
               </div>
               <div class="nav-content">
                 <div class="nav-title">AI Models</div>
-                <div class="nav-subtitle">Manage Ollama models</div>
+                <div class="nav-subtitle">Manage models</div>
               </div>
               <div class="nav-status" :class="{
                 'status-success': ollamaStatus.status === 'running',
@@ -373,18 +373,18 @@ onMounted(() => {
             <!-- Ollama Status -->
             <div class="ollama-status">
               <div v-if="ollamaStatus.status === 'running'" class="status-good">
-                <span class="text-green-400">● Ollama is running</span>
+                <span class="text-green-400">● Model manager is running</span>
                 <span v-if="ollamaStatus.version" class="text-white/60 text-xs ml-2">v{{ ollamaStatus.version }}</span>
               </div>
               <div v-else-if="ollamaStatus.status === 'not_running'" class="status-error">
-                <span class="text-red-400">● Ollama is not running</span>
-                <p class="text-white/60 text-xs mt-1">Please start Ollama to manage models</p>
+                <span class="text-red-400">● Model manager is not running</span>
+                <p class="text-white/60 text-xs mt-1">Please start Model manager to manage models</p>
               </div>
               <div v-else-if="ollamaStatus.status === 'checking'" class="status-loading">
-                <span class="text-yellow-400">● Checking Ollama status...</span>
+                <span class="text-yellow-400">● Checking model manager status...</span>
               </div>
               <div v-else class="status-error">
-                <span class="text-red-400">● Failed to connect to Ollama</span>
+                <span class="text-red-400">● Failed to connect to model manager</span>
               </div>
             </div>
             

@@ -1,5 +1,5 @@
 import { ref, watch } from 'vue'
-import { useConversationStore } from '../../../stores/conversation'
+import { useConversationStore } from '../stores/conversation'
 
 interface Conversation {
   id: string
