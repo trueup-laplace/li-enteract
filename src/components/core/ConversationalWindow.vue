@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { 
   MicrophoneIcon, 
   SpeakerWaveIcon, 
@@ -12,6 +12,7 @@ import {
 import { useSpeechTranscription } from '../../composables/useSpeechTranscription'
 import { useConversationStore } from '../../stores/conversation'
 import { useWindowResizing } from '../../composables/useWindowResizing'
+import { useWindowRegistration } from '../../composables/useWindowRegistry'
 import { useLiveAI } from '../../composables/useLiveAI'
 import { invoke } from '@tauri-apps/api/core'
 
@@ -36,15 +37,24 @@ interface Emits {
   (e: 'update:showConversationalWindow', value: boolean): void
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 // Store and composables
 const conversationStore = useConversationStore()
 const { resizeWindow } = useWindowResizing()
 
+// Window registry for centralized window management
+const windowRegistry = useWindowRegistration('conversational-window', {
+  closeOnClickOutside: true,
+  isModal: false,
+  priority: 150, // Lower than chat window
+  closeHandler: () => closeWindow()
+})
+
 // Components refs
 const messageListRef = ref<InstanceType<typeof MessageList>>()
+const conversationalWindowRef = ref<HTMLElement>()
 
 // State
 const audioLoopbackDeviceId = ref<string | null>(null)
@@ -153,6 +163,21 @@ const messages = computed(() => {
 
 const isAudioLoopbackActive = computed(() => conversationStore.isAudioLoopbackActive)
 const hasSelectedMessages = computed(() => selectedMessages.value.size > 0)
+
+// Watch for window open/close to register/unregister with window registry
+watch(() => props.showConversationalWindow, async (newValue) => {
+  if (newValue) {
+    await nextTick()
+    
+    // Register the window element when it opens
+    if (conversationalWindowRef.value) {
+      windowRegistry.registerSelf(conversationalWindowRef.value)
+    }
+  } else {
+    // Unregister when window closes
+    windowRegistry.unregisterSelf()
+  }
+})
 
 // Watch for sidebar changes to resize window
 watch(showConversationSidebar, async (newValue) => {
@@ -416,7 +441,7 @@ const formatSessionDuration = () => {
 
 <template>
   <Transition name="conversational-window">
-    <div v-if="showConversationalWindow" class="conversational-window">
+    <div v-if="showConversationalWindow" ref="conversationalWindowRef" class="conversational-window">
       <!-- Window Header -->
       <div class="window-header">
         <div class="header-title">

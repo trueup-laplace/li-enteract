@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, nextTick } from 'vue'
 import {
   Cog6ToothIcon,
   XMarkIcon,
@@ -13,6 +13,7 @@ import {
 } from '@heroicons/vue/24/outline'
 import { useAIModels } from '../../composables/useAIModels'
 import { useTransparency } from '../../composables/useTransparency'
+import { useWindowRegistration } from '../../composables/useWindowRegistry'
 import { invoke } from '@tauri-apps/api/core'
 
 interface Props {
@@ -45,6 +46,17 @@ interface AudioDeviceSettings {
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
+
+// Window registry for centralized window management
+const windowRegistry = useWindowRegistration('settings-panel', {
+  closeOnClickOutside: true,
+  isModal: true, // Settings panel should be modal
+  priority: 100, // Lower priority than other windows
+  closeHandler: () => closePanel()
+})
+
+// Components refs
+const settingsPanelRef = ref<HTMLElement>()
 
 // Settings tabs
 const activeTab = ref<'models' | 'audio' | 'general'>('models')
@@ -216,6 +228,13 @@ const saveGeneralSettings = async () => {
 // Watch for settings panel state changes
 watch(() => props.showSettingsPanel, async (newValue) => {
   if (newValue) {
+    await nextTick()
+    
+    // Register the settings panel element when it opens
+    if (settingsPanelRef.value) {
+      windowRegistry.registerSelf(settingsPanelRef.value)
+    }
+    
     await loadSettings()
     
     // Load AI models if on models tab
@@ -230,6 +249,9 @@ watch(() => props.showSettingsPanel, async (newValue) => {
     if (activeTab.value === 'audio') {
       await enumerateAudioDevices()
     }
+  } else {
+    // Unregister when settings panel closes
+    windowRegistry.unregisterSelf()
   }
 })
 
@@ -384,7 +406,7 @@ onMounted(() => {
 
 <template>
   <Transition name="settings-drawer">
-    <div v-if="showSettingsPanel" class="settings-drawer">
+    <div v-if="showSettingsPanel" ref="settingsPanelRef" class="settings-drawer">
         <!-- Drawer Header -->
         <div class="drawer-header">
           <div class="drawer-title">
