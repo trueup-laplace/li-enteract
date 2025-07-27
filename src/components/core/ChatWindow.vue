@@ -22,7 +22,7 @@ import { useSpeechEvents } from '../../composables/useSpeechEvents'
 import { useSpeechTranscription } from '../../composables/useSpeechTranscription'
 import AgentActionButtons from './AgentActionButtons.vue'
 import ModelSelector from './ModelSelector.vue'
-import ChatWindowSidebar from '../conversational/ChatWindowSidebar.vue'
+import ChatWindowSidebar from './ChatWindowSidebar.vue'
 
 interface Props {
   showChatWindow: boolean
