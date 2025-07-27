@@ -265,15 +265,18 @@ export function useWindowRegistry(config: WindowRegistryConfig = {}) {
   }
 
   /**
-   * Close all registered windows
+   * Close all registered windows with smooth transitions
    */
-  const closeAllWindows = () => {
+  const closeAllWindows = async () => {
     const sortedWindows = getAllWindows().sort((a, b) => b.priority - a.priority)
     
+    // Close windows sequentially for better visual effect
     for (const window of sortedWindows) {
       if (window.closeHandler) {
         debugLog(`Closing window: ${window.id}`)
         window.closeHandler()
+        // Small delay between closures for smooth transitions
+        await new Promise(resolve => setTimeout(resolve, 50))
       }
     }
   }

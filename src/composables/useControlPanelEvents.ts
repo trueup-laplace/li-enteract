@@ -26,135 +26,102 @@ export function useControlPanelEvents(
   } = stateRefs
 
   // Window control handlers
-  const closeAllWindows = () => {
-    windowRegistry.closeAllWindows()
+  const closeAllWindows = async () => {
+    await windowRegistry.closeAllWindows()
+    await stateRefs.closeAllWindows()
   }
 
   const closeSpecificWindows = (windowIds: string[]) => {
     windowRegistry.closeWindows(windowIds)
   }
 
-  // AI Models window handlers
+  // AI Models window handlers - using centralized state management
   const toggleAIModelsWindow = async (event: Event) => {
     event.stopPropagation()
     
-    // If this window is already open, close it
-    if (showAIModelsWindow.value) {
-      showAIModelsWindow.value = false
-      console.log('⚙️ AI Models window closed')
-      try {
-        await resizeWindow(false, false, false, false, false)
-      } catch (error) {
-        console.error('❌ Failed to resize window after closing AI models:', error)
-      }
-      return
-    }
-    
-    // Close all other windows first (state + registry)
-    showChatWindow.value = false
-    showConversationalWindow.value = false
-    closeSpecificWindows(['chat-window', 'conversational-window'])
-    
-    // Small delay for smooth transition
-    await new Promise(resolve => setTimeout(resolve, 50))
-    
-    showAIModelsWindow.value = true
-    console.log('⚙️ AI Models window opened')
-
     try {
-      // Resize window for AI models panel
-      await resizeWindow(true, false, false, false, false)
-    } catch (error) {
-      console.error('❌ Failed to resize window for AI models:', error)
-    }
-  }
-
-  const closeAIModelsWindow = () => {
-    if (showAIModelsWindow.value) {
-      showAIModelsWindow.value = false
-      console.log('⚙️ AI Models window closed')
+      await stateRefs.toggleWindow('aiModels')
       
-      // Resize window back to normal
-      resizeWindow(false, false, false, false, false).catch(error => {
-        console.error('❌ Failed to resize window after closing AI models:', error)
-      })
+      // Resize window based on current state
+      if (showAIModelsWindow.value) {
+        console.log('⚙️ AI Models window opened - resizing window')
+        await resizeWindow(showChatWindow.value, false, showAIModelsWindow.value, showConversationalWindow.value, false)
+      } else {
+        console.log('⚙️ AI Models window closed - resizing to base')
+        await resizeWindow(false, false, false, false, false)
+      }
+    } catch (error) {
+      console.error('❌ Failed to toggle AI models window:', error)
     }
   }
 
-  // Chat window handlers
+  const closeAIModelsWindow = async () => {
+    try {
+      await stateRefs.closeAllWindows()
+      await resizeWindow(false, false, false, false, false)
+      console.log('⚙️ AI Models window closed')
+    } catch (error) {
+      console.error('❌ Failed to close AI models window:', error)
+    }
+  }
+
+  // Chat window handlers - using centralized state management
   const toggleChatWindow = async (event: Event) => {
     event.stopPropagation()
     
-    // If this window is already open, close it
-    if (showChatWindow.value) {
-      showChatWindow.value = false
-      console.log('💬 Chat window closed')
-      try {
-        await resizeWindow(false, false, false, false, false)
-      } catch (error) {
-        console.error('❌ Failed to resize window after closing chat:', error)
-      }
-      return
-    }
-    
-    // Close all other windows first (state + registry)
-    showAIModelsWindow.value = false
-    showConversationalWindow.value = false
-    closeSpecificWindows(['ai-models-window', 'conversational-window'])
-    
-    // Small delay for smooth transition
-    await new Promise(resolve => setTimeout(resolve, 50))
-    
-    showChatWindow.value = true
-    console.log('💬 Chat window opened')
-
     try {
-      // Resize window for chat
-      await resizeWindow(false, true, false, false, false)
-    } catch (error) {
-      console.error('❌ Failed to resize window for chat:', error)
-    }
-  }
-
-  const closeChatWindow = () => {
-    if (showChatWindow.value) {
-      showChatWindow.value = false
-      console.log('💬 Chat window closed')
+      await stateRefs.toggleWindow('chat')
       
-      // Resize window back to normal
-      resizeWindow(false, false, false, false, false).catch(error => {
-        console.error('❌ Failed to resize window after closing chat:', error)
-      })
+      // Resize window based on current state
+      if (showChatWindow.value) {
+        console.log('💬 Chat window opened - resizing window')
+        await resizeWindow(showChatWindow.value, false, showAIModelsWindow.value, showConversationalWindow.value, false)
+      } else {
+        console.log('💬 Chat window closed - resizing to base')
+        await resizeWindow(false, false, false, false, false)
+      }
+    } catch (error) {
+      console.error('❌ Failed to toggle chat window:', error)
     }
   }
 
-  // Conversational window handlers
+  const closeChatWindow = async () => {
+    try {
+      await stateRefs.closeAllWindows()
+      await resizeWindow(false, false, false, false, false)
+      console.log('💬 Chat window closed')
+    } catch (error) {
+      console.error('❌ Failed to close chat window:', error)
+    }
+  }
+
+  // Conversational window handlers - using centralized state management
   const toggleConversationalWindow = async (event: Event) => {
     event.stopPropagation()
     
-    // Close other windows first using registry
-    closeSpecificWindows(['ai-models-window', 'chat-window'])
-    
-    showConversationalWindow.value = !showConversationalWindow.value
-    console.log(`🎤 Conversational window ${showConversationalWindow.value ? 'opened' : 'closed'}`)
-
     try {
-      // Resize window for conversational interface
-      await resizeWindow(false, false, showConversationalWindow.value, false, false)
+      await stateRefs.toggleWindow('conversational')
+      
+      // Resize window based on current state
+      if (showConversationalWindow.value) {
+        console.log('🎤 Conversational window opened - resizing window')
+        await resizeWindow(showChatWindow.value, false, showAIModelsWindow.value, showConversationalWindow.value, false)
+      } else {
+        console.log('🎤 Conversational window closed - resizing to base')
+        await resizeWindow(false, false, false, false, false)
+      }
     } catch (error) {
-      console.error('❌ Failed to resize window for conversational:', error)
+      console.error('❌ Failed to toggle conversational window:', error)
     }
   }
 
-  const closeConversationalWindow = () => {
-    if (showConversationalWindow.value) {
-      showConversationalWindow.value = false
+  const closeConversationalWindow = async () => {
+    try {
+      await stateRefs.closeAllWindows()
+      await resizeWindow(false, false, false, false, false)
       console.log('🎤 Conversational window closed')
-      
-      // Resize window back to normal
-      resizeWindow(false, false, false, false, false).catch(error => {
-        console.error('❌ Failed to resize window after closing conversational:', error)
-      })
+    } catch (error) {
+      console.error('❌ Failed to close conversational window:', error)
     }
   }
 
@@ -256,19 +223,17 @@ export function useControlPanelEvents(
     }
   }
 
-  const handleKeydown = (event: KeyboardEvent) => {
+  const handleKeydown = async (event: KeyboardEvent) => {
     // Handle keyboard shortcuts
     if (event.key === 'Escape') {
-      closeAllWindows()
+      await closeAllWindows()
     }
   }
 
-  const handleClickOutside = (event: Event) => {
-    // Use window registry for click outside detection
-    const target = event.target as HTMLElement
-    if (windowRegistry.isClickOutsideAll(target)) {
-      closeAllWindows()
-    }
+  const handleClickOutside = async (event: Event) => {
+    // Let the window registry handle click-outside detection automatically
+    // This prevents duplicate detection and conflicts
+    // The registry will call individual window close handlers when needed
   }
 
   return {

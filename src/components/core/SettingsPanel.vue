@@ -49,7 +49,7 @@ const emit = defineEmits<Emits>()
 
 // Window registry for centralized window management
 const windowRegistry = useWindowRegistration('settings-panel', {
-  closeOnClickOutside: true,
+  closeOnClickOutside: false, // Temporarily disabled for testing
   isModal: true, // Settings panel should be modal
   priority: 100, // Lower priority than other windows
   closeHandler: () => closePanel()

@@ -46,7 +46,7 @@ const { resizeWindow } = useWindowResizing()
 
 // Window registry for centralized window management
 const windowRegistry = useWindowRegistration('conversational-window', {
-  closeOnClickOutside: true,
+  closeOnClickOutside: false, // Temporarily disabled for testing
   isModal: false,
   priority: 150, // Lower than chat window
   closeHandler: () => closeWindow()

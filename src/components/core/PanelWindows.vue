@@ -88,51 +88,105 @@ const emit = defineEmits<Emits>()
   position: relative;
 }
 
-/* Settings Panel Transitions */
-.settings-panel-enter-active,
+/* Enhanced Settings Panel Transitions */
+.settings-panel-enter-active {
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition-delay: 0.1s;
+}
+
 .settings-panel-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.25s cubic-bezier(0.55, 0.085, 0.68, 0.53);
 }
 
 .settings-panel-enter-from {
   opacity: 0;
-  transform: translateY(-10px) scale(0.95);
+  transform: translateY(-20px) scale(0.9) rotateX(15deg);
+  filter: blur(8px);
 }
 
 .settings-panel-leave-to {
   opacity: 0;
-  transform: translateY(-10px) scale(0.95);
+  transform: translateY(-15px) scale(0.92);
+  filter: blur(4px);
 }
 
-/* Conversational Panel Transitions */
-.conversational-panel-enter-active,
+/* Enhanced Conversational Panel Transitions */
+.conversational-panel-enter-active {
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition-delay: 0.1s;
+}
+
 .conversational-panel-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.25s cubic-bezier(0.55, 0.085, 0.68, 0.53);
 }
 
 .conversational-panel-enter-from {
   opacity: 0;
-  transform: translateY(-10px) scale(0.95);
+  transform: translateY(-20px) scale(0.9) rotateX(15deg);
+  filter: blur(8px);
 }
 
 .conversational-panel-leave-to {
   opacity: 0;
-  transform: translateY(-10px) scale(0.95);
+  transform: translateY(-15px) scale(0.92);
+  filter: blur(4px);
 }
 
-/* Chat Panel Transitions */
-.chat-panel-enter-active,
+/* Enhanced Chat Panel Transitions */
+.chat-panel-enter-active {
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition-delay: 0.1s;
+}
+
 .chat-panel-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.25s cubic-bezier(0.55, 0.085, 0.68, 0.53);
 }
 
 .chat-panel-enter-from {
   opacity: 0;
-  transform: translateY(-10px) scale(0.95);
+  transform: translateY(-20px) scale(0.9) rotateX(15deg);
+  filter: blur(8px);
 }
 
 .chat-panel-leave-to {
   opacity: 0;
-  transform: translateY(-10px) scale(0.95);
+  transform: translateY(-15px) scale(0.92);
+  filter: blur(4px);
+}
+
+/* Smooth morphing between windows */
+.settings-panel-section,
+.conversational-panel-section,
+.chat-panel-section {
+  transform-origin: center top;
+  will-change: transform, opacity, filter;
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Additional spring effect for entering elements */
+.settings-panel-enter-active .settings-drawer,
+.conversational-panel-enter-active > *,
+.chat-panel-enter-active > * {
+  animation: spring-in 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes spring-in {
+  0% {
+    transform: scale(0.3) translateY(-50px);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05) translateY(-10px);
+    opacity: 0.8;
+  }
+  70% {
+    transform: scale(0.98) translateY(-2px);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
 }
 </style>

@@ -232,7 +232,7 @@ const {
 
 // Window registry for centralized window management
 const windowRegistry = useWindowRegistration('chat-window', {
-  closeOnClickOutside: true,
+  closeOnClickOutside: false, // Temporarily disabled for testing
   isModal: false,
   priority: 200, // Higher than settings panel
   closeHandler: () => closeWindow()

@@ -24,17 +24,26 @@ export function useControlPanelState() {
   // Computed drag indicator visibility
   const dragIndicatorVisible = computed(() => isDragging.value)
 
+  // Transition timing for smooth window switching
+  const transitionDelay = 150 // ms for smooth transitions
+  
   // Centralized window state manager - ensures only one window is open at a time
-  const closeAllWindows = () => {
+  const closeAllWindows = async () => {
     showChatWindow.value = false
     showTransparencyControls.value = false
     showAIModelsWindow.value = false
     showConversationalWindow.value = false
+    
+    // Wait for closing transitions to complete
+    await new Promise(resolve => setTimeout(resolve, transitionDelay))
   }
 
-  const openWindow = (windowType: 'chat' | 'transparency' | 'aiModels' | 'conversational') => {
-    // Close all windows first
-    closeAllWindows()
+  const openWindow = async (windowType: 'chat' | 'transparency' | 'aiModels' | 'conversational') => {
+    // Close all windows first with smooth transition
+    await closeAllWindows()
+    
+    // Wait a brief moment for clean visual transition
+    await new Promise(resolve => setTimeout(resolve, 50))
     
     // Open the requested window
     switch (windowType) {
@@ -55,16 +64,16 @@ export function useControlPanelState() {
     console.log(`🪟 Window Manager: Opened ${windowType} window, closed all others`)
   }
 
-  const toggleWindow = (windowType: 'chat' | 'transparency' | 'aiModels' | 'conversational') => {
+  const toggleWindow = async (windowType: 'chat' | 'transparency' | 'aiModels' | 'conversational') => {
     const currentState = getWindowState(windowType)
     
     if (currentState) {
       // If this window is open, close it
-      closeAllWindows()
+      await closeAllWindows()
       console.log(`🪟 Window Manager: Closed ${windowType} window`)
     } else {
       // If this window is closed, open it (and close all others)
-      openWindow(windowType)
+      await openWindow(windowType)
     }
   }
 
