@@ -77,3 +77,26 @@ export const createMockConversationStore = () => ({
   endSession: vi.fn(),
   setAudioLoopbackState: vi.fn(),
 })
+
+export const createMockWindowRegistry = () => ({
+  register: vi.fn(),
+  unregister: vi.fn(),
+  getWindow: vi.fn(),
+  getAllWindows: vi.fn(() => []),
+  getActiveWindows: vi.fn(() => []),
+  isRegistered: vi.fn(() => false),
+  isActive: vi.fn(() => false),
+  setActive: vi.fn(),
+  setInactive: vi.fn(),
+  bringToFront: vi.fn(),
+  isClickOutside: vi.fn(() => true),
+  isClickOutsideAll: vi.fn(() => true),
+  cleanup: vi.fn(),
+})
+
+export const createMockWindowRegistration = () => ({
+  registerSelf: vi.fn(),
+  unregisterSelf: vi.fn(),
+  updateConfig: vi.fn(),
+  ...createMockWindowRegistry(),
+})

@@ -83,9 +83,12 @@ const handleInput = (event: Event) => {
   showMentionSuggestions.value = false
 }
 
+// Ref for the chat input element
+const chatInputRef = ref<HTMLInputElement>()
+
 // Select mention suggestion
 const selectMention = (agent: {id: string, name: string, description: string}) => {
-  const input = document.querySelector('.chat-input') as HTMLInputElement
+  const input = chatInputRef.value
   if (input && mentionStartPos.value !== -1) {
     const beforeMention = chatMessage.value.substring(0, mentionStartPos.value)
     const afterCursor = chatMessage.value.substring(input.selectionStart || 0)
@@ -258,7 +261,7 @@ watch(() => props.showChatWindow, async (newValue) => {
     }
     
     setTimeout(() => {
-      const input = document.querySelector('.chat-input') as HTMLInputElement
+      const input = chatInputRef.value
       if (input) input.focus()
     }, 150)
   } else {
@@ -524,6 +527,7 @@ onUnmounted(() => {
           <div class="chat-input-container">
             <div class="input-wrapper">
               <input 
+                ref="chatInputRef"
                 v-model="chatMessage"
                 @input="handleInput"
                 @keydown="handleEnhancedKeydown"

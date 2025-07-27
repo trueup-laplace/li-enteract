@@ -1,0 +1,164 @@
+[16:19:50.684] RMS: 0.229690 (-12.8dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:19:51.490] RMS: 0.200841 (-13.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:19:51.501] RMS: 0.229690 (-12.8dB) | [MAIN] Raw Whisper result: 'and curfew in the show to be flat hands.'
+[16:19:51.502] RMS: 0.229690 (-12.8dB) | [MAIN] Cleaned text: 'and curfew in the show to be flat hands.'
+[16:19:51.503] RMS: 0.229690 (-12.8dB) | [MAIN SUCCESS] and curfew in the show to be flat hands. (conf: 0.800)
+[16:19:52.246] RMS: 0.200841 (-13.9dB) | [MAIN] Raw Whisper result: 'You sure don't be a black-hands like'
+[16:19:52.247] RMS: 0.200841 (-13.9dB) | [MAIN] Cleaned text: 'You sure don't be a black-hands like'
+[16:19:52.248] RMS: 0.200841 (-13.9dB) | [MAIN SUCCESS] You sure don't be a black-hands like (conf: 0.800)
+[16:19:52.299] RMS: 0.172955 (-15.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:19:52.952] RMS: 0.172955 (-15.2dB) | [MAIN] Raw Whisper result: 'like we messed up'
+[16:19:52.952] RMS: 0.172955 (-15.2dB) | [MAIN] Cleaned text: 'like we messed up'
+[16:19:52.953] RMS: 0.172955 (-15.2dB) | [MAIN SUCCESS] like we messed up (conf: 0.800)
+[16:19:53.120] RMS: 0.223229 (-13.0dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:19:53.908] RMS: 0.300361 (-10.4dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:19:53.916] RMS: 0.223229 (-13.0dB) | [MAIN] Raw Whisper result: 'We're at stop. Yeah, and we'll'
+[16:19:53.917] RMS: 0.223229 (-13.0dB) | [MAIN] Cleaned text: 'We're at stop. Yeah, and we'll'
+[16:19:53.918] RMS: 0.223229 (-13.0dB) | [MAIN SUCCESS] We're at stop. Yeah, and we'll (conf: 0.800)
+[16:19:54.733] RMS: 0.330678 (-9.6dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:19:54.760] RMS: 0.300361 (-10.4dB) | [MAIN] Raw Whisper result: 'stop. Yeah, and what was it?'
+[16:19:54.760] RMS: 0.300361 (-10.4dB) | [MAIN] Cleaned text: 'stop. Yeah, and what was it?'
+[16:19:54.761] RMS: 0.300361 (-10.4dB) | [MAIN SUCCESS] stop. Yeah, and what was it? (conf: 0.800)
+[16:19:55.471] RMS: 0.330678 (-9.6dB) | [MAIN] Raw Whisper result: 'What did you have to learn?'
+[16:19:55.472] RMS: 0.330678 (-9.6dB) | [MAIN] Cleaned text: 'What did you have to learn?'
+[16:19:55.473] RMS: 0.330678 (-9.6dB) | [MAIN SUCCESS] What did you have to learn? (conf: 0.800)
+[16:19:55.519] RMS: 0.277281 (-11.1dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:19:56.278] RMS: 0.277281 (-11.1dB) | [MAIN] Raw Whisper result: 'Well, what did you have to learn of the stack, isn't it?'
+[16:19:56.278] RMS: 0.277281 (-11.1dB) | [MAIN] Cleaned text: 'Well, what did you have to learn of the stack, isn't it?'
+[16:19:56.279] RMS: 0.277281 (-11.1dB) | [MAIN SUCCESS] Well, what did you have to learn of the stack, isn't it? (conf: 0.800)
+[16:19:56.330] RMS: 0.216244 (-13.3dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:19:57.023] RMS: 0.216244 (-13.3dB) | [MAIN] Raw Whisper result: 'the alert of the stack is Netflix.'
+[16:19:57.024] RMS: 0.216244 (-13.3dB) | [MAIN] Cleaned text: 'the alert of the stack is Netflix.'
+[16:19:57.025] RMS: 0.216244 (-13.3dB) | [MAIN SUCCESS] the alert of the stack is Netflix. (conf: 0.686)
+[16:19:57.130] RMS: 0.215144 (-13.3dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:19:57.790] RMS: 0.215144 (-13.3dB) | [MAIN] Raw Whisper result: 'because Netflix and I'
+[16:19:57.791] RMS: 0.215144 (-13.3dB) | [MAIN] Cleaned text: 'because Netflix and I'
+[16:19:57.792] RMS: 0.215144 (-13.3dB) | [MAIN SUCCESS] because Netflix and I (conf: 0.800)
+[16:19:57.952] RMS: 0.204960 (-13.8dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:19:58.751] RMS: 0.207938 (-13.6dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:19:58.860] RMS: 0.204960 (-13.8dB) | [MAIN] Raw Whisper result: 'and I choose Z.'
+[16:19:58.861] RMS: 0.204960 (-13.8dB) | [MAIN] Cleaned text: 'and I choose Z.'
+[16:19:58.862] RMS: 0.204960 (-13.8dB) | [MAIN SUCCESS] and I choose Z. (conf: 0.800)
+[16:19:59.561] RMS: 0.186628 (-14.6dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:19:59.577] RMS: 0.207938 (-13.6dB) | [MAIN] Raw Whisper result: 'And I just, this is,'
+[16:19:59.578] RMS: 0.207938 (-13.6dB) | [MAIN] Cleaned text: 'And I just, this is,'
+[16:19:59.578] RMS: 0.207938 (-13.6dB) | [MAIN SUCCESS] And I just, this is, (conf: 0.800)
+[16:20:00.369] RMS: 0.217528 (-13.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:01.121] RMS: 0.186628 (-14.6dB) | [MAIN] Raw Whisper result: 'is a is a'
+[16:20:01.121] RMS: 0.186628 (-14.6dB) | [MAIN] Cleaned text: 'is a is a'
+[16:20:01.122] RMS: 0.186628 (-14.6dB) | [MAIN SUCCESS] is a is a (conf: 0.400)
+[16:20:01.181] RMS: 0.219749 (-13.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:01.791] RMS: 0.217528 (-13.2dB) | [MAIN] Raw Whisper result: 'This is incredible infrastructure as the delay'
+[16:20:01.792] RMS: 0.217528 (-13.2dB) | [MAIN] Cleaned text: 'This is incredible infrastructure as the delay'
+[16:20:01.793] RMS: 0.217528 (-13.2dB) | [MAIN SUCCESS] This is incredible infrastructure as the delay (conf: 0.800)
+[16:20:01.991] RMS: 0.181684 (-14.8dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:02.597] RMS: 0.219749 (-13.2dB) | [MAIN] Raw Whisper result: 'and quite well infrastructure has to deliver.'
+[16:20:02.598] RMS: 0.219749 (-13.2dB) | [MAIN] Cleaned text: 'and quite well infrastructure has to deliver.'
+[16:20:02.599] RMS: 0.219749 (-13.2dB) | [MAIN SUCCESS] and quite well infrastructure has to deliver. (conf: 0.800)
+[16:20:02.792] RMS: 0.196771 (-14.1dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:03.361] RMS: 0.181684 (-14.8dB) | [MAIN] Raw Whisper result: 'I should have said it over. Just a few.'
+[16:20:03.361] RMS: 0.181684 (-14.8dB) | [MAIN] Cleaned text: 'I should have said it over. Just a few.'
+[16:20:03.362] RMS: 0.181684 (-14.8dB) | [MAIN SUCCESS] I should have said it over. Just a few. (conf: 0.800)
+[16:20:03.689] RMS: 0.215401 (-13.3dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:04.054] RMS: 0.196771 (-14.1dB) | [MAIN] Raw Whisper result: 'just a huge amount of money.'
+[16:20:04.054] RMS: 0.196771 (-14.1dB) | [MAIN] Cleaned text: 'just a huge amount of money.'
+[16:20:04.055] RMS: 0.196771 (-14.1dB) | [MAIN SUCCESS] just a huge amount of money. (conf: 0.800)
+[16:20:04.402] RMS: 0.276120 (-11.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:04.837] RMS: 0.215401 (-13.3dB) | [MAIN] Raw Whisper result: 'Just a huge amount of data.'
+[16:20:04.838] RMS: 0.215401 (-13.3dB) | [MAIN] Cleaned text: 'Just a huge amount of data.'
+[16:20:04.840] RMS: 0.215401 (-13.3dB) | [MAIN SUCCESS] Just a huge amount of data. (conf: 0.800)
+[16:20:05.204] RMS: 0.255344 (-11.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:05.605] RMS: 0.276120 (-11.2dB) | [MAIN] Raw Whisper result: 'I'm just blown away'
+[16:20:05.605] RMS: 0.276120 (-11.2dB) | [MAIN] Cleaned text: 'I'm just blown away'
+[16:20:05.606] RMS: 0.276120 (-11.2dB) | [MAIN SUCCESS] I'm just blown away (conf: 0.800)
+[16:20:06.014] RMS: 0.236923 (-12.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:06.344] RMS: 0.255344 (-11.9dB) | [MAIN] Raw Whisper result: 'I'm just blown away.'
+[16:20:06.345] RMS: 0.255344 (-11.9dB) | [MAIN] Cleaned text: 'I'm just blown away.'
+[16:20:06.346] RMS: 0.255344 (-11.9dB) | [MAIN SUCCESS] I'm just blown away. (conf: 0.800)
+[16:20:06.822] RMS: 0.161518 (-15.8dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:07.131] RMS: 0.236923 (-12.5dB) | [MAIN] Raw Whisper result: 'long away.'
+[16:20:07.131] RMS: 0.236923 (-12.5dB) | [MAIN] Cleaned text: 'long away.'
+[16:20:07.132] RMS: 0.236923 (-12.5dB) | [MAIN SUCCESS] long away. (conf: 0.800)
+[16:20:07.632] RMS: 0.233789 (-12.6dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:07.888] RMS: 0.161518 (-15.8dB) | [MAIN] Raw Whisper result: 'Finally, that flicks, but'
+[16:20:07.889] RMS: 0.161518 (-15.8dB) | [MAIN] Cleaned text: 'Finally, that flicks, but'
+[16:20:07.890] RMS: 0.161518 (-15.8dB) | [MAIN SUCCESS] Finally, that flicks, but (conf: 0.800)
+[16:20:08.443] RMS: 0.208187 (-13.6dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:08.678] RMS: 0.233789 (-12.6dB) | [MAIN] Raw Whisper result: 'I'm Netflix, but I'll still get you.'
+[16:20:08.679] RMS: 0.233789 (-12.6dB) | [MAIN] Cleaned text: 'I'm Netflix, but I'll still get you.'
+[16:20:08.680] RMS: 0.233789 (-12.6dB) | [MAIN SUCCESS] I'm Netflix, but I'll still get you. (conf: 0.800)
+[16:20:09.308] RMS: 0.237891 (-12.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:09.386] RMS: 0.208187 (-13.6dB) | [MAIN] Raw Whisper result: 'Thanks for all of the YouTube.'
+[16:20:09.387] RMS: 0.208187 (-13.6dB) | [MAIN] Cleaned text: 'Thanks for all of the YouTube.'
+[16:20:09.388] RMS: 0.208187 (-13.6dB) | [MAIN SUCCESS] Thanks for all of the YouTube. (conf: 0.800)
+[16:20:10.082] RMS: 0.245366 (-12.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:10.094] RMS: 0.237891 (-12.5dB) | [MAIN] Raw Whisper result: 'YouTube. These companies are'
+[16:20:10.095] RMS: 0.237891 (-12.5dB) | [MAIN] Cleaned text: 'YouTube. These companies are'
+[16:20:10.096] RMS: 0.237891 (-12.5dB) | [MAIN SUCCESS] YouTube. These companies are (conf: 0.800)
+[16:20:10.791] RMS: 0.245366 (-12.2dB) | [MAIN] Raw Whisper result: 'These companies I have to'
+[16:20:10.792] RMS: 0.245366 (-12.2dB) | [MAIN] Cleaned text: 'These companies I have to'
+[16:20:10.792] RMS: 0.245366 (-12.2dB) | [MAIN SUCCESS] These companies I have to (conf: 0.800)
+[16:20:10.884] RMS: 0.235963 (-12.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:11.643] RMS: 0.235963 (-12.5dB) | [MAIN] Raw Whisper result: 'Companies that have to.'
+[16:20:11.643] RMS: 0.235963 (-12.5dB) | [MAIN] Cleaned text: 'Companies that have to.'
+[16:20:11.644] RMS: 0.235963 (-12.5dB) | [MAIN SUCCESS] Companies that have to. (conf: 0.800)
+[16:20:11.690] RMS: 0.227396 (-12.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:12.411] RMS: 0.227396 (-12.9dB) | [MAIN] Raw Whisper result: 'to deliver.'
+[16:20:12.412] RMS: 0.227396 (-12.9dB) | [MAIN] Cleaned text: 'to deliver.'
+[16:20:12.412] RMS: 0.227396 (-12.9dB) | [MAIN SUCCESS] to deliver. (conf: 0.800)
+[16:20:12.495] RMS: 0.199024 (-14.0dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:13.281] RMS: 0.199024 (-14.0dB) | [MAIN] Raw Whisper result: 'Deliver, like sir.'
+[16:20:13.281] RMS: 0.199024 (-14.0dB) | [MAIN] Cleaned text: 'Deliver, like sir.'
+[16:20:13.282] RMS: 0.199024 (-14.0dB) | [MAIN SUCCESS] Deliver, like sir. (conf: 0.800)
+[16:20:13.299] RMS: 0.247484 (-12.1dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:14.033] RMS: 0.247484 (-12.1dB) | [MAIN] Raw Whisper result: 'deliver. Like, serve a huge'
+[16:20:14.034] RMS: 0.247484 (-12.1dB) | [MAIN] Cleaned text: 'deliver. Like, serve a huge'
+[16:20:14.034] RMS: 0.247484 (-12.1dB) | [MAIN SUCCESS] deliver. Like, serve a huge (conf: 0.800)
+[16:20:14.101] RMS: 0.227044 (-12.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:14.913] RMS: 0.192722 (-14.3dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:14.939] RMS: 0.227044 (-12.9dB) | [MAIN] Raw Whisper result: 'Let's serve a huge amount.'
+[16:20:14.939] RMS: 0.227044 (-12.9dB) | [MAIN] Cleaned text: 'Let's serve a huge amount.'
+[16:20:14.941] RMS: 0.227044 (-12.9dB) | [MAIN SUCCESS] Let's serve a huge amount. (conf: 0.800)
+[16:20:15.610] RMS: 0.192722 (-14.3dB) | [MAIN] Raw Whisper result: 'huge amount of'
+[16:20:15.610] RMS: 0.192722 (-14.3dB) | [MAIN] Cleaned text: 'huge amount of'
+[16:20:15.611] RMS: 0.192722 (-14.3dB) | [MAIN SUCCESS] huge amount of (conf: 0.800)
+[16:20:15.718] RMS: 0.143788 (-16.8dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:16.438] RMS: 0.143788 (-16.8dB) | [MAIN] Raw Whisper result: 'amount of like.'
+[16:20:16.438] RMS: 0.143788 (-16.8dB) | [MAIN] Cleaned text: 'amount of like.'
+[16:20:16.439] RMS: 0.143788 (-16.8dB) | [MAIN SUCCESS] amount of like. (conf: 0.800)
+[16:20:16.515] RMS: 0.074754 (-22.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:17.263] RMS: 0.074754 (-22.5dB) | [MAIN] Raw Whisper result: 'of like.'
+[16:20:17.263] RMS: 0.074754 (-22.5dB) | [MAIN] Cleaned text: 'of like.'
+[16:20:17.264] RMS: 0.074754 (-22.5dB) | [MAIN SUCCESS] of like. (conf: 0.800)
+[16:20:17.322] RMS: 0.073565 (-22.7dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:18.067] RMS: 0.073565 (-22.7dB) | [MAIN] Raw Whisper result: 'like bits'
+[16:20:18.068] RMS: 0.073565 (-22.7dB) | [MAIN] Cleaned text: 'like bits'
+[16:20:18.068] RMS: 0.073565 (-22.7dB) | [MAIN SUCCESS] like bits (conf: 0.800)
+[16:20:18.130] RMS: 0.050567 (-25.9dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:18.934] RMS: 0.138643 (-17.2dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:18.996] RMS: 0.050567 (-25.9dB) | [MAIN] Raw Whisper result: 'It's...'
+[16:20:18.996] RMS: 0.050567 (-25.9dB) | [MAIN] Cleaned text: 'It's...'
+[16:20:18.997] RMS: 0.050567 (-25.9dB) | [MAIN SUCCESS] It's... (conf: 0.800)
+[16:20:19.740] RMS: 0.186998 (-14.6dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:19.750] RMS: 0.138643 (-17.2dB) | [MAIN] Raw Whisper result: 'It's never as'
+[16:20:19.751] RMS: 0.138643 (-17.2dB) | [MAIN] Cleaned text: 'It's never as'
+[16:20:19.751] RMS: 0.138643 (-17.2dB) | [MAIN SUCCESS] It's never as (conf: 0.800)
+[16:20:20.539] RMS: 0.239539 (-12.4dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:20.571] RMS: 0.186998 (-14.6dB) | [MAIN] Raw Whisper result: 'And Netflix has an easiest answer.'
+[16:20:20.572] RMS: 0.186998 (-14.6dB) | [MAIN] Cleaned text: 'And Netflix has an easiest answer.'
+[16:20:20.574] RMS: 0.186998 (-14.6dB) | [MAIN SUCCESS] And Netflix has an easiest answer. (conf: 0.800)
+[16:20:21.350] RMS: 0.237394 (-12.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:21.361] RMS: 0.239539 (-12.4dB) | [MAIN] Raw Whisper result: 'And Netflix has an easiest out of all the coming'
+[16:20:21.361] RMS: 0.239539 (-12.4dB) | [MAIN] Cleaned text: 'And Netflix has an easiest out of all the coming'
+[16:20:21.362] RMS: 0.239539 (-12.4dB) | [MAIN SUCCESS] And Netflix has an easiest out of all the coming (conf: 0.800)
+[16:20:22.109] RMS: 0.237394 (-12.5dB) | [MAIN] Raw Whisper result: 'the'
+[16:20:22.110] RMS: 0.237394 (-12.5dB) | [MAIN] Cleaned text: 'the'
+[16:20:22.110] RMS: 0.237394 (-12.5dB) | [MAIN SUCCESS] the (conf: 0.800)
+[16:20:22.159] RMS: 0.267134 (-11.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:22.905] RMS: 0.267134 (-11.5dB) | [MAIN] Raw Whisper result: 'all the coming networks by even though we have.'
+[16:20:22.906] RMS: 0.267134 (-11.5dB) | [MAIN] Cleaned text: 'all the coming networks by even though we have.'
+[16:20:22.907] RMS: 0.267134 (-11.5dB) | [MAIN SUCCESS] all the coming networks by even though we have. (conf: 0.800)
+[16:20:22.960] RMS: 0.238316 (-12.5dB) | [MAIN] Using file-based transcription with improved filtering...
+[16:20:23.887] RMS: 0.238316 (-12.5dB) | [MAIN] Raw Whisper result: 'that's what's right, even though we have, you can say.'
+[16:20:23.888] RMS: 0.238316 (-12.5dB) | [MAIN] Cleaned text: 'that's what's right, even though we have, you can say.'
+[16:20:23.888] RMS: 0.238316 (-12.5dB) | [MAIN SUCCESS] that's what's right, even though we have, you can say. (conf: 0.800)

@@ -47,6 +47,13 @@ vi.mock('@/composables/useControlPanelEvents', () => ({
     toggleMLEyeTrackingWithMovement: vi.fn(),
     handleKeydown: vi.fn(),
     handleClickOutside: vi.fn(),
+    registerWindow: vi.fn(),
+    unregisterWindow: vi.fn(),
+    windowRegistry: {
+      register: vi.fn(),
+      unregister: vi.fn(),
+      getAllWindows: vi.fn(() => []),
+    },
   }),
 }))
 
