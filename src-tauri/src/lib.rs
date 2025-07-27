@@ -11,6 +11,7 @@ mod screenshot;
 mod file_handler;
 mod data_store;
 mod audio_loopback; // New audio loopback module
+mod system_prompts; // System prompts module
 
 // Re-export the commands from modules
 use transparency::{set_window_transparency, emergency_restore_window, toggle_transparency};
