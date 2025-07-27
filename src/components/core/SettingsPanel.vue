@@ -409,7 +409,7 @@ onMounted(() => {
             <div class="section-header">
               <h2 class="section-title">AI Models</h2>
               <p class="section-description">
-                Manage AI models for transcription analysis and intelligent responses. Enteract uses Ollama to run models locally for privacy and performance.
+                Manage AI models for transcription analysis and intelligent responses. Enteract runs models locally for privacy and performance.
               </p>
             </div>
             
