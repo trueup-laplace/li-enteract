@@ -1,5 +1,7 @@
+/// <reference types="vitest" />
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
+import path from "path";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -27,6 +29,33 @@ export default defineConfig(async () => ({
     watch: {
       // 3. tell vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**", "**/transcription_debug.txt"],
+    },
+  },
+
+  // Path resolution for testing
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+
+  // Vitest configuration
+  test: {
+    globals: true,
+    environment: 'happy-dom',
+    setupFiles: ['./src/tests/setup.ts'],
+    include: ['src/tests/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    exclude: ['node_modules', 'dist', '.idea', '.git', '.cache', 'src-tauri'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      exclude: [
+        'node_modules/',
+        'src/tests/',
+        '**/*.d.ts',
+        'src-tauri/',
+        'dist/',
+      ],
     },
   },
 }));
