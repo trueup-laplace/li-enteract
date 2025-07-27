@@ -67,18 +67,19 @@ export class MarkdownRenderer {
       processed = processed.replace(new RegExp(placeholder, 'g'), html)
     })
     
-    // Add raw markdown display for testing
-    const debugSection = `
-      <div class="markdown-debug border-t border-white/20 mt-6 pt-4">
-        <div class="text-xs text-white/50 font-semibold mb-2">RAW MARKDOWN:</div>
-        <pre class="bg-gray-800/50 border border-white/10 rounded p-3 text-xs text-white/70 overflow-x-auto font-mono whitespace-pre-wrap">${this.escapeHtml(text)}</pre>
-      </div>
-    `
+    // Add raw markdown display for testing (commented out)
+    // const debugSection = `
+    //   <div class="markdown-debug border-t border-white/20 mt-6 pt-4">
+    //     <div class="text-xs text-white/50 font-semibold mb-2">RAW MARKDOWN:</div>
+    //     <pre class="bg-gray-800/50 border border-white/10 rounded p-3 text-xs text-white/70 overflow-x-auto font-mono whitespace-pre-wrap">${this.escapeHtml(text)}</pre>
+    //   </div>
+    // `
     
     console.log('=== MARKDOWN RENDER END ===')
-    console.log('Final output length:', (processed + debugSection).length)
+    // console.log('Final output length:', (processed + debugSection).length)
     
-    return processed + debugSection
+    // return processed + debugSection
+    return processed
   }
   
   private static processBlockElements(text: string): string {
@@ -132,28 +133,58 @@ export class MarkdownRenderer {
         continue
       }
       
-      // Unordered lists
+      // Unordered lists (handle empty lines between items)
       if (/^[\*\-\+]\s/.test(trimmed)) {
         const listItems = []
-        while (i < lines.length && /^[\*\-\+]\s/.test(lines[i].trim())) {
-          const content = lines[i].trim().slice(2)
-          listItems.push(`<li class="flex items-start"><span class="text-blue-400 mr-2 mt-1">•</span><span>${content}</span></li>`)
-          i++
+        
+        while (i < lines.length) {
+          const currentLine = lines[i].trim()
+          
+          // If it's a bullet list item, add it
+          if (/^[\*\-\+]\s/.test(currentLine)) {
+            const content = currentLine.slice(2)
+            listItems.push(`<li class="flex items-start"><span class="text-blue-400 mr-2 mt-1">•</span><span>${content}</span></li>`)
+            i++
+          }
+          // If it's an empty line, skip it but continue looking for more list items
+          else if (currentLine === '') {
+            i++
+          }
+          // If it's not a list item and not empty, we're done with this list
+          else {
+            break
+          }
         }
+        
         result.push(`<ul class="my-3 space-y-1">${listItems.join('')}</ul>`)
         continue
       }
       
-      // Ordered lists
+      // Ordered lists (handle empty lines between items)
       if (/^\d+\.\s/.test(trimmed)) {
         const listItems = []
         let listNumber = 1
-        while (i < lines.length && /^\d+\.\s/.test(lines[i].trim())) {
-          const content = lines[i].trim().replace(/^\d+\.\s/, '')
-          listItems.push(`<li class="flex items-start"><span class="text-green-400 mr-2 mt-1 font-medium min-w-[1.5rem]">${listNumber}.</span><span>${content}</span></li>`)
-          listNumber++
-          i++
+        
+        while (i < lines.length) {
+          const currentLine = lines[i].trim()
+          
+          // If it's a numbered list item, add it
+          if (/^\d+\.\s/.test(currentLine)) {
+            const content = currentLine.replace(/^\d+\.\s/, '')
+            listItems.push(`<li class="flex items-start"><span class="text-green-400 mr-2 mt-1 font-medium min-w-[1.5rem]">${listNumber}.</span><span>${content}</span></li>`)
+            listNumber++
+            i++
+          }
+          // If it's an empty line, skip it but continue looking for more list items
+          else if (currentLine === '') {
+            i++
+          }
+          // If it's not a list item and not empty, we're done with this list
+          else {
+            break
+          }
         }
+        
         result.push(`<ol class="my-3 space-y-1">${listItems.join('')}</ol>`)
         continue
       }
@@ -334,12 +365,12 @@ export class MarkdownRenderer {
     // Use a safer, sequential approach
     let result = code
     
-    // 1. Comments (do first so they don't interfere)
-    result = result.replace(/(#[^\n]*)/g, '<span class="text-gray-500 italic">$1</span>')
-    
-    // 2. Triple-quoted strings
+    // 1. Triple-quoted strings FIRST (before single line comments to avoid conflicts)
     result = result.replace(/("""[\s\S]*?""")/g, '<span class="text-green-300">$1</span>')
     result = result.replace(/('''[\s\S]*?''')/g, '<span class="text-green-300">$1</span>')
+    
+    // 2. Single line comments (after docstrings)
+    result = result.replace(/(?!<span[^>]*>)(#[^\n]*)(?![^<]*<\/span>)/g, '<span class="text-gray-500 italic">$1</span>')
     
     // 3. Regular strings (only if not already highlighted)
     result = result.replace(/(?!<span[^>]*>)("(?:[^"\\]|\\.)*")(?![^<]*<\/span>)/g, '<span class="text-green-300">$1</span>')
@@ -372,9 +403,11 @@ export class MarkdownRenderer {
   private static highlightJavaScript(code: string): string {
     let result = code
     
-    // 1. Comments
-    result = result.replace(/(\/\/[^\n]*)/g, '<span class="text-gray-500 italic">$1</span>')
+    // 1. Multi-line comments first
     result = result.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="text-gray-500 italic">$1</span>')
+    
+    // 2. Single line comments (after multi-line to avoid conflicts)
+    result = result.replace(/(?!<span[^>]*>)(\/\/[^\n]*)(?![^<]*<\/span>)/g, '<span class="text-gray-500 italic">$1</span>')
     
     // 2. Strings
     result = result.replace(/(?!<span[^>]*>)("(?:[^"\\]|\\.)*")(?![^<]*<\/span>)/g, '<span class="text-green-300">$1</span>')
@@ -420,9 +453,11 @@ export class MarkdownRenderer {
   private static highlightRust(code: string): string {
     let result = code
     
-    // 1. Comments
-    result = result.replace(/(\/\/[^\n]*)/g, '<span class="text-gray-500 italic">$1</span>')
+    // 1. Multi-line comments first
     result = result.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="text-gray-500 italic">$1</span>')
+    
+    // 2. Single line comments (after multi-line to avoid conflicts)
+    result = result.replace(/(?!<span[^>]*>)(\/\/[^\n]*)(?![^<]*<\/span>)/g, '<span class="text-gray-500 italic">$1</span>')
     
     // 2. Strings
     result = result.replace(/(?!<span[^>]*>)("(?:[^"\\]|\\.)*")(?![^<]*<\/span>)/g, '<span class="text-green-300">$1</span>')
@@ -489,12 +524,12 @@ export class MarkdownRenderer {
   private static highlightBash(code: string): string {
     let result = code
     
-    // 1. Comments
-    result = result.replace(/(#[^\n]*)/g, '<span class="text-gray-500 italic">$1</span>')
-    
-    // 2. Strings (before other highlighting)
+    // 1. Strings first (before comments to avoid conflicts)
     result = result.replace(/(?!<span[^>]*>)("(?:[^"\\]|\\.)*")(?![^<]*<\/span>)/g, '<span class="text-green-300">$1</span>')
     result = result.replace(/(?!<span[^>]*>)('(?:[^'\\]|\\.)*')(?![^<]*<\/span>)/g, '<span class="text-green-300">$1</span>')
+    
+    // 2. Comments (after strings)
+    result = result.replace(/(?!<span[^>]*>)(#[^\n]*)(?![^<]*<\/span>)/g, '<span class="text-gray-500 italic">$1</span>')
     
     // 3. Prompt symbols
     result = result.replace(/^(\$|#)\s*/gm, '<span class="text-gray-500">$1</span> ')
