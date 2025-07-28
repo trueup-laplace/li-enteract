@@ -1,4 +1,4 @@
-// markdownRenderer.ts - Enhanced markdown renderer with proper parsing order
+// markdownRenderer.ts - Enhanced markdown renderer with proper paragraph handling
 export class MarkdownRenderer {
   static render(text: string): string {
     if (!text) return ''
@@ -32,7 +32,7 @@ export class MarkdownRenderer {
             Copy
           </button>
         </div>
-        <div class="code-content leading-relaxed">${highlightedCode}</div>
+        <div class="code-content leading-relaxed whitespace-pre">${highlightedCode}</div>
       </div>`
       
       codeBlocks.push(codeBlockHtml)
@@ -67,6 +67,10 @@ export class MarkdownRenderer {
       processed = processed.replace(new RegExp(placeholder, 'g'), html)
     })
     
+    console.log('=== MARKDOWN RENDER END ===')
+
+
+
     // Add raw markdown display for testing (commented out)
     // const debugSection = `
     //   <div class="markdown-debug border-t border-white/20 mt-6 pt-4">
@@ -74,11 +78,9 @@ export class MarkdownRenderer {
     //     <pre class="bg-gray-800/50 border border-white/10 rounded p-3 text-xs text-white/70 overflow-x-auto font-mono whitespace-pre-wrap">${this.escapeHtml(text)}</pre>
     //   </div>
     // `
-    
-    console.log('=== MARKDOWN RENDER END ===')
-    // console.log('Final output length:', (processed + debugSection).length)
-    
     // return processed + debugSection
+
+
     return processed
   }
   
@@ -207,9 +209,36 @@ export class MarkdownRenderer {
         continue
       }
       
-      // Regular paragraph
-      result.push(`<p class="text-white/85 my-2 leading-relaxed">${line}</p>`)
-      i++
+      // FIXED: Regular paragraphs - group consecutive lines
+      const paragraphLines = []
+      while (i < lines.length) {
+        const currentLine = lines[i]
+        const currentTrimmed = currentLine.trim()
+        
+        // If empty line, we're done with this paragraph
+        if (!currentTrimmed) {
+          break
+        }
+        
+        // If it matches a special pattern, we're done with this paragraph
+        if (currentTrimmed.startsWith('#') || 
+            currentTrimmed.startsWith('>') ||
+            currentTrimmed === '---' || currentTrimmed === '***' || currentTrimmed === '___' ||
+            /^[\*\-\+]\s/.test(currentTrimmed) ||
+            /^\d+\.\s/.test(currentTrimmed) ||
+            (currentTrimmed.includes('|') && currentTrimmed.startsWith('|') && currentTrimmed.endsWith('|'))) {
+          break
+        }
+        
+        paragraphLines.push(currentLine)
+        i++
+      }
+      
+      if (paragraphLines.length > 0) {
+        // Join lines with spaces to preserve text flow
+        const paragraphText = paragraphLines.join(' ').trim()
+        result.push(`<p class="text-white/85 my-2 leading-relaxed">${paragraphText}</p>`)
+      }
     }
     
     return result.join('\n')
@@ -324,10 +353,12 @@ export class MarkdownRenderer {
         result = this.highlightBash(escapedCode)
         break
       default:
+        // Ensure we preserve the original structure for unknown languages
         result = `<span class="text-gray-300">${escapedCode}</span>`
     }
     
     console.log('Highlight result length:', result.length)
+    // Ensure newlines are preserved in the result
     return result
   }
   
