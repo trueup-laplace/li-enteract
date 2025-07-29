@@ -15,7 +15,7 @@ import { useSpeechTranscription } from '../../composables/useSpeechTranscription
 import { useWindowRegistration } from '../../composables/useWindowRegistry'
 import AgentActionButtons from './AgentActionButtons.vue'
 import ModelSelector from './ModelSelector.vue'
-import ChatWindowSidebarAdapter from './ChatWindowSidebarAdapter.vue'
+import ChatWindowSidebar from './ChatWindowSidebar.vue'
 
 interface Props {
   showChatWindow: boolean
@@ -420,7 +420,7 @@ onUnmounted(() => {
       <!-- Window Content Container -->
       <div class="window-content">
         <!-- Chat Sidebar -->
-        <ChatWindowSidebarAdapter
+        <ChatWindowSidebar
           :show="showChatSidebar"
           :selected-model="selectedModel"
           @close="showChatSidebar = false"

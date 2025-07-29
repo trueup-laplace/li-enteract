@@ -52,7 +52,7 @@ export function useSpeechTranscription() {
 
   // Configuration
   const defaultWhisperConfig: WhisperConfig = {
-    modelSize: 'tiny',
+    modelSize: 'small',
     language: 'en',
     enableVAD: true,
     silenceThreshold: 0.01,
@@ -506,137 +506,39 @@ export function useSpeechTranscription() {
     }
   }
 
-  // Enhanced stop recording with instant cancellation and parallel cleanup
+  // Enhanced stop recording with cleanup and auto-send
   const stopRecording = async () => {
     if (!isRecording.value) return
 
     try {
-      // IMMEDIATE UI RESPONSE - Reset state instantly for responsive UX
+      // Immediately reset recording state for responsive UX
       isRecording.value = false
       isTranscribing.value = false
       
-      console.log('🛑 Instant stop initiated - UI reset immediately')
-      
-      // PHASE 1: Instant cancellation signals (non-blocking)
-      const cancellationPromise = (async () => {
-        try {
-          await invoke('cancel_microphone_transcription')
-          console.log('✅ Microphone transcription cancelled instantly')
-        } catch (cancellationError) {
-          console.warn('⚠️ Cancellation signal failed:', cancellationError)
-        }
-      })()
-      
-      // PHASE 2: Parallel cleanup sequence with frequent stop signal checks
-      const cleanupPromises = [
-        // Audio context cleanup with cancellation checks
-        (async () => {
-          resetSilenceTimer()
-          
-          // Check for cancellation every 50ms during cleanup
-          const cleanupWithChecks = async () => {
-            if (audioContext && audioContext.state !== 'closed') {
-              await audioContext.close()
-              audioContext = null
-              analyser = null
-            }
-          }
-          
-          await cleanupWithChecks()
-          console.log('✅ Audio context cleaned up')
-        })(),
-        
-        // Web Speech API cleanup - instant
-        (async () => {
-          if (recognition) {
-            recognition.stop()
-            isListening.value = false
-          }
-          console.log('✅ Web Speech API stopped')
-        })(),
-        
-        // MediaRecorder cleanup - instant
-        (async () => {
-          if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-            mediaRecorder.stop()
-          }
-          console.log('✅ MediaRecorder stopped')
-        })(),
-        
-        // Audio stream cleanup - instant
-        (async () => {
-          if (audioStream) {
-            audioStream.getTracks().forEach(track => track.stop())
-            audioStream = null
-          }
-          console.log('✅ Audio stream tracks stopped')
-        })(),
-        
-        // Advanced whisper cleanup with progressive timeouts
-        (async () => {
-          try {
-            // First try graceful cleanup with model-specific timeout
-            await Promise.race([
-              invoke('cleanup_whisper_microphone_context'),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Graceful cleanup timeout')), 3000)
-              )
-            ])
-            console.log('✅ Whisper microphone context cleaned up gracefully')
-          } catch (gracefulError) {
-            console.warn('⚠️ Graceful whisper cleanup failed, trying force cleanup:', gracefulError)
-            
-            try {
-              // Emergency cleanup if graceful fails
-              await Promise.race([
-                invoke('emergency_shutdown_whisper'),
-                new Promise((_, reject) => 
-                  setTimeout(() => reject(new Error('Emergency cleanup timeout')), 2000)
-                )
-              ])
-              console.log('✅ Emergency whisper cleanup successful')
-            } catch (emergencyError) {
-              console.error('❌ Emergency whisper cleanup failed:', emergencyError)
-              
-              // Last resort - force cleanup without waiting
-              try {
-                invoke('force_cleanup_whisper_contexts') // Fire and forget
-                console.log('✅ Force cleanup initiated (fire and forget)')
-              } catch (forceError) {
-                console.error('❌ Even force cleanup failed:', forceError)
-              }
-            }
-          }
-        })()
-      ]
-
-      // PHASE 3: Execute cleanup with progressive timeouts
-      const cleanupWithTimeout = async () => {
-        try {
-          // Try to complete cleanup in 2 seconds
-          await Promise.race([
-            Promise.allSettled(cleanupPromises),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Primary cleanup timeout')), 2000)
-            )
-          ])
-          console.log('✅ Primary cleanup completed within timeout')
-        } catch (timeoutError) {
-          console.warn('⚠️ Primary cleanup timed out, background cleanup continues')
-          
-          // Continue cleanup in background without blocking UI
-          Promise.allSettled(cleanupPromises).then(() => {
-            console.log('✅ Background cleanup completed')
-          }).catch((bgError) => {
-            console.error('❌ Background cleanup failed:', bgError)
-          })
-        }
+      // Clean up silence detection
+      resetSilenceTimer()
+      if (audioContext && audioContext.state !== 'closed') {
+        await audioContext.close()
+        audioContext = null
+        analyser = null
       }
-      
-      // Wait for cancellation signal and start cleanup simultaneously
-      await Promise.all([cancellationPromise, cleanupWithTimeout()])
-      
-      console.log('✅ Instant stop sequence completed')
+
+      // Stop Web Speech API
+      if (recognition) {
+        recognition.stop()
+        isListening.value = false
+      }
+
+      // Stop MediaRecorder
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop()
+      }
+
+      // Stop audio stream
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop())
+        audioStream = null
+      }
 
       // End session
       if (currentSession.value) {
@@ -669,14 +571,6 @@ export function useSpeechTranscription() {
     } catch (err) {
       console.error('Error stopping recording:', err)
       error.value = `Error stopping recording: ${err}`
-      
-      // Emergency cleanup on error
-      try {
-        await invoke('force_cleanup_whisper_contexts')
-        console.log('✅ Emergency whisper cleanup completed')
-      } catch (emergencyError) {
-        console.error('❌ Emergency cleanup failed:', emergencyError)
-      }
     } finally {
       // Ensure processing state is reset even if there are errors
       isProcessing.value = false
