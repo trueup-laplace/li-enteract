@@ -3,12 +3,13 @@ use serde_json;
 use reqwest;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+// use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 use futures_util::StreamExt;
 use lazy_static::lazy_static;
 use tokio::sync::Semaphore;
-use tokio::time::timeout; 
+// use tokio::time::timeout; 
+use std::sync::Mutex;
 use crate::system_prompts::{
     ENTERACT_AGENT_PROMPT, 
     VISION_ANALYSIS_PROMPT, 
@@ -16,19 +17,24 @@ use crate::system_prompts::{
     CONVERSATIONAL_AI_PROMPT,
     CODING_AGENT_PROMPT
 };
+use crate::system_info::get_gpu_info;
 // Shared HTTP client for better connection pooling and memory efficiency
 lazy_static! {
     static ref HTTP_CLIENT: Arc<reqwest::Client> = Arc::new(
         reqwest::Client::builder()
-            .pool_max_idle_per_host(8)  // Maintain connection pool per host
-            .pool_idle_timeout(std::time::Duration::from_secs(30))
-            .timeout(std::time::Duration::from_secs(120))  // 2 minute timeout for large models
+            .pool_max_idle_per_host(16)  // More idle connections for faster reuse
+            .pool_idle_timeout(std::time::Duration::from_secs(60))
+            .tcp_keepalive(Some(std::time::Duration::from_secs(60)))
+            .timeout(std::time::Duration::from_secs(60))  // Shorter timeout to fail fast
             .build()
             .expect("Failed to create HTTP client")
     );
     
     // Semaphore to limit concurrent AI model requests (memory safety)
-    static ref REQUEST_SEMAPHORE: Arc<Semaphore> = Arc::new(Semaphore::new(3)); // Max 3 concurrent requests
+    static ref REQUEST_SEMAPHORE: Arc<Semaphore> = Arc::new(Semaphore::new(4)); // Slightly higher concurrency
+    
+    // Track active streaming sessions for cancellation
+    static ref ACTIVE_SESSIONS: Mutex<HashMap<String, bool>> = Mutex::new(HashMap::new());
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -82,6 +88,7 @@ pub struct GenerateRequest {
     pub context: Option<Vec<i32>>,
     pub images: Option<Vec<String>>,
     pub system: Option<String>,
+    pub options: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -132,192 +139,249 @@ fn build_prompt_with_context(current_prompt: String, context: Option<Vec<ChatCon
     }
 }
 
-// Enhanced fast repetition detection
+// Detect GPU and determine optimal layer count for GPU acceleration
+fn detect_gpu_layers() -> i32 {
+    // Try to get GPU info
+    match get_gpu_info() {
+        Ok(gpus) => {
+            for gpu in gpus {
+                // Check for NVIDIA GPUs (best Ollama support)
+                if gpu.vendor == "NVIDIA" {
+                    if let Some(memory_mb) = gpu.memory_mb {
+                        println!("🎮 Detected NVIDIA GPU: {} with {}MB VRAM", gpu.name, memory_mb);
+                        
+                        // Calculate layers based on VRAM
+                        // Conservative estimates to prevent OOM
+                        let layers = if memory_mb >= 24000 {
+                            99  // Full GPU offload for 24GB+ cards (RTX 4090, A5000)
+                        } else if memory_mb >= 16000 {
+                            80  // RTX 4080, A4000
+                        } else if memory_mb >= 12000 {
+                            60  // RTX 4070 Ti, RTX 3080 Ti
+                        } else if memory_mb >= 10000 {
+                            50  // RTX 3080, RTX 4070
+                        } else if memory_mb >= 8000 {
+                            40  // RTX 3070, RTX 4060 Ti
+                        } else if memory_mb >= 6000 {
+                            30  // RTX 3060, RTX 4060
+                        } else if memory_mb >= 4000 {
+                            20  // GTX 1650, older cards
+                        } else {
+                            0   // Too little VRAM, use CPU
+                        };
+                        
+                        println!("🚀 GPU acceleration enabled with {} layers", layers);
+                        return layers;
+                    }
+                }
+                
+                // AMD GPUs (experimental Ollama support)
+                if gpu.vendor == "AMD" && gpu.name.contains("Radeon") {
+                    if let Some(memory_mb) = gpu.memory_mb {
+                        println!("🎮 Detected AMD GPU: {} with {}MB VRAM", gpu.name, memory_mb);
+                        
+                        // Conservative for AMD due to less mature support
+                        let layers = if memory_mb >= 16000 {
+                            40
+                        } else if memory_mb >= 8000 {
+                            20
+                        } else {
+                            0
+                        };
+                        
+                        if layers > 0 {
+                            println!("⚠️ AMD GPU support is experimental, using {} layers", layers);
+                        }
+                        return layers;
+                    }
+                }
+            }
+            
+            println!("⚠️ No supported GPU found for acceleration, using CPU");
+            0
+        }
+        Err(e) => {
+            println!("⚠️ Could not detect GPU: {}, using CPU", e);
+            0
+        }
+    }
+}
+
+// Get GPU acceleration status
+#[tauri::command]
+pub fn get_gpu_acceleration_status() -> serde_json::Value {
+    let gpu_layers = detect_gpu_layers();
+    let gpus = get_gpu_info().unwrap_or_else(|_| vec![]);
+    
+    serde_json::json!({
+        "enabled": gpu_layers > 0,
+        "layers": gpu_layers,
+        "gpus": gpus.iter().map(|gpu| {
+            serde_json::json!({
+                "name": gpu.name,
+                "vendor": gpu.vendor,
+                "memory_mb": gpu.memory_mb,
+                "driver_version": gpu.driver_version
+            })
+        }).collect::<Vec<_>>()
+    })
+}
+
+// Cancel a streaming session
+#[tauri::command]
+pub fn cancel_ai_response(session_id: String) -> Result<(), String> {
+    let mut sessions = ACTIVE_SESSIONS.lock().unwrap();
+    sessions.insert(session_id.clone(), true);
+    println!("🛑 Cancellation requested for session: {}", session_id);
+    Ok(())
+}
+
+// Check if a session is cancelled
+fn is_session_cancelled(session_id: &str) -> bool {
+    let sessions = ACTIVE_SESSIONS.lock().unwrap();
+    sessions.get(session_id).copied().unwrap_or(false)
+}
+
+// Clean up cancelled session
+fn cleanup_session(session_id: &str) {
+    let mut sessions = ACTIVE_SESSIONS.lock().unwrap();
+    sessions.remove(session_id);
+}
+
+// Shared streaming logic
 async fn stream_ollama_response(
     app_handle: AppHandle,
     url: String,
     request: GenerateRequest,
     session_id: String,
 ) -> Result<(), String> {
+    // Register the session as active
+    {
+        let mut sessions = ACTIVE_SESSIONS.lock().unwrap();
+        sessions.insert(session_id.clone(), false);
+    }
+
     let client = Arc::clone(&HTTP_CLIENT);
-    let is_vision = request.images.is_some();
-    
-    let stream_timeout = if is_vision { Duration::from_secs(45) } else { Duration::from_secs(30) };
-    let chunk_timeout = Duration::from_secs(8);
-    
-    let emit_error_and_cleanup = |app_handle: &AppHandle, session_id: &str, error_msg: &str| {
-        let _ = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-            "type": "error",
-            "error": error_msg
-        }));
-        let _ = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-            "type": "complete"
-        }));
-    };
-    
-    let stream_result = timeout(stream_timeout, async {
-        match client.post(&url).json(&request).send().await {
-            Ok(response) => {
-                if response.status().is_success() {
-                    let mut stream = response.bytes_stream();
-                    let mut buffer = Vec::new();
-                    let mut total_chunks = 0;
-                    let mut last_activity = Instant::now();
-                    let mut accumulated_text = String::new();
-                    
-                    // FAST DETECTION: Track recent chunks for immediate patterns
-                    let mut recent_chunks = std::collections::VecDeque::with_capacity(10);
-                    let mut section_markers = std::collections::HashMap::new();
-                    
-                    while let Some(chunk_result) = stream.next().await {
-                        if last_activity.elapsed() > chunk_timeout {
-                            return Err("Stream timed out - model appears stuck".to_string());
-                        }
-                        
-                        match chunk_result {
-                            Ok(chunk) => {
-                                last_activity = Instant::now();
-                                total_chunks += 1;
-                                
-                                // Much lower limit for faster detection
-                                if total_chunks > 800 {
-                                    return Err("Stream exceeded chunk limit - preventing runaway generation".to_string());
-                                }
-                                
-                                buffer.extend_from_slice(&chunk);
-                                
-                                while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
-                                    let line = buffer.drain(..=newline_pos).collect::<Vec<u8>>();
-                                    let line_str = String::from_utf8_lossy(&line[..line.len()-1]);
-                                    
-                                    if line_str.trim().is_empty() {
-                                        continue;
+    // Send with shorter connect timeout by spawning and imposing a small timeout for first bytes
+    match client.post(&url).json(&request).send().await {
+        Ok(response) => {
+            if response.status().is_success() {
+                let mut stream = response.bytes_stream();
+                let mut buffer = Vec::new();
+                // Emit a tiny nudge to UI so it can render quickly even before first chunk
+                if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                    "type": "chunk",
+                    "text": "",
+                    "done": false
+                })) {
+                    eprintln!("Failed to emit priming chunk: {}", e);
+                }
+
+                while let Some(chunk_result) = stream.next().await {
+                    match chunk_result {
+                        Ok(chunk) => {
+                            buffer.extend_from_slice(&chunk);
+
+                            // Process complete lines from buffer
+                            while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
+                                // Check for cancellation
+                                if is_session_cancelled(&session_id) {
+                                    println!("🛑 Session cancelled: {}", session_id);
+
+                                    if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                                        "type": "cancelled",
+                                        "message": "Response cancelled by user"
+                                    })) {
+                                        eprintln!("Failed to emit cancellation event: {}", e);
                                     }
-                                    
-                                    match serde_json::from_str::<GenerateResponse>(&line_str) {
-                                        Ok(response_chunk) => {
-                                            if response_chunk.done {
-                                                let _ = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                                                    "type": "chunk",
-                                                    "text": response_chunk.response,
-                                                    "done": true
-                                                }));
-                                                return Ok(());
-                                            }
-                                            
-                                            let chunk_text = &response_chunk.response;
-                                            accumulated_text.push_str(chunk_text);
-                                            
-                                            // IMMEDIATE CHUNK-LEVEL DETECTION
-                                            if !chunk_text.trim().is_empty() {
-                                                // Add to recent chunks
-                                                if recent_chunks.len() >= 10 {
-                                                    recent_chunks.pop_front();
-                                                }
-                                                recent_chunks.push_back(chunk_text.to_string());
-                                                
-                                                // 1. FAST: Check for immediate repetition in last 3-5 chunks
-                                                if recent_chunks.len() >= 3 {
-                                                    let last_3: Vec<&String> = recent_chunks.iter().rev().take(3).collect();
-                                                    if last_3.len() == 3 && last_3[0] == last_3[1] && last_3[1] == last_3[2] {
-                                                        return Err(format!("Immediate 3x repetition: '{}'", last_3[0]));
-                                                    }
-                                                }
-                                                
-                                                // 2. FAST: Track markdown section markers
-                                                for marker in &["## 📋", "## 🔍", "## 💡", "```", "- **", "* **"] {
-                                                    if chunk_text.contains(marker) {
-                                                        let count = section_markers.entry(marker.to_string()).or_insert(0);
-                                                        *count += 1;
-                                                        
-                                                        // If we see the same section marker 2+ times, it's repeating
-                                                        if *count > 1 {
-                                                            return Err(format!("Section repetition detected: '{}' appeared {} times", marker, count));
-                                                        }
-                                                    }
-                                                }
-                                                
-                                                // 3. FAST: Check for cyclic patterns in recent chunks
-                                                if recent_chunks.len() >= 6 {
-                                                    let chunks_vec: Vec<&String> = recent_chunks.iter().collect();
-                                                    // Check if chunks 0,1,2 == chunks 3,4,5 (pattern repeating)
-                                                    if chunks_vec.len() >= 6 &&
-                                                       chunks_vec[0] == chunks_vec[3] &&
-                                                       chunks_vec[1] == chunks_vec[4] &&
-                                                       chunks_vec[2] == chunks_vec[5] {
-                                                        return Err("Cyclic pattern detected in recent chunks".to_string());
-                                                    }
-                                                }
-                                            }
-                                            
-                                            // 4. MEDIUM: Early accumulated text patterns (much lower threshold)
-                                            if accumulated_text.len() > 150 {  // Much earlier detection
-                                                // Check for common repetitive patterns
-                                                let ollama_count = accumulated_text.matches("ollama").count();
-                                                let file_count = accumulated_text.matches(".rs").count();
-                                                
-                                                if ollama_count > 8 || file_count > 10 {
-                                                    return Err(format!("Repetitive file pattern detected (ollama: {}, .rs: {})", ollama_count, file_count));
-                                                }
-                                                
-                                                // Look for repeated phrases
-                                                let summary_count = accumulated_text.matches("Summary").count();
-                                                let observations_count = accumulated_text.matches("Observations").count();
-                                                
-                                                if summary_count > 1 || observations_count > 1 {
-                                                    return Err(format!("Section headers repeating (Summary: {}, Observations: {})", summary_count, observations_count));
-                                                }
-                                            }
-                                            
-                                            // Emit chunk
-                                            let _ = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                                                "type": "chunk",
-                                                "text": response_chunk.response,
-                                                "done": false
-                                            }));
-                                        }
-                                        Err(e) => {
-                                            eprintln!("JSON parse error: {}", e);
+
+                                    cleanup_session(&session_id);
+                                    return Ok(());
+                                }
+
+                                let line = buffer.drain(..=newline_pos).collect::<Vec<u8>>();
+                                let line_str = String::from_utf8_lossy(&line[..line.len()-1]);
+
+                                if line_str.trim().is_empty() {
+                                    continue;
+                                }
+
+                                match serde_json::from_str::<GenerateResponse>(&line_str) {
+                                    Ok(response_chunk) => {
+                                        // Skip empty chunks to reduce UI overhead
+                                        if response_chunk.response.is_empty() {
                                             continue;
                                         }
+                                        if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                                            "type": "chunk",
+                                            "text": response_chunk.response,
+                                            "done": response_chunk.done
+                                        })) {
+                                            eprintln!("Failed to emit chunk event: {}", e);
+                                        }
+
+                                        if response_chunk.done {
+                                            println!("✅ Agent streaming completed for session: {}", session_id);
+                                            cleanup_session(&session_id);
+                                            break;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Failed to parse streaming response: {} - Line: {}", e, line_str);
+                                        continue;
                                     }
                                 }
                             }
-                            Err(e) => {
-                                return Err(format!("Network stream error: {}", e));
+                        }
+                        Err(e) => {
+                            let error_msg = format!("Stream error: {}", e);
+                            eprintln!("{}", error_msg);
+
+                            if let Err(emit_err) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                                "type": "error",
+                                "error": error_msg
+                            })) {
+                                eprintln!("Failed to emit error event: {}", emit_err);
                             }
+
+                            return Err(error_msg);
                         }
                     }
-                    
-                    Ok(())
-                } else {
-                    let status = response.status();
-                    let error_text = response.text().await.unwrap_or_else(|_| "Unknown HTTP error".to_string());
-                    Err(format!("HTTP {}: {}", status, error_text))
                 }
+
+                // Emit completion event
+                if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                    "type": "complete"
+                })) {
+                    eprintln!("Failed to emit complete event: {}", e);
+                }
+
+                Ok(())
+            } else {
+                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                let error_msg = format!("Generation failed: {}", error_text);
+
+                if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                    "type": "error",
+                    "error": error_msg
+                })) {
+                    eprintln!("Failed to emit error event: {}", e);
+                }
+
+                Err(error_msg)
             }
-            Err(e) => {
-                Err(format!("Failed to connect to Ollama: {}", e))
+        }
+        Err(e) => {
+            let error_msg = format!("Failed to connect to Ollama: {}", e);
+
+            if let Err(emit_err) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                "type": "error",
+                "error": error_msg
+            })) {
+                eprintln!("Failed to emit error event: {}", emit_err);
             }
-        }
-    }).await;
-    
-    // Handle results with cleanup
-    match stream_result {
-        Ok(Ok(())) => {
-            let _ = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                "type": "complete"
-            }));
-            Ok(())
-        }
-        Ok(Err(stream_error)) => {
-            emit_error_and_cleanup(&app_handle, &session_id, &stream_error);
-            Err(stream_error)
-        }
-        Err(_) => {
-            let timeout_msg = "Vision model timed out";
-            emit_error_and_cleanup(&app_handle, &session_id, timeout_msg);
-            Err(timeout_msg.to_string())
+
+            Err(error_msg)
         }
     }
 }
@@ -425,6 +489,17 @@ pub async fn generate_ollama_response(model: String, prompt: String) -> Result<S
     let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/generate", OLLAMA_BASE_URL);
     
+    // Detect GPU and set acceleration options
+    let gpu_layers = detect_gpu_layers();
+    let options = if gpu_layers > 0 {
+        Some(serde_json::json!({
+            "num_gpu": gpu_layers,
+            "num_thread": 4
+        }))
+    } else {
+        None
+    };
+    
     let request = GenerateRequest {
         model,
         prompt,
@@ -432,6 +507,7 @@ pub async fn generate_ollama_response(model: String, prompt: String) -> Result<S
         context: None,
         images: None,
         system: None,
+        options,
     };
     
     match client.post(&url).json(&request).send().await {
@@ -460,6 +536,17 @@ pub async fn generate_ollama_response_stream(
     let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/generate", OLLAMA_BASE_URL);
     
+    // Detect GPU and set acceleration options
+    let gpu_layers = detect_gpu_layers();
+    let options = if gpu_layers > 0 {
+        Some(serde_json::json!({
+            "num_gpu": gpu_layers,
+            "num_thread": 4
+        }))
+    } else {
+        None
+    };
+    
     let request = GenerateRequest {
         model: model.clone(),
         prompt: prompt.clone(),
@@ -467,6 +554,7 @@ pub async fn generate_ollama_response_stream(
         context: None,
         images: None,
         system: None,
+        options,
     };
     
     println!("🚀 Starting streaming generation for session: {}", session_id);
@@ -647,14 +735,35 @@ pub async fn generate_conversational_ai(
     app_handle: AppHandle,
     conversation_context: String,
     session_id: String,
+    custom_system_prompt: Option<String>,
 ) -> Result<(), String> {
-    let model = "gemma3:1b-it-qat".to_string(); // Using same model as enteract agent for consistency
+    // Fast 1B model for instant responses (quantized)
+    let model = "gemma3:1b-it-qat".to_string();
     
-    // Format the prompt to include the conversation context for live analysis
-    let full_prompt = format!("LIVE CONVERSATION CONTEXT:\n{}\n\nAnalyze this ongoing conversation and suggest a thoughtful response or contribution that would add value to the discussion. Provide 1-2 concise response options that match the conversation's tone and advance the dialogue.", conversation_context);
+    // Simple, direct prompt for speed
+    let full_prompt = format!("Last 3 messages (short):\n{}\n\nGive 2-3 ultra-brief options only.", conversation_context);
+    
+    // Use custom system prompt if provided, otherwise fall back to default
+    let has_custom = custom_system_prompt
+        .as_ref()
+        .map(|p| p.trim())
+        .filter(|p| !p.is_empty())
+        .is_some();
+
+    let system_prompt = custom_system_prompt
+        .as_ref()
+        .and_then(|p| {
+            let t = p.trim();
+            if t.is_empty() { None } else { Some(t.to_string()) }
+        })
+        .unwrap_or_else(|| CONVERSATIONAL_AI_PROMPT.to_string());
     
     println!("💬 CONVERSATIONAL AI: Using model {} for live response assistance, session {}", model, session_id);
-    generate_agent_response_stream(app_handle, model, full_prompt, CONVERSATIONAL_AI_PROMPT.to_string(), None, session_id, "conversational_ai".to_string()).await
+    if has_custom {
+        println!("🔧 Using custom system prompt: {}...", system_prompt.chars().take(100).collect::<String>());
+    }
+    
+    generate_agent_response_stream(app_handle, model, full_prompt, system_prompt, None, session_id, "conversational_ai".to_string()).await
 }
 
 
@@ -678,6 +787,48 @@ async fn generate_agent_response_stream(
     // Build full prompt with context
     let full_prompt = build_prompt_with_context(prompt, context);
     
+    // Detect GPU and set acceleration options
+    let gpu_layers = detect_gpu_layers();
+    
+    let options = if agent_type == "conversational_ai" {
+        // Keep live suggestions extremely fast and short
+        let mut opts = serde_json::json!({
+            "num_predict": 64,
+            "temperature": 0.6,
+            "top_p": 0.9,
+            "repeat_penalty": 1.05
+        });
+        if gpu_layers > 0 {
+            opts["num_gpu"] = serde_json::json!(gpu_layers);
+            opts["num_thread"] = serde_json::json!(4); // Reduce CPU threads when using GPU
+        }
+        Some(opts)
+    } else if agent_type == "coding" {
+        let mut opts = serde_json::json!({
+            "num_predict": 512,
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "repeat_penalty": 1.1
+        });
+        if gpu_layers > 0 {
+            opts["num_gpu"] = serde_json::json!(gpu_layers);
+            opts["num_thread"] = serde_json::json!(4);
+        }
+        Some(opts)
+    } else {
+        let mut opts = serde_json::json!({
+            "num_predict": 256,
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "repeat_penalty": 1.1
+        });
+        if gpu_layers > 0 {
+            opts["num_gpu"] = serde_json::json!(gpu_layers);
+            opts["num_thread"] = serde_json::json!(4);
+        }
+        Some(opts)
+    };
+
     let request = GenerateRequest {
         model: model.clone(),
         prompt: full_prompt,
@@ -685,6 +836,7 @@ async fn generate_agent_response_stream(
         context: None,
         images: None,
         system: Some(system_prompt),
+        options,
     };
     
     println!("🤖 Starting {} agent ({}) streaming for session: {}", agent_type, model, session_id);
@@ -734,6 +886,19 @@ async fn generate_agent_response_stream_with_image(
         context: None,
         images: Some(vec![image_base64]),
         system: Some(system_prompt),
+        options: {
+            let gpu_layers = detect_gpu_layers();
+            let mut opts = serde_json::json!({
+                "num_predict": 256,
+                "temperature": 0.5,
+                "top_p": 0.9
+            });
+            if gpu_layers > 0 {
+                opts["num_gpu"] = serde_json::json!(gpu_layers);
+                opts["num_thread"] = serde_json::json!(4);
+            }
+            Some(opts)
+        },
     };
     
     println!("👁️ Starting {} vision analysis ({}) for session: {}", agent_type, model, session_id);

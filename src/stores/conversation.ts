@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { useMessagePersistence } from '../composables/useMessagePersistence'
 
 export interface ConversationMessage {
   id: string
@@ -11,6 +12,10 @@ export interface ConversationMessage {
   confidence?: number
   isPreview?: boolean
   isTyping?: boolean
+  persistenceState?: 'pending' | 'saving' | 'saved' | 'failed'
+  retryCount?: number
+  lastSaveAttempt?: number
+  saveError?: string
 }
 
 export interface ConversationSession {
@@ -23,6 +28,9 @@ export interface ConversationSession {
 }
 
 export const useConversationStore = defineStore('conversation', () => {
+  // Initialize message persistence
+  const messagePersistence = useMessagePersistence()
+  
   // State
   const currentSession = ref<ConversationSession | null>(null)
   const sessions = ref<ConversationSession[]>([])
@@ -58,9 +66,18 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
-  // Save sessions to Rust backend
-  const saveSessions = async () => {
+  // Save sessions to Rust backend with proper state management
+  const saveSessions = async (forceImmediate = false) => {
+    if (isSaving.value && !forceImmediate) {
+      console.log('💾 Store: Save already in progress, will queue this save')
+      pendingSave.value = true
+      return
+    }
+
     try {
+      isSaving.value = true
+      pendingSave.value = false
+      
       console.log(`💾 Store: Attempting to save ${sessions.value.length} conversation sessions to backend...`)
       console.log(`💾 Store: Sessions to save:`, sessions.value.map(s => ({ id: s.id, name: s.name, messageCount: s.messages.length, isActive: s.isActive, endTime: s.endTime })))
       
@@ -70,27 +87,50 @@ export const useConversationStore = defineStore('conversation', () => {
       console.log(`💾 Store: Successfully saved ${sessions.value.length} conversation sessions to backend`)
       
       // Verify save by immediately loading back
-      setTimeout(async () => {
-        try {
-          const response = await invoke<{conversations: ConversationSession[]}>('load_conversations')
-          console.log(`💾 Store: Verification load returned ${response.conversations.length} sessions`)
-        } catch (verifyError) {
-          console.error('💾 Store: Verification load failed:', verifyError)
-        }
-      }, 100)
+      const response = await invoke<{conversations: ConversationSession[]}>('load_conversations')
+      const savedCount = response.conversations.length
+      const expectedCount = sessions.value.length
+      
+      if (savedCount !== expectedCount) {
+        console.error(`💾 Store: Save verification failed! Expected ${expectedCount}, got ${savedCount}`)
+        throw new Error(`Save verification failed: expected ${expectedCount}, got ${savedCount}`)
+      }
+      
+      console.log(`💾 Store: Save verified successfully - ${savedCount} sessions persisted`)
       
     } catch (error) {
       console.error('💾 Store: Failed to save conversation sessions to backend:', error)
       throw error // Re-throw to let caller handle
+    } finally {
+      isSaving.value = false
+      
+      // If there was a pending save, execute it now
+      if (pendingSave.value) {
+        console.log('💾 Store: Executing queued save')
+        setTimeout(() => saveSessions().catch(console.error), 100)
+      }
     }
   }
 
-  // Watch for changes and auto-save (debounced)
+  // Save state management
+  const isSaving = ref(false)
+  const pendingSave = ref(false)
+  
+  // Watch for changes and auto-save (debounced, but can be disabled)
   let saveTimeout: number | null = null
+  let autoSaveEnabled = ref(true)
+  
   watch(sessions, () => {
+    if (!autoSaveEnabled.value || isSaving.value) {
+      pendingSave.value = true
+      return
+    }
+    
     if (saveTimeout) clearTimeout(saveTimeout)
-    saveTimeout = setTimeout(() => {
-      saveSessions().catch(console.error)
+    saveTimeout = window.setTimeout(() => {
+      if (!isSaving.value) {
+        saveSessions().catch(console.error)
+      }
     }, 1000) // Debounce saves by 1 second
   }, { deep: true })
 
@@ -113,26 +153,45 @@ export const useConversationStore = defineStore('conversation', () => {
   })
 
   // Actions
-  const createSession = (name?: string): ConversationSession => {
+  const createSession = async (name?: string): Promise<ConversationSession> => {
     console.log('🆕 Store: Creating new session')
-    const session: ConversationSession = {
-      id: `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      name: name || `Conversation ${new Date().toLocaleTimeString()}`,
-      startTime: Date.now(),
-      messages: [],
-      isActive: true
-    }
+    
+    // Disable auto-save during session creation to prevent race conditions
+    autoSaveEnabled.value = false
+    
+    try {
+      const session: ConversationSession = {
+        id: `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: name || `Conversation ${new Date().toLocaleTimeString()}`,
+        startTime: Date.now(),
+        messages: [],
+        isActive: true
+      }
 
-    // Deactivate any existing current session
-    if (currentSession.value) {
-      currentSession.value.isActive = false
-      console.log('🆕 Store: Deactivated previous session')
-    }
+      // Deactivate any existing current session
+      if (currentSession.value) {
+        currentSession.value.isActive = false
+        console.log('🆕 Store: Deactivated previous session')
+      }
 
-    sessions.value.push(session)
-    currentSession.value = session
-    console.log('🆕 Store: Session created successfully:', session.id)
-    return session
+      sessions.value.push(session)
+      currentSession.value = session
+      console.log('🆕 Store: Session created successfully:', session.id)
+      
+      // Force immediate save of new session and wait for completion
+      await saveSessions(true)
+      
+      return session
+    } finally {
+      // Re-enable auto-save immediately after successful save
+      autoSaveEnabled.value = true
+      
+      // Process any pending saves that accumulated during the disable period
+      if (pendingSave.value) {
+        console.log('💾 Store: Processing pending save after session creation')
+        setTimeout(() => saveSessions().catch(console.error), 100)
+      }
+    }
   }
 
   const endSession = async (sessionId?: string) => {
@@ -141,35 +200,66 @@ export const useConversationStore = defineStore('conversation', () => {
       : currentSession.value
 
     if (targetSession) {
-      targetSession.isActive = false
-      targetSession.endTime = Date.now()
-      console.log(`🏁 Store: Session ended with ${targetSession.messages.length} messages:`, targetSession.id)
+      // Disable auto-save during critical operation
+      autoSaveEnabled.value = false
       
-      if (currentSession.value?.id === targetSession.id) {
-        currentSession.value = null
-        console.log('🏁 Store: Cleared current session reference')
+      try {
+        targetSession.isActive = false
+        targetSession.endTime = Date.now()
+        console.log(`🏁 Store: Session ended with ${targetSession.messages.length} messages:`, targetSession.id)
+        
+        if (currentSession.value?.id === targetSession.id) {
+          currentSession.value = null
+          console.log('🏁 Store: Cleared current session reference')
+        }
+        
+        // Force immediate save when ending session to ensure persistence
+        console.log('💾 Store: Force saving session on end with verification')
+        await saveSessions(true) // Force immediate save
+        
+        console.log('🏁 Store: Session end operation completed successfully')
+        
+      } catch (error) {
+        console.error('🏁 Store: Failed to end session properly:', error)
+        throw error
+      } finally {
+        // Re-enable auto-save
+        autoSaveEnabled.value = true
       }
-      
-      // Force immediate save when ending session to ensure persistence
-      console.log('💾 Store: Force saving session on end')
-      await saveSessions()
     }
   }
 
-  // New function to pause/complete a session without clearing currentSession
-  // This keeps the session accessible for continued use while marking it as complete
-  const completeSession = (sessionId?: string) => {
+  // Complete a session without clearing currentSession - keeps it accessible for review and continuation
+  const completeSession = async (sessionId?: string) => {
     const targetSession = sessionId 
       ? sessions.value.find(s => s.id === sessionId)
       : currentSession.value
 
     if (targetSession) {
-      targetSession.isActive = false
-      targetSession.endTime = Date.now()
+      // Disable auto-save during critical operation
+      autoSaveEnabled.value = false
       
-      // DON'T clear currentSession - this keeps the window open
-      // and allows for continued interaction with the completed session
-      console.log(`🏁 Session completed but remains accessible: ${targetSession.id}`)
+      try {
+        targetSession.isActive = false
+        targetSession.endTime = Date.now()
+        
+        // DON'T clear currentSession - this keeps the window open
+        // and allows for continued interaction with the completed session
+        console.log(`🏁 Store: Session completed but remains accessible: ${targetSession.id}`)
+        
+        // Force immediate save when completing session to ensure persistence
+        console.log('💾 Store: Force saving completed session with verification')
+        await saveSessions(true) // Force immediate save
+        
+        console.log('🏁 Store: Session completion operation finished successfully')
+        
+      } catch (error) {
+        console.error('🏁 Store: Failed to complete session properly:', error)
+        throw error
+      } finally {
+        // Re-enable auto-save
+        autoSaveEnabled.value = true
+      }
     }
   }
 
@@ -190,6 +280,50 @@ export const useConversationStore = defineStore('conversation', () => {
       console.log('🔄 Store: Session switched successfully')
     } else {
       console.error('🔄 Store: Session not found:', sessionId)
+    }
+  }
+
+  // Resume/continue an existing conversation - reactivates it for new messages
+  const resumeSession = async (sessionId: string) => {
+    const session = sessions.value.find(s => s.id === sessionId)
+    if (session) {
+      console.log('▶️ Store: Resuming session for continuation:', sessionId)
+      
+      // Disable auto-save during critical operation
+      autoSaveEnabled.value = false
+      
+      try {
+        // Complete current session if there is one
+        if (currentSession.value && currentSession.value.id !== sessionId) {
+          console.log('🏁 Store: Completing current session before resume')
+          await completeSession()
+        }
+        
+        // Reactivate the target session
+        session.isActive = true
+        // Clear endTime to indicate it's active again
+        session.endTime = undefined
+        // Update the session name to show it's been resumed
+        if (!session.name.includes('(Resumed)')) {
+          session.name += ' (Resumed)'
+        }
+        
+        currentSession.value = session
+        console.log('▶️ Store: Session resumed successfully and ready for new messages')
+        
+        // Force immediate save to persist the resume state
+        await saveSessions(true)
+        
+      } catch (error) {
+        console.error('▶️ Store: Failed to resume session properly:', error)
+        throw error
+      } finally {
+        // Re-enable auto-save
+        autoSaveEnabled.value = true
+      }
+    } else {
+      console.error('▶️ Store: Session not found for resume:', sessionId)
+      throw new Error(`Session ${sessionId} not found`)
     }
   }
 
@@ -215,16 +349,34 @@ export const useConversationStore = defineStore('conversation', () => {
 
     const message: ConversationMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      persistenceState: 'pending',
       ...messageData
     }
 
     currentSession.value.messages.push(message)
+    
+    // Immediately queue the message for saving
+    messagePersistence.queueMessage(message, currentSession.value.id)
+    console.log(`💾 Queued message for immediate save: ${message.id}`)
+    
+    // If this is a resumed session (has endTime), update it to show continued activity
+    if (currentSession.value.endTime) {
+      console.log('📝 Updating resumed session timestamp due to new message')
+      currentSession.value.endTime = Date.now()
+      
+      // Add edit indicator to session name if not already present
+      if (!currentSession.value.name.includes('(Edited)')) {
+        currentSession.value.name = currentSession.value.name.replace(' (Resumed)', '') + ' (Edited)'
+      }
+    }
+    
     console.log(`📝 Added message to session ${currentSession.value.id}:`, message.content.substring(0, 50))
     console.log(`📝 Session now has ${currentSession.value.messages.length} total messages`)
+    
     return message
   }
 
-  const updateMessage = (messageId: string, updates: Partial<ConversationMessage>) => {
+  const updateMessage = async (messageId: string, updates: Partial<ConversationMessage>) => {
     if (!currentSession.value) return null
 
     const messageIndex = currentSession.value.messages.findIndex(m => m.id === messageId)
@@ -233,16 +385,30 @@ export const useConversationStore = defineStore('conversation', () => {
         ...currentSession.value.messages[messageIndex],
         ...updates
       }
-      return currentSession.value.messages[messageIndex]
+      
+      // Update in backend if message was already saved
+      const message = currentSession.value.messages[messageIndex]
+      if (message.persistenceState === 'saved') {
+        await messagePersistence.updateMessage(messageId, currentSession.value.id, updates)
+      }
+      
+      return message
     }
     return null
   }
 
-  const deleteMessage = (messageId: string) => {
+  const deleteMessage = async (messageId: string) => {
     if (!currentSession.value) return false
 
     const messageIndex = currentSession.value.messages.findIndex(m => m.id === messageId)
     if (messageIndex !== -1) {
+      const message = currentSession.value.messages[messageIndex]
+      
+      // Delete from backend if message was saved
+      if (message.persistenceState === 'saved') {
+        await messagePersistence.deleteMessage(messageId, currentSession.value.id)
+      }
+      
       currentSession.value.messages.splice(messageIndex, 1)
       return true
     }
@@ -252,6 +418,44 @@ export const useConversationStore = defineStore('conversation', () => {
   const clearCurrentSession = () => {
     if (currentSession.value) {
       currentSession.value.messages = []
+    }
+  }
+
+  const renameSession = async (sessionId: string, newName: string) => {
+    if (!newName || !newName.trim()) {
+      throw new Error('Session name cannot be empty')
+    }
+    
+    try {
+      console.log(`✏️ Store: Renaming session ${sessionId} to "${newName}"`)
+      
+      const session = sessions.value.find(s => s.id === sessionId)
+      if (!session) {
+        throw new Error(`Session ${sessionId} not found`)
+      }
+      
+      // Disable auto-save during rename operation
+      autoSaveEnabled.value = false
+      
+      try {
+        const trimmedName = newName.trim()
+        const oldName = session.name
+        session.name = trimmedName
+        console.log(`✏️ Store: Session renamed from "${oldName}" to "${trimmedName}": ${sessionId}`)
+        
+        // Force immediate save to persist the rename
+        await saveSessions(true)
+        console.log(`✏️ Store: Rename saved successfully`)
+        
+      } finally {
+        // Re-enable auto-save
+        autoSaveEnabled.value = true
+      }
+      
+      return session
+    } catch (error) {
+      console.error('✏️ Store: Failed to rename conversation session:', error)
+      throw error
     }
   }
 
@@ -323,19 +527,54 @@ export const useConversationStore = defineStore('conversation', () => {
 
     const microphoneMessages = session.messages.filter(m => m.source === 'microphone')
     const loopbackMessages = session.messages.filter(m => m.source === 'loopback')
+    const userMessages = session.messages.filter(m => m.type === 'user')
+    const systemMessages = session.messages.filter(m => m.type === 'system')
     const duration = session.endTime 
       ? session.endTime - session.startTime 
       : Date.now() - session.startTime
 
+    const confidenceValues = session.messages
+      .filter(m => m.confidence !== undefined)
+      .map(m => m.confidence || 0)
+
     return {
       totalMessages: session.messages.length,
+      userMessages: userMessages.length,
+      systemMessages: systemMessages.length,
       microphoneMessages: microphoneMessages.length,
       loopbackMessages: loopbackMessages.length,
       duration: Math.round(duration / 1000), // in seconds
-      averageConfidence: session.messages
-        .filter(m => m.confidence !== undefined)
-        .reduce((sum, m) => sum + (m.confidence || 0), 0) / 
-        session.messages.filter(m => m.confidence !== undefined).length
+      averageConfidence: confidenceValues.length > 0 
+        ? confidenceValues.reduce((sum, conf) => sum + conf, 0) / confidenceValues.length
+        : 0,
+      isActive: session.isActive,
+      isCompleted: !!session.endTime,
+      isResumed: session.name.includes('(Resumed)') || session.name.includes('(Edited)')
+    }
+  }
+  
+  // Get all conversation statistics for dashboard/debugging
+  const getAllConversationStats = () => {
+    return {
+      totalConversations: sessions.value.length,
+      activeConversations: sessions.value.filter(s => s.isActive).length,
+      completedConversations: sessions.value.filter(s => s.endTime).length,
+      totalMessages: sessions.value.reduce((sum, s) => sum + s.messages.length, 0),
+      averageMessagesPerConversation: sessions.value.length > 0 
+        ? sessions.value.reduce((sum, s) => sum + s.messages.length, 0) / sessions.value.length 
+        : 0,
+      longestConversation: sessions.value.length > 0 
+        ? sessions.value.reduce((longest, current) => 
+            current.messages.length > longest.messages.length ? current : longest)
+        : null,
+      oldestConversation: sessions.value.length > 0
+        ? sessions.value.reduce((oldest, current) => 
+            current.startTime < oldest.startTime ? current : oldest)
+        : null,
+      newestConversation: sessions.value.length > 0
+        ? sessions.value.reduce((newest, current) => 
+            current.startTime > newest.startTime ? current : newest)
+        : null
     }
   }
 
@@ -400,12 +639,37 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
+  // Auto-save control methods
+  const disableAutoSave = () => {
+    autoSaveEnabled.value = false
+    console.log('🔒 Store: Auto-save disabled')
+  }
+  
+  const enableAutoSave = () => {
+    autoSaveEnabled.value = true
+    console.log('🔓 Store: Auto-save enabled')
+  }
+  
+  const waitForSaveCompletion = async (timeoutMs = 5000) => {
+    const startTime = Date.now()
+    while (isSaving.value && Date.now() - startTime < timeoutMs) {
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+    if (isSaving.value) {
+      throw new Error('Save operation did not complete within timeout')
+    }
+  }
+
   return {
     // State
     currentSession,
     sessions,
     isRecording,
     isAudioLoopbackActive,
+
+    // Save state
+    isSaving,
+    pendingSave,
 
     // Computed
     currentMessages,
@@ -417,15 +681,18 @@ export const useConversationStore = defineStore('conversation', () => {
     endSession,
     completeSession,
     switchToSession,
+    resumeSession,
     addMessage,
     updateMessage,
     deleteMessage,
     clearCurrentSession,
+    renameSession,
     deleteSession,
     setRecordingState,
     setAudioLoopbackState,
     exportMessagesToMainChat,
     getSessionStats,
+    getAllConversationStats,
     
     // Persistence actions
     loadSessions,
@@ -433,6 +700,15 @@ export const useConversationStore = defineStore('conversation', () => {
     exportSessionData,
     importSessionData,
     clearAllSessions,
-    getStorageInfo
+    getStorageInfo,
+    
+    // Auto-save control
+    disableAutoSave,
+    enableAutoSave,
+    waitForSaveCompletion,
+    
+    // Message persistence
+    getMessagePersistenceStatus: () => messagePersistence.getQueueStatus(),
+    messagePersistence
   }
 })

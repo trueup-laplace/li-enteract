@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { useConversationTempo } from './useConversationTempo'
 
 export interface LiveAISession {
   id: string
@@ -21,6 +22,8 @@ export interface SuggestionItem {
   text: string
   timestamp: number
   contextLength: number
+  priority?: 'immediate' | 'soon' | 'normal' | 'low'
+  confidence?: number
 }
 
 export function useLiveAI() {
@@ -30,16 +33,30 @@ export function useLiveAI() {
   const suggestions = ref<SuggestionItem[]>([])
   const isProcessing = ref(false)
   const error = ref<string | null>(null)
+  const isAnalyzing = ref(false)
+  const preemptiveAnalysisInProgress = ref(false)
+  const customSystemPrompt = ref<string | null>(null)
+  
+  // Conversation tempo tracking
+  const {
+    currentTempo,
+    tempoMetrics,
+    suggestedResponseTypes,
+    analyzeConversationTempo,
+    getResponsePriority
+  } = useConversationTempo()
+  
   let streamListener: any = null
   let analysisTimeout: number | null = null
   let lastAnalysisTime = 0
-  const ANALYSIS_DEBOUNCE_MS = 3000 // Wait 3 seconds after last message before analyzing
-  const MIN_ANALYSIS_INTERVAL_MS = 5000 // Minimum 5 seconds between analyses
 
   const startLiveAI = async (messages: any[]): Promise<void> => {
     try {
       error.value = null
       isProcessing.value = true
+      
+      // Store messages for reference in listener
+      const currentMessages = messages
       
       // Create a new session
       const newSessionId = `live-ai-${Date.now()}`
@@ -53,6 +70,8 @@ export function useLiveAI() {
           console.log('🚀 Live AI streaming started')
           isProcessing.value = true
           response.value = ''
+          // Clear old suggestions when starting fresh analysis
+          suggestions.value = []
         } else if (data.type === 'chunk') {
           response.value += data.text
         } else if (data.type === 'complete') {
@@ -65,14 +84,13 @@ export function useLiveAI() {
               id: `suggestion-${Date.now()}`,
               text: response.value.trim(),
               timestamp: Date.now(),
-              contextLength: 0 // Will be set by caller
+              contextLength: currentMessages?.length || 0,
+              priority: getResponsePriority(),
+              confidence: 0.85
             }
-            suggestions.value.unshift(suggestion) // Add to beginning of list
             
-            // Keep only last 5 suggestions to prevent UI overflow
-            if (suggestions.value.length > 5) {
-              suggestions.value = suggestions.value.slice(0, 5)
-            }
+            // Replace all suggestions with the new one (keep it simple)
+            suggestions.value = [suggestion]
           }
         } else if (data.type === 'error') {
           console.error('❌ Live AI streaming error:', data.error)
@@ -91,7 +109,7 @@ export function useLiveAI() {
         // Add welcome message to suggestions
         const welcomeSuggestion: SuggestionItem = {
           id: 'welcome',
-          text: "Live AI Response Assistant is now active. The AI will provide response suggestions when there are pauses in the conversation.",
+          text: "AI Assistant is active. Contextual responses will appear automatically during conversation pauses.",
           timestamp: Date.now(),
           contextLength: 0
         }
@@ -133,31 +151,71 @@ export function useLiveAI() {
     }
   }
 
-  const analyzeConversationContext = async (messages: any[]): Promise<void> => {
+  const analyzeConversationContext = async (messages: any[], isPreemptive = false): Promise<void> => {
     if (!isActive.value || !sessionId.value) return
     
+    // Don't run multiple analyses simultaneously
+    if (isAnalyzing.value || (isPreemptive && preemptiveAnalysisInProgress.value)) {
+      console.log('⏳ Analysis already in progress, skipping')
+      return
+    }
+    
     try {
-      isProcessing.value = true
+      if (isPreemptive) {
+        preemptiveAnalysisInProgress.value = true
+      } else {
+        isProcessing.value = true
+      }
+      isAnalyzing.value = true
       
-      // Format conversation context for the AI
+      // Analyze conversation tempo first
+      const tempo = analyzeConversationTempo(messages)
+      
+      // Get last 5 messages for better context
+      const contextSize = 5
+      
+      // Properly label conversation context
       const conversationContext = messages
-        .filter(msg => !msg.isPreview) // Exclude preview messages
-        .slice(-10) // Only take the last 10 messages for context
-        .map(msg => `${msg.type === 'user' ? 'User' : 'System'}: ${msg.content}`)
+        .filter(msg => !msg.isPreview)
+        .slice(-contextSize)
+        .map(msg => {
+          // Properly identify speaker based on source
+          const speaker = msg.source === 'loopback' ? 'System' : 'User'
+          // Keep full message for context, but limit to 200 chars
+          const content = msg.content.length > 200 
+            ? msg.content.substring(0, 200) + '...' 
+            : msg.content
+          return `${speaker}: ${content}`
+        })
         .join('\n')
       
       if (conversationContext.trim()) {
-        console.log('💬 Analyzing conversation context for response suggestions')
+        console.log(`💬 ${isPreemptive ? 'Preemptive' : 'Regular'} analysis with tempo: ${tempo.pace}, urgency: ${tempo.urgencyLevel}`)
         
-        // Call the conversational AI backend function
+        // Generate AI responses with proper context
         await invoke('generate_conversational_ai', {
           conversationContext,
-          sessionId: sessionId.value
+          sessionId: sessionId.value,
+          customSystemPrompt: customSystemPrompt.value || 'You are a helpful conversation assistant. Provide natural, contextual responses based on the conversation flow.',
+          tempoContext: {
+            pace: tempo.pace,
+            urgencyLevel: tempo.urgencyLevel,
+            conversationType: tempo.conversationType,
+            responseTypes: suggestedResponseTypes.value,
+            priority: getResponsePriority()
+          }
         })
       }
     } catch (err) {
       console.error('Failed to analyze conversation context:', err)
       error.value = err instanceof Error ? err.message : 'Failed to analyze conversation'
+    } finally {
+      isAnalyzing.value = false
+      if (isPreemptive) {
+        preemptiveAnalysisInProgress.value = false
+      } else {
+        isProcessing.value = false
+      }
     }
   }
 
@@ -173,7 +231,7 @@ export function useLiveAI() {
     }
   }
 
-  // Function to continuously analyze conversation changes with debouncing
+  // Simplified conversation change handler
   const onConversationChange = async (messages: any[]): Promise<void> => {
     if (!isActive.value) return
     
@@ -181,36 +239,55 @@ export function useLiveAI() {
     const realMessages = messages.filter(msg => !msg.isPreview)
     if (realMessages.length === 0) return
     
-    // Clear any existing analysis timeout
+    // Analyze conversation tempo to determine timing
+    const tempo = analyzeConversationTempo(realMessages)
+    
+    // Clear any existing analysis timeouts
     if (analysisTimeout) {
       clearTimeout(analysisTimeout)
     }
     
-    // Check if enough time has passed since last analysis
-    const now = Date.now()
-    const timeSinceLastAnalysis = now - lastAnalysisTime
+    // Detect conversation pauses and analyze
+    const lastMessage = realMessages[realMessages.length - 1]
+    const isSystemSpeaking = lastMessage?.source === 'loopback'
     
-    if (timeSinceLastAnalysis < MIN_ANALYSIS_INTERVAL_MS && suggestions.value.length > 0) {
-      console.log('⏳ Skipping analysis - too soon since last update')
-      return
+    // Determine appropriate wait time based on context
+    let waitTime = 1500 // Default 1.5 seconds
+    
+    if (isSystemSpeaking) {
+      // Wait longer after system speaks to let user respond
+      waitTime = 2000
+    } else if (tempo.pace === 'rapid') {
+      // Shorter wait for fast conversations
+      waitTime = 1000
+    } else if (tempo.pace === 'slow') {
+      // Longer wait for slow conversations
+      waitTime = 2500
     }
     
-    // Set a debounced timeout to analyze after conversation pause
-    analysisTimeout = setTimeout(async () => {
+    // Set timeout for analysis
+    analysisTimeout = window.setTimeout(async () => {
       if (!isActive.value || isProcessing.value) return
       
-      console.log('💭 Conversation paused, analyzing for response suggestions...')
+      const now = Date.now()
+      const timeSinceLastAnalysis = now - lastAnalysisTime
+      
+      // Minimum interval between analyses (3 seconds)
+      if (timeSinceLastAnalysis < 3000 && suggestions.value.length > 0) {
+        console.log(`⏳ Skipping - analyzed recently`)
+        return
+      }
+      
+      console.log(`💭 Analyzing conversation (${tempo.pace} tempo)...`)
       lastAnalysisTime = Date.now()
       
-      // Update context length for the upcoming suggestion
-      const contextLength = realMessages.length
-      await analyzeConversationContext(realMessages)
-      
-      // Update the context length of the most recent suggestion
-      if (suggestions.value.length > 0) {
-        suggestions.value[0].contextLength = contextLength
-      }
-    }, ANALYSIS_DEBOUNCE_MS)
+      await analyzeConversationContext(realMessages, false)
+    }, waitTime)
+  }
+
+  const updateSystemPrompt = (prompt: string) => {
+    customSystemPrompt.value = prompt
+    console.log('🔧 System prompt updated for LiveAI:', prompt.substring(0, 100) + '...')
   }
 
   const reset = () => {
@@ -228,6 +305,7 @@ export function useLiveAI() {
     suggestions.value = []
     isProcessing.value = false
     error.value = null
+    customSystemPrompt.value = null
     lastAnalysisTime = 0
   }
 
@@ -238,11 +316,14 @@ export function useLiveAI() {
     suggestions,
     isProcessing,
     error,
+    currentTempo,
+    tempoMetrics,
     startLiveAI,
     stopLiveAI,
     analyzeConversationContext,
     onSystemSpeaking,
     onConversationChange,
+    updateSystemPrompt,
     reset
   }
 }

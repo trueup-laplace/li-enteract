@@ -6,7 +6,6 @@ import {
   XMarkIcon,
   QueueListIcon,
   PencilIcon,
-  SparklesIcon,
   RocketLaunchIcon
 } from '@heroicons/vue/24/outline'
 import { useSpeechTranscription } from '../../composables/useSpeechTranscription'
@@ -18,10 +17,10 @@ import { invoke } from '@tauri-apps/api/core'
 
 // Components
 import MessageList from '../conversational/MessageList.vue'
-import ConversationSidebar from '../conversational/ConversationSidebar.vue'
-import AIAssistant from '../conversational/AIAssistant.vue'
+import ConversationSidebarAdapter from '../conversational/ConversationSidebarAdapter.vue'
 import LiveAI from '../conversational/LiveAI.vue'
 import ExportControls from '../conversational/ExportControls.vue'
+import MessageSaveIndicator from '../MessageSaveIndicator.vue'
 
 // Composables
 import { useLoopbackTranscription } from '../../composables/useLoopbackTranscription'
@@ -63,7 +62,6 @@ const showExportControls = ref(false)
 
 // Sidebar and panel states
 const showConversationSidebar = ref(false)
-const showAIAssistant = ref(false)
 const showLiveAI = ref(false)
 
 // Speech transcription
@@ -97,6 +95,7 @@ const {
   loadConversations,
   createNewConversation,
   resumeConversation,
+  renameConversation,
   deleteConversation
 } = useConversationManagement()
 
@@ -115,9 +114,11 @@ const {
   suggestions: liveAISuggestions,
   isProcessing: liveAIIsProcessing,
   error: liveAIError,
+  currentTempo: liveAITempo,
   startLiveAI,
   stopLiveAI,
-  onConversationChange
+  onConversationChange,
+  updateSystemPrompt
 } = useLiveAI()
 
 // Computed
@@ -268,7 +269,7 @@ const stopAudioLoopbackCapture = async () => {
   }
 }
 
-// Microphone toggle
+// Microphone toggle with robust save handling
 const toggleMicrophone = async () => {
   if (isRecording.value) {
     await stopRecording()
@@ -278,29 +279,57 @@ const toggleMicrophone = async () => {
       // Get session ID before ending it
       const sessionId = conversationStore.currentSession.id
       
-      // End the current session (now async with immediate save)
-      await conversationStore.endSession()
-      console.log('🏁 ConversationalWindow: Session ended:', sessionId)
-      
-      // Small delay to ensure backend persistence completes
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      // Refresh conversation list to show the newly ended session
-      await loadConversations()
-      console.log('📁 ConversationalWindow: After ending session and loading, allConversations:', allConversations.value.length)
+      try {
+        console.log('🏁 ConversationalWindow: Ending session with robust save handling:', sessionId)
+        
+        // Complete the session without clearing it (keeps conversation visible for review)
+        await conversationStore.completeSession()
+        console.log('🏁 ConversationalWindow: Session completed successfully:', sessionId)
+        
+        // Wait for any pending saves to complete
+        await conversationStore.waitForSaveCompletion()
+        console.log('🏁 ConversationalWindow: All saves completed')
+        
+        // Refresh conversation list to show the newly ended session
+        await loadConversations()
+        console.log('📁 ConversationalWindow: After ending session and loading, allConversations:', allConversations.value.length)
+        
+      } catch (error) {
+        console.error('🏁 ConversationalWindow: Failed to end session properly:', error)
+        // Even if ending failed, try to refresh the conversation list
+        await loadConversations()
+      }
     }
   } else {
-    if (!conversationStore.currentSession) {
-      // Create a new session if none exists
-      const session = conversationStore.createSession()
-      console.log('🆕 ConversationalWindow: Created new session:', session.id)
-    } else {
-      console.log('🔄 ConversationalWindow: Using existing session:', conversationStore.currentSession.id)
-    }
-    
-    await startRecording()
-    if (audioLoopbackDeviceId.value) {
-      await startAudioLoopbackCapture()
+    try {
+      if (!conversationStore.currentSession) {
+        // Create a new session if none exists
+        console.log('🆕 ConversationalWindow: Creating new session')
+        const session = await conversationStore.createSession()
+        console.log('🆕 ConversationalWindow: Created new session:', session.id)
+        
+        // Wait for the session creation save to complete
+        await conversationStore.waitForSaveCompletion()
+        console.log('🆕 ConversationalWindow: Session creation save completed')
+      } else if (conversationStore.currentSession.endTime) {
+        // Resume the current session if it's completed
+        console.log('▶️ ConversationalWindow: Resuming completed session:', conversationStore.currentSession.id)
+        await conversationStore.resumeSession(conversationStore.currentSession.id)
+        console.log('▶️ ConversationalWindow: Session resumed successfully')
+        
+        // Wait for the resume save to complete
+        await conversationStore.waitForSaveCompletion()
+        console.log('▶️ ConversationalWindow: Session resume save completed')
+      } else {
+        console.log('🔄 ConversationalWindow: Using existing active session:', conversationStore.currentSession.id)
+      }
+      
+      await startRecording()
+      if (audioLoopbackDeviceId.value) {
+        await startAudioLoopbackCapture()
+      }
+    } catch (error) {
+      console.error('🆕 ConversationalWindow: Failed to start recording session:', error)
     }
   }
 }
@@ -370,25 +399,22 @@ const handleResumeConversation = async (id: string) => {
   showConversationSidebar.value = false
 }
 
+const handleRenameConversation = async (id: string, newName: string) => {
+  await renameConversation(id, newName)
+}
+
 const handleDeleteConversation = async (id: string) => {
   await deleteConversation(id)
 }
 
-// AI Assistant actions
-const toggleAIAssistant = () => {
-  if (showAIAssistant.value) {
-    // If already open, just close it
-    showAIAssistant.value = false
-  } else {
-    // Close other drawers first, then open AI Assistant
-    showLiveAI.value = false
-    showAIAssistant.value = true
-  }
-}
 
 const handleAIQuery = async (query: string) => {
   const currentMessages = conversationStore.currentMessages || []
   await queryAI(query, currentMessages)
+}
+
+const handleSystemPromptUpdate = (prompt: string) => {
+  updateSystemPrompt(prompt)
 }
 
 // Live AI actions
@@ -398,7 +424,6 @@ const toggleLiveAI = () => {
     showLiveAI.value = false
   } else {
     // Close other drawers first, then open Live AI
-    showAIAssistant.value = false
     showLiveAI.value = true
   }
 }
@@ -468,14 +493,6 @@ const formatSessionDuration = () => {
                 <QueueListIcon class="w-3 h-3" />
               </button>
               <button 
-                @click="toggleAIAssistant" 
-                class="ai-assistant-btn"
-                :class="{ 'active': showAIAssistant }"
-                title="AI Assistant"
-              >
-                <SparklesIcon class="w-3 h-3" />
-              </button>
-              <button 
                 @click="toggleLiveAI" 
                 class="live-ai-btn"
                 :class="{ 'active': showLiveAI }"
@@ -500,18 +517,19 @@ const formatSessionDuration = () => {
       <!-- Window Content Container -->
       <div class="window-content">
         <!-- Conversation Sidebar -->
-        <ConversationSidebar
+        <ConversationSidebarAdapter
           :show="showConversationSidebar"
           :conversations="allConversations"
           :is-loading="isLoadingConversations"
           @close="showConversationSidebar = false"
           @new-conversation="handleNewConversation"
           @resume-conversation="handleResumeConversation"
+          @rename-conversation="handleRenameConversation"
           @delete-conversation="handleDeleteConversation"
         />
         
         <!-- Main Content Area -->
-        <div class="main-content" :class="{ 'with-sidebar': showConversationSidebar }">
+        <div class="main-content" :class="{ 'with-sidebar': showConversationSidebar, 'with-right-panel': showLiveAI }">
           <!-- Export Controls -->
           <ExportControls
             :show="showExportControls"
@@ -553,6 +571,14 @@ const formatSessionDuration = () => {
                 <div v-if="conversationStore.currentSession" class="status-item time-item">
                   <span class="time-label">{{ formatSessionDuration() }}</span>
                 </div>
+                
+                <!-- Message Save Status -->
+                <div class="save-status-container">
+                  <MessageSaveIndicator 
+                    :show-global-status="true" 
+                    :show-stats="false" 
+                  />
+                </div>
               </div>
 
               <!-- Compact Action Button -->
@@ -576,16 +602,6 @@ const formatSessionDuration = () => {
           </div>
         </div>
         
-        <!-- AI Assistant Drawer -->
-        <AIAssistant
-          :show="showAIAssistant"
-          :processing="aiIsProcessing"
-          :response="aiResponse"
-          :error="aiError"
-          :message-count="messages.length"
-          @close="showAIAssistant = false"
-          @query="handleAIQuery"
-        />
         
         <!-- Live AI Drawer -->
         <LiveAI
@@ -595,8 +611,16 @@ const formatSessionDuration = () => {
           :response="liveAIResponse"
           :suggestions="liveAISuggestions"
           :error="liveAIError"
+          :conversation-tempo="liveAITempo"
+          :ai-processing="aiIsProcessing"
+          :ai-response="aiResponse"
+          :ai-error="aiError"
+          :message-count="messages.length"
+          :full-screen="isLiveAIActive"
           @close="showLiveAI = false"
           @toggle-live="toggleLiveAIActive"
+          @ai-query="handleAIQuery"
+          @update-system-prompt="handleSystemPromptUpdate"
         />
       </div>
     </div>
@@ -663,7 +687,9 @@ const formatSessionDuration = () => {
 }
 
 .window-content {
-  @apply flex-1 flex flex-col min-h-0;
+  @apply flex-1 flex min-h-0;
+  flex-direction: row; /* Always use row layout for right-side panel */
+  position: relative; /* Allow fullscreen overlays within content area */
 }
 
 .conversational-window:has(.conversation-sidebar) .window-content,
@@ -674,6 +700,10 @@ const formatSessionDuration = () => {
 
 .main-content {
   @apply flex-1 flex flex-col min-h-0;
+}
+
+.main-content.with-right-panel {
+  margin-right: 0; /* No margin needed since we're using flexbox */
 }
 
 .window-header {
@@ -812,6 +842,10 @@ const formatSessionDuration = () => {
 
 .time-label {
   @apply text-xs text-blue-300 font-mono;
+}
+
+.save-status-container {
+  @apply flex items-center;
 }
 
 /* Compact Action Button */
