@@ -14,6 +14,7 @@ The **Embedded Agentic Assistant** is a next-generation, hyper-personalized desk
 *It's not just an assistant. It's an **extension of your will**—embedded, intelligent, beautiful.*
 
 ## 🛠️ Tech Stack
+<img width="1031" height="741" alt="image" src="https://github.com/user-attachments/assets/ebcb93f3-53b5-420c-91f6-c586d53c7ea3" />
 
 - **Frontend:** Vue 3 + TypeScript + Vite
 - **Backend:** Rust + Tauri
