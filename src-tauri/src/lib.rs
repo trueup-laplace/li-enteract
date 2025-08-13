@@ -17,11 +17,6 @@ mod system_prompts; // System prompts module
 mod system_info; // System information module
 mod rag_system; // RAG document system module
 mod rag_commands; // RAG command handlers
-mod simple_embedding_service; // Simple embedding service
-mod search_service; // Tantivy search service
-mod chunking_service; // Enhanced text chunking service
-mod enhanced_rag_system; // Enhanced RAG system
-mod enhanced_rag_commands; // Enhanced RAG command handlers
 
 // Re-export the commands from modules
 use transparency::{set_window_transparency, emergency_restore_window, toggle_transparency};
@@ -72,15 +67,6 @@ use rag_commands::{
     get_storage_stats, generate_embeddings, clear_embedding_cache
 };
 
-// Import Enhanced RAG commands
-use enhanced_rag_commands::{
-    EnhancedRagSystemState, initialize_enhanced_rag_system, upload_enhanced_document,
-    get_all_enhanced_documents, delete_enhanced_document, search_enhanced_documents,
-    generate_enhanced_embeddings, clear_enhanced_embedding_cache, update_enhanced_rag_settings,
-    get_enhanced_rag_settings, get_enhanced_storage_stats, get_embedding_status,
-    validate_enhanced_file_upload
-};
-
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -91,7 +77,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(RagSystemState(std::sync::Arc::new(std::sync::Mutex::new(None))))
-        .manage(EnhancedRagSystemState(std::sync::Arc::new(std::sync::Mutex::new(None))))
         .setup(|app| {
             // Setup emergency global hotkey for transparency restore
             #[cfg(desktop)]
@@ -106,20 +91,19 @@ pub fn run() {
             
             // Audio loopback functionality is initialized on-demand
             
-            // Enhanced RAG system will be initialized on-demand from frontend
-            
-            // Keep legacy RAG system for compatibility
-            let app_handle_legacy = app.handle().clone();
+            // Initialize RAG system on startup
+            let app_handle = app.handle().clone();
             let rag_state = app.state::<RagSystemState>().inner().clone();
             tauri::async_runtime::spawn(async move {
+                // Initialize in background to avoid blocking startup
                 if let Ok(mut state_guard) = rag_state.0.lock() {
-                    match crate::rag_system::RagSystem::new(&app_handle_legacy) {
+                    match crate::rag_system::RagSystem::new(&app_handle) {
                         Ok(system) => {
                             *state_guard = Some(system);
-                            println!("Legacy RAG system initialized successfully");
+                            println!("RAG system initialized successfully");
                         }
                         Err(e) => {
-                            eprintln!("Failed to initialize legacy RAG system: {}", e);
+                            eprintln!("Failed to initialize RAG system: {}", e);
                         }
                     }
                 }
@@ -224,7 +208,7 @@ pub fn run() {
             save_conversation_insight,
             get_conversation_insights,
             
-            // RAG system commands (legacy)
+            // RAG system commands
             initialize_rag_system,
             upload_document,
             get_all_documents,
@@ -234,21 +218,7 @@ pub fn run() {
             get_rag_settings,
             get_storage_stats,
             generate_embeddings,
-            clear_embedding_cache,
-            
-            // Enhanced RAG system commands
-            initialize_enhanced_rag_system,
-            upload_enhanced_document,
-            get_all_enhanced_documents,
-            delete_enhanced_document,
-            search_enhanced_documents,
-            generate_enhanced_embeddings,
-            clear_enhanced_embedding_cache,
-            update_enhanced_rag_settings,
-            get_enhanced_rag_settings,
-            get_enhanced_storage_stats,
-            get_embedding_status,
-            validate_enhanced_file_upload
+            clear_embedding_cache
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

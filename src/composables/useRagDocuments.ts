@@ -1,18 +1,16 @@
 import { ref, computed } from 'vue'
 import { ragService, type Document, type DocumentChunk, type RagSettings } from '../services/ragService'
-import { enhancedRagService, type EnhancedDocument, type EnhancedDocumentChunk, type EnhancedRagSettings } from '../services/enhancedRagService'
 
 export function useRagDocuments() {
-  // State - Using enhanced types but keeping backward compatibility
-  const documents = ref<EnhancedDocument[]>([])
+  // State
+  const documents = ref<Document[]>([])
   const selectedDocumentIds = ref<Set<string>>(new Set())
   const isLoading = ref(false)
   const error = ref<string | null>(null)
   const uploadProgress = ref<Map<string, number>>(new Map())
-  const settings = ref<EnhancedRagSettings | null>(null)
-  const searchResults = ref<EnhancedDocumentChunk[]>([])
+  const settings = ref<RagSettings | null>(null)
+  const searchResults = ref<DocumentChunk[]>([])
   const isSearching = ref(false)
-  const useEnhanced = ref(true) // Flag to enable enhanced RAG system
 
   // Computed
   const selectedDocuments = computed(() => {
@@ -37,11 +35,7 @@ export function useRagDocuments() {
       isLoading.value = true
       error.value = null
       
-      if (useEnhanced.value) {
-        await enhancedRagService.initialize()
-      } else {
-        await ragService.initialize()
-      }
+      await ragService.initialize()
       await loadDocuments()
       await loadSettings()
       
@@ -60,9 +54,7 @@ export function useRagDocuments() {
       isLoading.value = true
       error.value = null
       
-      const docs = useEnhanced.value 
-        ? await enhancedRagService.getAllDocuments()
-        : await ragService.getAllDocuments() as EnhancedDocument[]
+      const docs = await ragService.getAllDocuments()
       documents.value = docs
       
       // Restore selected documents from localStorage
@@ -84,28 +76,20 @@ export function useRagDocuments() {
   // Load settings
   const loadSettings = async () => {
     try {
-      settings.value = useEnhanced.value 
-        ? await enhancedRagService.getSettings()
-        : await ragService.getSettings() as EnhancedRagSettings
+      settings.value = await ragService.getSettings()
     } catch (err) {
       console.error('Failed to load RAG settings:', err)
     }
   }
 
   // Upload document with progress tracking
-  const uploadDocument = async (file: File): Promise<EnhancedDocument | null> => {
+  const uploadDocument = async (file: File): Promise<Document | null> => {
     try {
       error.value = null
       
       // Validate file
-      if (useEnhanced.value) {
-        const validation = await enhancedRagService.validateFileUpload(file)
-        if (!validation.valid) {
-          error.value = validation.error || 'File validation failed'
-          return null
-        }
-      } else if (settings.value) {
-        const validation = ragService.validateFile(file, settings.value as RagSettings)
+      if (settings.value) {
+        const validation = ragService.validateFile(file, settings.value)
         if (!validation.valid) {
           error.value = validation.error || 'File validation failed'
           return null
@@ -125,9 +109,7 @@ export function useRagDocuments() {
       }, 200)
       
       // Upload document
-      const document = useEnhanced.value 
-        ? await enhancedRagService.uploadDocument(file)
-        : await ragService.uploadDocument(file) as EnhancedDocument
+      const document = await ragService.uploadDocument(file)
       
       // Complete progress
       clearInterval(progressInterval)
@@ -154,8 +136,8 @@ export function useRagDocuments() {
   }
 
   // Upload multiple documents
-  const uploadDocuments = async (files: FileList | File[]): Promise<EnhancedDocument[]> => {
-    const uploaded: EnhancedDocument[] = []
+  const uploadDocuments = async (files: FileList | File[]): Promise<Document[]> => {
+    const uploaded: Document[] = []
     
     for (const file of files) {
       const doc = await uploadDocument(file)
@@ -172,11 +154,7 @@ export function useRagDocuments() {
     try {
       error.value = null
       
-      if (useEnhanced.value) {
-        await enhancedRagService.deleteDocument(documentId)
-      } else {
-        await ragService.deleteDocument(documentId)
-      }
+      await ragService.deleteDocument(documentId)
       
       // Remove from local state
       documents.value = documents.value.filter(doc => doc.id !== documentId)
@@ -235,9 +213,7 @@ export function useRagDocuments() {
       error.value = null
       
       const contextIds = useSelectedOnly ? Array.from(selectedDocumentIds.value) : []
-      searchResults.value = useEnhanced.value 
-        ? await enhancedRagService.searchDocuments(query, contextIds)
-        : await ragService.searchDocuments(query, contextIds) as EnhancedDocumentChunk[]
+      searchResults.value = await ragService.searchDocuments(query, contextIds)
       
       return searchResults.value
     } catch (err) {
@@ -250,26 +226,19 @@ export function useRagDocuments() {
   }
 
   // Get document by ID
-  const getDocumentById = (documentId: string): EnhancedDocument | undefined => {
+  const getDocumentById = (documentId: string): Document | undefined => {
     return documents.value.find(doc => doc.id === documentId)
   }
 
   // Generate embeddings for a document
   const generateEmbeddings = async (documentId: string) => {
     try {
-      if (useEnhanced.value) {
-        await enhancedRagService.generateEmbeddings(documentId)
-      } else {
-        await ragService.generateEmbeddings(documentId)
-      }
+      await ragService.generateEmbeddings(documentId)
       
       // Update document cache status
       const doc = documents.value.find(d => d.id === documentId)
       if (doc) {
         doc.is_cached = true
-        if ('embedding_status' in doc) {
-          doc.embedding_status = 'processing'
-        }
       }
     } catch (err) {
       console.error('Failed to generate embeddings:', err)
@@ -279,18 +248,11 @@ export function useRagDocuments() {
   // Clear embedding cache
   const clearEmbeddingCache = async () => {
     try {
-      if (useEnhanced.value) {
-        await enhancedRagService.clearEmbeddingCache()
-      } else {
-        await ragService.clearEmbeddingCache()
-      }
+      await ragService.clearEmbeddingCache()
       
       // Update all documents cache status
       documents.value.forEach(doc => {
         doc.is_cached = false
-        if ('embedding_status' in doc) {
-          doc.embedding_status = 'pending'
-        }
       })
     } catch (err) {
       console.error('Failed to clear embedding cache:', err)
@@ -298,16 +260,12 @@ export function useRagDocuments() {
   }
 
   // Update settings
-  const updateSettings = async (newSettings: Partial<EnhancedRagSettings>) => {
+  const updateSettings = async (newSettings: Partial<RagSettings>) => {
     try {
       if (!settings.value) return
       
       const updatedSettings = { ...settings.value, ...newSettings }
-      if (useEnhanced.value) {
-        await enhancedRagService.updateSettings(updatedSettings)
-      } else {
-        await ragService.updateSettings(updatedSettings as RagSettings)
-      }
+      await ragService.updateSettings(updatedSettings)
       settings.value = updatedSettings
     } catch (err) {
       console.error('Failed to update settings:', err)
@@ -317,9 +275,7 @@ export function useRagDocuments() {
   // Get storage statistics
   const getStorageStats = async () => {
     try {
-      return useEnhanced.value 
-        ? await enhancedRagService.getStorageStats()
-        : await ragService.getStorageStats()
+      return await ragService.getStorageStats()
     } catch (err) {
       console.error('Failed to get storage stats:', err)
       return null
@@ -327,14 +283,7 @@ export function useRagDocuments() {
   }
 
   // Format document context for AI
-  const formatContextForAI = (chunks: EnhancedDocumentChunk[]): string => {
-    return useEnhanced.value 
-      ? enhancedRagService.formatContextForAI(chunks)
-      : formatLegacyContextForAI(chunks)
-  }
-
-  // Legacy formatting for backward compatibility
-  const formatLegacyContextForAI = (chunks: EnhancedDocumentChunk[]): string => {
+  const formatContextForAI = (chunks: DocumentChunk[]): string => {
     if (chunks.length === 0) return ''
     
     const grouped = chunks.reduce((acc, chunk) => {
@@ -343,7 +292,7 @@ export function useRagDocuments() {
       }
       acc[chunk.document_id].push(chunk)
       return acc
-    }, {} as Record<string, EnhancedDocumentChunk[]>)
+    }, {} as Record<string, DocumentChunk[]>)
     
     let context = 'Relevant document context:\n\n'
     
@@ -361,36 +310,6 @@ export function useRagDocuments() {
     return context
   }
 
-  // Enhanced methods
-  const getEmbeddingStatus = async () => {
-    if (useEnhanced.value) {
-      try {
-        return await enhancedRagService.getEmbeddingStatus()
-      } catch (err) {
-        console.error('Failed to get embedding status:', err)
-        return null
-      }
-    }
-    return null
-  }
-
-  const validateFile = async (file: File) => {
-    if (useEnhanced.value) {
-      try {
-        return await enhancedRagService.validateFileUpload(file)
-      } catch (err) {
-        console.error('Failed to validate file:', err)
-        return { valid: false, error: 'Validation failed' }
-      }
-    }
-    
-    // Legacy validation
-    if (settings.value) {
-      return ragService.validateFile(file, settings.value as RagSettings)
-    }
-    return { valid: true }
-  }
-
   return {
     // State
     documents,
@@ -405,7 +324,6 @@ export function useRagDocuments() {
     isSearching,
     totalStorageSize,
     totalStorageSizeMB,
-    useEnhanced,
     
     // Methods
     initialize,
@@ -423,14 +341,6 @@ export function useRagDocuments() {
     clearEmbeddingCache,
     updateSettings,
     getStorageStats,
-    formatContextForAI,
-    
-    // Enhanced methods
-    getEmbeddingStatus,
-    validateFile,
-    
-    // Service references for advanced usage
-    ragService,
-    enhancedRagService
+    formatContextForAI
   }
 }

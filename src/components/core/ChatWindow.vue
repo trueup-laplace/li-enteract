@@ -7,8 +7,7 @@ import {
   ExclamationTriangleIcon,
   MicrophoneIcon,
   StopIcon,
-  QueueListIcon,
-  DocumentTextIcon
+  QueueListIcon
 } from '@heroicons/vue/24/outline'
 import { useChatManagement } from '../../composables/useChatManagement'
 import { useSpeechEvents } from '../../composables/useSpeechEvents'
@@ -62,35 +61,40 @@ const availableAgents = [
   { id: 'vision', name: '@vision', description: 'Visual content analysis' }
 ]
 
-// Handle mention input: '@' for agent/model, '/' for documents
+// Handle @ mention input
 const handleInput = (event: Event) => {
   const target = event.target as HTMLInputElement
   const value = target.value
   const cursorPos = target.selectionStart || 0
   
+  // Check for @ mention
   const beforeCursor = value.substring(0, cursorPos)
-
-  // Document context with '/'
-  const lastSlashIndex = beforeCursor.lastIndexOf('/')
-  if (lastSlashIndex !== -1) {
-    const afterSlash = beforeCursor.substring(lastSlashIndex + 1)
-    if (!afterSlash.includes(' ') && afterSlash.length >= 0) {
-      const rect = target.getBoundingClientRect()
-      documentDropdownPosition.value = { x: rect.left, y: rect.bottom + 5 }
-      documentSearchQuery.value = '/' + afterSlash
-      showDocumentDropdown.value = true
-      showMentionSuggestions.value = false
-      mentionStartPos.value = lastSlashIndex
-      return
-    }
-  }
-
-  // Agent/model mentions with '@'
   const lastAtIndex = beforeCursor.lastIndexOf('@')
+  
   if (lastAtIndex !== -1) {
     const afterAt = beforeCursor.substring(lastAtIndex + 1)
+    
+    // If there's no space after @, show suggestions
     if (!afterAt.includes(' ') && afterAt.length >= 0) {
-      const filtered = availableAgents.filter(agent => agent.name.toLowerCase().includes(('@' + afterAt).toLowerCase()))
+      // Check if it's a document context mention (starts with @context or just @)
+      if (afterAt === '' || afterAt.toLowerCase().startsWith('context') || afterAt.toLowerCase().startsWith('doc')) {
+        // Show document dropdown
+        const rect = target.getBoundingClientRect()
+        documentDropdownPosition.value = {
+          x: rect.left,
+          y: rect.bottom + 5
+        }
+        documentSearchQuery.value = '@' + afterAt
+        showDocumentDropdown.value = true
+        showMentionSuggestions.value = false
+        return
+      }
+      
+      // Otherwise check for agent mentions
+      const filtered = availableAgents.filter(agent => 
+        agent.name.toLowerCase().includes(('@' + afterAt).toLowerCase())
+      )
+      
       if (filtered.length > 0) {
         mentionSuggestions.value = filtered
         mentionStartPos.value = lastAtIndex
@@ -100,7 +104,7 @@ const handleInput = (event: Event) => {
       }
     }
   }
-
+  
   showMentionSuggestions.value = false
   showDocumentDropdown.value = false
 }
@@ -145,13 +149,6 @@ const parseAgentFromMessage = (message: string): string => {
 
 // Enhanced keyboard handler
 const handleEnhancedKeydown = (event: KeyboardEvent) => {
-  if (showDocumentDropdown.value) {
-    if (event.key === 'Escape') {
-      handleDocumentDropdownClose()
-      return
-    }
-  }
-  
   if (showMentionSuggestions.value) {
     if (event.key === 'Escape') {
       showMentionSuggestions.value = false
@@ -179,18 +176,26 @@ const sendMessageWithAgent = async () => {
   let originalMessage = chatMessage.value.trim()
   const cleanedMessage = parseAgentFromMessage(originalMessage)
   
-  // Prepare selected document IDs for RAG search
-  const selectedDocIds = Array.from(ragDocuments.selectedDocumentIds.value)
-  
-  if (selectedDocIds.length > 0) {
-    console.log(`📚 Sending message with ${selectedDocIds.length} selected documents for RAG context`)
+  // Check if there are selected documents for RAG context
+  if (ragDocuments.selectedDocumentIds.value.size > 0) {
+    // Search relevant chunks from selected documents
+    const searchQuery = cleanedMessage || originalMessage
+    const chunks = await ragDocuments.searchDocuments(searchQuery, true)
+    
+    if (chunks.length > 0) {
+      // Format and append context to the message
+      const context = ragDocuments.formatContextForAI(chunks)
+      originalMessage = `${context}\n\nUser Question: ${originalMessage}`
+      
+      console.log('📚 RAG context added from', ragDocuments.selectedDocumentIds.value.size, 'documents')
+    }
   }
   
   chatMessage.value = ''
   showMentionSuggestions.value = false
   showDocumentDropdown.value = false
   
-  await sendMessage(currentAgent.value, cleanedMessage || originalMessage, selectedDocIds)
+  await sendMessage(currentAgent.value, cleanedMessage || originalMessage)
 }
 
 // Handle model and agent selection
@@ -393,30 +398,13 @@ const handleDocumentDeselect = (documentId: string) => {
   ragDocuments.selectedDocumentIds.value.delete(documentId)
 }
 
-const handleDocumentUpload = async (files: FileList) => {
-  try {
-    const uploadedDocs = await ragDocuments.uploadDocuments(files)
-    console.log(`📚 Uploaded ${uploadedDocs.length} documents via dropdown`)
-    
-    // Auto-select uploaded documents
-    uploadedDocs.forEach(doc => {
-      ragDocuments.selectedDocumentIds.value.add(doc.id)
-    })
-    
-    // Close dropdown after successful upload
-    showDocumentDropdown.value = false
-  } catch (error) {
-    console.error('Failed to upload documents:', error)
-  }
-}
-
 const handleInsertReference = (fileName: string) => {
   const input = chatInputRef.value
   if (input && mentionStartPos.value !== -1) {
     const beforeMention = chatMessage.value.substring(0, mentionStartPos.value)
     const afterCursor = chatMessage.value.substring(input.selectionStart || 0)
     
-    chatMessage.value = beforeMention + '/' + fileName + ' ' + afterCursor
+    chatMessage.value = beforeMention + '@' + fileName + ' ' + afterCursor
     showDocumentDropdown.value = false
     
     // Focus input
@@ -424,25 +412,6 @@ const handleInsertReference = (fileName: string) => {
       input.focus()
     })
   }
-}
-
-// Handle dropdown close to remove '/' if nothing was selected
-const handleDocumentDropdownClose = () => {
-  if (mentionStartPos.value !== -1 && chatMessage.value.charAt(mentionStartPos.value) === '/') {
-    // Check if there's anything after the '/' that looks like a file reference
-    const input = chatInputRef.value
-    if (input) {
-      const beforeMention = chatMessage.value.substring(0, mentionStartPos.value)
-      const afterMention = chatMessage.value.substring(mentionStartPos.value + 1)
-      
-      // If there's only whitespace or nothing after '/', remove the '/'
-      if (!afterMention.trim() || afterMention.startsWith(' ')) {
-        chatMessage.value = beforeMention + afterMention
-      }
-    }
-  }
-  showDocumentDropdown.value = false
-  mentionStartPos.value = -1
 }
 
 // Setup speech events when component mounts
@@ -641,26 +610,13 @@ onUnmounted(() => {
           <!-- Chat Input -->
           <div class="chat-input-container">
             <div class="input-wrapper">
-              <!-- Referenced Documents Pills -->
-              <div v-if="ragDocuments.selectedDocumentIds.value.size > 0" class="doc-pills">
-                <div
-                  v-for="doc in ragDocuments.documents.value.filter(d => ragDocuments.selectedDocumentIds.value.has(d.id))"
-                  :key="doc.id"
-                  class="doc-pill"
-                  title="Included in context"
-                >
-                  <DocumentTextIcon class="w-3 h-3" />
-                  <span class="pill-text">{{ doc.file_name }}</span>
-                  <button class="pill-close" @click.stop="handleDocumentDeselect(doc.id)">×</button>
-                </div>
-              </div>
               <input 
                 ref="chatInputRef"
                 v-model="chatMessage"
                 @input="handleInput"
                 @keydown="handleEnhancedKeydown"
                 class="chat-input"
-                placeholder="Ask any AI agent... (use @ to mention agents, / to add documents)"
+                placeholder="Ask any AI agent... (use @ to mention specific agents)"
                 type="text"
               />
               
@@ -713,8 +669,7 @@ onUnmounted(() => {
         @select="handleDocumentSelect"
         @deselect="handleDocumentDeselect"
         @insert-reference="handleInsertReference"
-        @upload-documents="handleDocumentUpload"
-        @close="handleDocumentDropdownClose"
+        @close="showDocumentDropdown = false"
       />
     </div>
   </Transition>
@@ -942,31 +897,6 @@ onUnmounted(() => {
 
 .input-wrapper {
   @apply flex-1 relative;
-}
-
-.doc-pills {
-  @apply absolute -top-8 left-0 right-0 flex flex-wrap gap-2 px-1 pb-1; 
-}
-
-.doc-pill {
-  @apply inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs border transition-all duration-200; 
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(147, 51, 234, 0.12) 100%);
-  border-color: rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.doc-pill:hover {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%);
-  border-color: rgba(255, 255, 255, 0.25);
-  transform: translateY(-1px);
-}
-
-.pill-text {
-  @apply truncate max-w-[180px];
-}
-
-.pill-close {
-  @apply ml-1 text-white/60 hover:text-white transition-colors;
 }
 
 .chat-input {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { DocumentTextIcon, FolderIcon, MagnifyingGlassIcon, XMarkIcon, CloudArrowUpIcon } from '@heroicons/vue/24/outline'
+import { DocumentTextIcon, FolderIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { CheckCircleIcon } from '@heroicons/vue/24/solid'
 import type { Document } from '../../services/ragService'
 
@@ -18,7 +18,6 @@ interface Emits {
   (e: 'deselect', documentId: string): void
   (e: 'close'): void
   (e: 'insertReference', fileName: string): void
-  (e: 'uploadDocuments', files: FileList): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -32,7 +31,6 @@ const emit = defineEmits<Emits>()
 const searchInput = ref('')
 const hoveredDocumentId = ref<string | null>(null)
 const dropdownRef = ref<HTMLElement>()
-const fileInputRef = ref<HTMLInputElement>()
 
 // Computed
 const filteredDocuments = computed(() => {
@@ -61,7 +59,7 @@ const canSelectMore = computed(() => {
 
 // Watch for search query from parent
 watch(() => props.searchQuery, (newQuery) => {
-  if (newQuery && (newQuery.startsWith('/') || newQuery.startsWith('@'))) {
+  if (newQuery && newQuery.startsWith('@')) {
     searchInput.value = newQuery.substring(1)
   }
 })
@@ -108,19 +106,6 @@ const getFileIcon = (fileType: string) => {
   if (fileType.includes('text')) return '📝'
   if (fileType.includes('doc')) return '📃'
   return '📎'
-}
-
-const triggerFileUpload = () => {
-  fileInputRef.value?.click()
-}
-
-const handleFileUpload = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  if (target.files && target.files.length > 0) {
-    emit('uploadDocuments', target.files)
-    // Reset the input so the same file can be uploaded again
-    target.value = ''
-  }
 }
 
 // Position dropdown
@@ -222,9 +207,9 @@ onMounted(() => {
             <button 
               class="insert-btn"
               @click.stop="insertReference(doc)"
-              title="Insert /reference"
+              title="Insert @reference"
             >
-              /
+              @
             </button>
           </div>
         </div>
@@ -271,9 +256,9 @@ onMounted(() => {
             <button 
               class="insert-btn"
               @click.stop="insertReference(doc)"
-              title="Insert /reference"
+              title="Insert @reference"
             >
-              /
+              @
             </button>
           </div>
         </div>
@@ -286,39 +271,19 @@ onMounted(() => {
         </div>
       </div>
       
-      <!-- Hidden file input -->
-      <input
-        ref="fileInputRef"
-        type="file"
-        multiple
-        accept=".pdf,.txt,.md,.doc,.docx,.rtf"
-        @change="handleFileUpload"
-        class="hidden"
-      />
-      
       <!-- Footer -->
       <div class="dropdown-footer">
-        <div class="footer-left">
-          <div class="footer-info">
-            <span v-if="selectedDocumentIds.size > 0">
-              {{ selectedDocumentIds.size }} document{{ selectedDocumentIds.size !== 1 ? 's' : '' }} selected
-            </span>
-            <span v-else>
-              Select documents for context
-            </span>
-          </div>
-          <div class="footer-hint">
-            Type / to reference documents
-          </div>
+        <div class="footer-info">
+          <span v-if="selectedDocumentIds.size > 0">
+            {{ selectedDocumentIds.size }} document{{ selectedDocumentIds.size !== 1 ? 's' : '' }} selected
+          </span>
+          <span v-else>
+            Select documents for context
+          </span>
         </div>
-        <button 
-          @click="triggerFileUpload"
-          class="upload-btn"
-          title="Upload new documents"
-        >
-          <CloudArrowUpIcon class="w-4 h-4" />
-          Upload
-        </button>
+        <div class="footer-hint">
+          Type @ to reference documents
+        </div>
       </div>
     </div>
   </Transition>
@@ -482,34 +447,12 @@ onMounted(() => {
   background: rgba(0, 0, 0, 0.2);
 }
 
-.footer-left {
-  @apply flex-1;
-}
-
 .footer-info {
   @apply text-xs text-white/60;
 }
 
 .footer-hint {
   @apply text-xs text-white/40;
-}
-
-.upload-btn {
-  @apply flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200;
-  background: rgba(34, 197, 94, 0.15);
-  border: 1px solid rgba(34, 197, 94, 0.3);
-  color: rgb(134, 239, 172);
-}
-
-.upload-btn:hover {
-  background: rgba(34, 197, 94, 0.25);
-  border-color: rgba(34, 197, 94, 0.5);
-  color: rgb(187, 247, 208);
-  transform: translateY(-1px);
-}
-
-.hidden {
-  display: none !important;
 }
 
 /* Scrollbar */
