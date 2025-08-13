@@ -9,11 +9,16 @@ import {
   SpeakerWaveIcon,
   MicrophoneIcon,
   ComputerDesktopIcon,
-  CpuChipIcon
+  CpuChipIcon,
+  DocumentTextIcon,
+  FolderIcon,
+  CloudArrowUpIcon,
+  ChartBarIcon
 } from '@heroicons/vue/24/outline'
 import { useAIModels } from '../../composables/useAIModels'
 import { useTransparency } from '../../composables/useTransparency'
 import { useWindowRegistration } from '../../composables/useWindowRegistry'
+import { useRagDocuments } from '../../composables/useRagDocuments'
 import { invoke } from '@tauri-apps/api/core'
 
 interface Props {
@@ -59,7 +64,13 @@ const windowRegistry = useWindowRegistration('settings-panel', {
 const settingsPanelRef = ref<HTMLElement>()
 
 // Settings tabs
-const activeTab = ref<'models' | 'audio' | 'general'>('models')
+const activeTab = ref<'models' | 'audio' | 'documents' | 'general'>('models')
+
+// RAG Documents system
+const ragDocuments = useRagDocuments()
+const fileInputRef = ref<HTMLInputElement>()
+const isDragOver = ref(false)
+const isUploading = ref(false)
 
 // AI Models (existing functionality)
 const {
@@ -270,6 +281,11 @@ watch(() => props.showSettingsPanel, async (newValue) => {
     if (activeTab.value === 'audio') {
       await enumerateAudioDevices()
     }
+    
+    // Initialize RAG system if on documents tab
+    if (activeTab.value === 'documents') {
+      await ragDocuments.initialize()
+    }
   } else {
     // Unregister when settings panel closes
     windowRegistry.unregisterSelf()
@@ -287,6 +303,8 @@ watch(activeTab, async (newTab) => {
     }
   } else if (newTab === 'audio') {
     await enumerateAudioDevices()
+  } else if (newTab === 'documents') {
+    await ragDocuments.initialize()
   }
 })
 
@@ -450,6 +468,99 @@ const formatGpuMemory = (memoryMb?: number): string => {
   }
   return `${memoryMb} MB`
 }
+
+// Document Management Functions
+const triggerFileUpload = () => {
+  fileInputRef.value?.click()
+}
+
+const handleFileUpload = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const files = input.files
+  if (!files) return
+  
+  isUploading.value = true
+  try {
+    await ragDocuments.uploadDocuments(files)
+  } catch (error) {
+    console.error('Error uploading documents:', error)
+  } finally {
+    isUploading.value = false
+    input.value = ''
+  }
+}
+
+const handleDragOver = (event: DragEvent) => {
+  event.preventDefault()
+  isDragOver.value = true
+}
+
+const handleDragLeave = () => {
+  isDragOver.value = false
+}
+
+const handleDrop = async (event: DragEvent) => {
+  event.preventDefault()
+  isDragOver.value = false
+  
+  const files = event.dataTransfer?.files
+  if (!files) return
+  
+  isUploading.value = true
+  try {
+    await ragDocuments.uploadDocuments(files)
+  } catch (error) {
+    console.error('Error uploading documents:', error)
+  } finally {
+    isUploading.value = false
+  }
+}
+
+const deleteDocument = async (documentId: string) => {
+  try {
+    await ragDocuments.deleteDocument(documentId)
+  } catch (error) {
+    console.error('Error deleting document:', error)
+  }
+}
+
+const toggleDocumentSelection = (documentId: string) => {
+  ragDocuments.toggleDocumentSelection(documentId)
+}
+
+const clearAllSelections = () => {
+  ragDocuments.clearSelection()
+}
+
+const generateEmbeddings = async (documentId: string) => {
+  try {
+    await ragDocuments.generateEmbeddings(documentId)
+  } catch (error) {
+    console.error('Error generating embeddings:', error)
+  }
+}
+
+const clearCache = async () => {
+  try {
+    await ragDocuments.clearEmbeddingCache()
+  } catch (error) {
+    console.error('Error clearing cache:', error)
+  }
+}
+
+const getDocumentIcon = (fileType: string) => {
+  if (fileType.includes('pdf')) return '📄'
+  if (fileType.includes('image')) return '🖼️'
+  if (fileType.includes('text')) return '📝'
+  if (fileType.includes('doc')) return '📃'
+  return '📎'
+}
+
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
 </script>
 
 <template>
@@ -507,6 +618,27 @@ const formatGpuMemory = (memoryMb?: number): string => {
                 'status-success': audioSettings.loopbackEnabled && audioSettings.selectedLoopbackDevice,
                 'status-error': !audioSettings.loopbackEnabled || !audioSettings.selectedLoopbackDevice,
                 'status-warning': isLoadingAudioDevices
+              }">
+                <div class="status-dot"></div>
+              </div>
+            </button>
+            
+            <button
+              @click="activeTab = 'documents'"
+              :class="{ 'nav-active': activeTab === 'documents' }"
+              class="nav-item"
+            >
+              <div class="nav-icon">
+                <DocumentTextIcon class="w-5 h-5" />
+              </div>
+              <div class="nav-content">
+                <div class="nav-title">Documents</div>
+                <div class="nav-subtitle">RAG knowledge base</div>
+              </div>
+              <div class="nav-status" :class="{
+                'status-success': ragDocuments.documents.value.length > 0 && ragDocuments.selectedDocumentIds.value.size > 0,
+                'status-warning': ragDocuments.documents.value.length > 0 && ragDocuments.selectedDocumentIds.value.size === 0,
+                'status-error': ragDocuments.documents.value.length === 0
               }">
                 <div class="status-dot"></div>
               </div>
@@ -774,6 +906,253 @@ const formatGpuMemory = (memoryMb?: number): string => {
                     <option :value="48000">48000 Hz (Studio)</option>
                   </select>
                 </label>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Documents Management Tab -->
+          <div v-if="activeTab === 'documents'" class="settings-section">
+            <div class="section-header">
+              <h2 class="section-title">Document Management</h2>
+              <p class="section-description">
+                Manage your RAG knowledge base. Upload documents to enhance AI responses with relevant context from your files.
+              </p>
+            </div>
+            
+            <!-- Hidden file input -->
+            <input
+              ref="fileInputRef"
+              type="file"
+              multiple
+              accept=".pdf,.txt,.md,.doc,.docx,.rtf"
+              @change="handleFileUpload"
+              class="hidden"
+            />
+            
+            <!-- Upload Area -->
+            <div class="documents-upload-section">
+              <div class="upload-header">
+                <h3 class="text-white/90 font-medium">Upload Documents</h3>
+                <div class="upload-actions">
+                  <button 
+                    @click="triggerFileUpload" 
+                    :disabled="isUploading"
+                    class="upload-btn"
+                    title="Select Files"
+                  >
+                    <CloudArrowUpIcon class="w-4 h-4" />
+                    {{ isUploading ? 'Uploading...' : 'Upload Files' }}
+                  </button>
+                </div>
+              </div>
+              
+              <!-- Drag and Drop Zone -->
+              <div
+                class="upload-dropzone"
+                :class="{ 
+                  'drag-over': isDragOver,
+                  'uploading': isUploading
+                }"
+                @dragover="handleDragOver"
+                @dragleave="handleDragLeave"
+                @drop="handleDrop"
+                @click="triggerFileUpload"
+              >
+                <div class="dropzone-content">
+                  <FolderIcon class="w-12 h-12 text-white/40 mb-4" />
+                  <p class="text-white/80 font-medium mb-2">
+                    {{ isUploading ? 'Processing files...' : 'Drop files here or click to upload' }}
+                  </p>
+                  <p class="text-white/50 text-sm">
+                    Supports PDF, TXT, MD, DOC, DOCX files (up to {{ ragDocuments.settings.value?.max_document_size_mb || 50 }}MB each)
+                  </p>
+                  
+                  <div v-if="isUploading" class="upload-progress mt-4">
+                    <div class="progress-bar">
+                      <div class="progress-fill"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Storage Statistics -->
+            <div class="storage-stats-section">
+              <div class="stats-header">
+                <h4 class="text-white/80 font-medium flex items-center gap-2">
+                  <ChartBarIcon class="w-4 h-4" />
+                  Storage Statistics
+                </h4>
+                <button 
+                  @click="ragDocuments.getStorageStats"
+                  class="refresh-btn"
+                  title="Refresh Stats"
+                >
+                  <ArrowsPointingOutIcon class="w-4 h-4" />
+                </button>
+              </div>
+              
+              <div class="stats-grid">
+                <div class="stat-item">
+                  <div class="stat-value">{{ ragDocuments.documents.value.length }}</div>
+                  <div class="stat-label">Total Documents</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-value">{{ ragDocuments.selectedDocumentIds.value.size }}</div>
+                  <div class="stat-label">Active Context</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-value">{{ ragDocuments.cachedDocuments.value.length }}</div>
+                  <div class="stat-label">Cached</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-value">{{ (ragDocuments.totalStorageSizeMB.value).toFixed(1) }}MB</div>
+                  <div class="stat-label">Storage Used</div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Document Library -->
+            <div class="documents-library-section">
+              <div class="library-header">
+                <h4 class="text-white/80 font-medium">Document Library</h4>
+                <div class="library-actions">
+                  <button 
+                    @click="clearAllSelections"
+                    :disabled="ragDocuments.selectedDocumentIds.value.size === 0"
+                    class="action-btn secondary"
+                    title="Clear Selection"
+                  >
+                    Clear Selection
+                  </button>
+                  <button 
+                    @click="ragDocuments.selectAllDocuments"
+                    :disabled="ragDocuments.documents.value.length === 0"
+                    class="action-btn secondary"
+                    title="Select All"
+                  >
+                    Select All
+                  </button>
+                </div>
+              </div>
+              
+              <!-- Document List -->
+              <div v-if="ragDocuments.documents.value.length > 0" class="documents-list">
+                <div 
+                  v-for="doc in ragDocuments.documents.value"
+                  :key="doc.id"
+                  class="document-item"
+                  :class="{ 
+                    'selected': ragDocuments.selectedDocumentIds.value.has(doc.id),
+                    'cached': doc.is_cached
+                  }"
+                >
+                  <div class="document-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="ragDocuments.selectedDocumentIds.value.has(doc.id)"
+                      @change="toggleDocumentSelection(doc.id)"
+                      class="setting-checkbox"
+                    />
+                  </div>
+                  
+                  <div class="document-icon">
+                    {{ getDocumentIcon(doc.file_type) }}
+                  </div>
+                  
+                  <div class="document-info">
+                    <div class="document-name">{{ doc.file_name }}</div>
+                    <div class="document-meta">
+                      <span>{{ formatFileSize(doc.file_size) }}</span>
+                      <span class="separator">•</span>
+                      <span>{{ new Date(doc.created_at).toLocaleDateString() }}</span>
+                      <span v-if="doc.access_count > 0" class="separator">•</span>
+                      <span v-if="doc.access_count > 0">Used {{ doc.access_count }}x</span>
+                    </div>
+                  </div>
+                  
+                  <div class="document-status">
+                    <div v-if="doc.is_cached" class="cache-badge active">
+                      ⚡ Cached
+                    </div>
+                    <div v-else class="cache-badge">
+                      💤 Not Cached
+                    </div>
+                  </div>
+                  
+                  <div class="document-actions">
+                    <button
+                      @click="generateEmbeddings(doc.id)"
+                      :disabled="doc.is_cached"
+                      class="action-btn small"
+                      title="Generate Embeddings"
+                    >
+                      🧠
+                    </button>
+                    <button
+                      @click="deleteDocument(doc.id)"
+                      class="action-btn small danger"
+                      title="Delete Document"
+                    >
+                      <TrashIcon class="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Empty State -->
+              <div v-else class="empty-documents">
+                <DocumentTextIcon class="w-16 h-16 text-white/20 mb-4" />
+                <p class="text-white/60 font-medium mb-2">No documents uploaded</p>
+                <p class="text-white/40 text-sm mb-4">
+                  Upload documents to create a knowledge base for your AI conversations
+                </p>
+                <button 
+                  @click="triggerFileUpload"
+                  class="upload-btn"
+                >
+                  <CloudArrowUpIcon class="w-4 h-4" />
+                  Upload Your First Document
+                </button>
+              </div>
+            </div>
+            
+            <!-- Cache Management -->
+            <div v-if="ragDocuments.cachedDocuments.value.length > 0" class="cache-management-section">
+              <div class="cache-header">
+                <h4 class="text-white/80 font-medium">Cache Management</h4>
+                <div class="cache-info">
+                  <span class="text-white/60 text-sm">
+                    {{ ragDocuments.cachedDocuments.value.length }} / {{ ragDocuments.settings.value?.max_cached_documents || 5 }} documents cached
+                  </span>
+                </div>
+              </div>
+              
+              <div class="cache-actions">
+                <button 
+                  @click="clearCache"
+                  class="action-btn danger"
+                  title="Clear All Cache"
+                >
+                  Clear Embedding Cache
+                </button>
+              </div>
+              
+              <div class="cache-documents">
+                <div 
+                  v-for="doc in ragDocuments.cachedDocuments.value"
+                  :key="doc.id"
+                  class="cache-document-item"
+                >
+                  <div class="cache-doc-icon">{{ getDocumentIcon(doc.file_type) }}</div>
+                  <div class="cache-doc-info">
+                    <div class="cache-doc-name">{{ doc.file_name }}</div>
+                    <div class="cache-doc-meta">
+                      Last accessed: {{ doc.last_accessed ? new Date(doc.last_accessed).toLocaleString() : 'Never' }}
+                    </div>
+                  </div>
+                  <div class="cache-indicator">⚡</div>
+                </div>
               </div>
             </div>
           </div>
@@ -1902,5 +2281,278 @@ const formatGpuMemory = (memoryMb?: number): string => {
 
 .refresh-button {
   @apply flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white/80 hover:text-white rounded-lg transition-colors text-sm;
+}
+
+/* Documents Management Styles */
+.documents-upload-section {
+  @apply mb-6;
+}
+
+.upload-header {
+  @apply flex items-center justify-between mb-4;
+}
+
+.upload-actions {
+  @apply flex items-center gap-3;
+}
+
+.upload-btn {
+  @apply flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium transition-all duration-300 relative overflow-hidden;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(22, 163, 74, 0.1) 100%);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: rgb(187, 247, 208);
+}
+
+.upload-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.3) 0%, rgba(22, 163, 74, 0.2) 100%);
+  border-color: rgba(34, 197, 94, 0.6);
+  color: rgb(220, 252, 231);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 24px rgba(34, 197, 94, 0.25);
+}
+
+.upload-btn:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+.upload-dropzone {
+  @apply p-8 border-2 border-dashed rounded-2xl cursor-pointer transition-all duration-300;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.01) 100%);
+}
+
+.upload-dropzone:hover {
+  border-color: rgba(34, 197, 94, 0.4);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.05) 0%, rgba(22, 163, 74, 0.03) 100%);
+  transform: translateY(-2px);
+}
+
+.upload-dropzone.drag-over {
+  border-color: rgba(34, 197, 94, 0.6);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(22, 163, 74, 0.05) 100%);
+}
+
+.upload-dropzone.uploading {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(37, 99, 235, 0.03) 100%);
+}
+
+.dropzone-content {
+  @apply text-center;
+}
+
+.upload-progress {
+  @apply w-full;
+}
+
+.progress-bar {
+  @apply w-full h-2 bg-white/10 rounded-full overflow-hidden;
+}
+
+.progress-fill {
+  @apply h-full bg-gradient-to-r from-green-500 to-blue-500 rounded-full;
+  animation: progress-pulse 2s ease-in-out infinite;
+  width: 100%;
+}
+
+@keyframes progress-pulse {
+  0%, 100% { transform: translateX(-100%); }
+  50% { transform: translateX(0%); }
+}
+
+.storage-stats-section {
+  @apply mb-6;
+}
+
+.stats-header {
+  @apply flex items-center justify-between mb-4;
+}
+
+.stats-grid {
+  @apply grid grid-cols-2 md:grid-cols-4 gap-4;
+}
+
+.stat-item {
+  @apply bg-white/5 rounded-xl p-4 border border-white/10 text-center;
+}
+
+.stat-value {
+  @apply text-2xl font-bold text-white/90 mb-1;
+}
+
+.stat-label {
+  @apply text-xs text-white/60;
+}
+
+.documents-library-section {
+  @apply mb-6;
+}
+
+.library-header {
+  @apply flex items-center justify-between mb-4;
+}
+
+.library-actions {
+  @apply flex items-center gap-2;
+}
+
+.action-btn {
+  @apply px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200;
+}
+
+.action-btn.secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.action-btn.secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.action-btn.small {
+  @apply px-2 py-1 text-xs;
+}
+
+.action-btn.danger {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: rgb(252, 165, 165);
+}
+
+.action-btn.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: rgb(254, 202, 202);
+}
+
+.action-btn:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+.documents-list {
+  @apply space-y-3 max-h-96 overflow-y-auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.document-item {
+  @apply flex items-center gap-4 p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.document-item:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.document-item.selected {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(22, 163, 74, 0.1) 100%);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.document-item.cached {
+  border-left: 3px solid #fbbf24;
+}
+
+.document-checkbox {
+  @apply flex-shrink-0;
+}
+
+.document-icon {
+  @apply text-2xl flex-shrink-0;
+}
+
+.document-info {
+  @apply flex-1 min-w-0;
+}
+
+.document-name {
+  @apply text-white/90 font-medium text-sm truncate;
+}
+
+.document-meta {
+  @apply flex items-center gap-1 text-xs text-white/50 mt-1;
+}
+
+.separator {
+  @apply text-white/20;
+}
+
+.document-status {
+  @apply flex-shrink-0;
+}
+
+.cache-badge {
+  @apply px-2 py-1 rounded-md text-xs font-medium;
+}
+
+.cache-badge.active {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+}
+
+.cache-badge:not(.active) {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.document-actions {
+  @apply flex items-center gap-2 flex-shrink-0;
+}
+
+.empty-documents {
+  @apply text-center py-12;
+}
+
+.cache-management-section {
+  @apply mt-6 pt-6 border-t border-white/10;
+}
+
+.cache-header {
+  @apply flex items-center justify-between mb-4;
+}
+
+.cache-info {
+  @apply text-right;
+}
+
+.cache-actions {
+  @apply mb-4;
+}
+
+.cache-documents {
+  @apply space-y-2;
+}
+
+.cache-document-item {
+  @apply flex items-center gap-3 p-3 rounded-lg;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.cache-doc-icon {
+  @apply text-lg flex-shrink-0;
+}
+
+.cache-doc-info {
+  @apply flex-1;
+}
+
+.cache-doc-name {
+  @apply text-white/90 text-sm font-medium;
+}
+
+.cache-doc-meta {
+  @apply text-white/60 text-xs mt-0.5;
+}
+
+.cache-indicator {
+  @apply text-yellow-400 flex-shrink-0;
 }
 </style>
