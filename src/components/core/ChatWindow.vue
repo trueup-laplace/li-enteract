@@ -13,9 +13,12 @@ import { useChatManagement } from '../../composables/useChatManagement'
 import { useSpeechEvents } from '../../composables/useSpeechEvents'
 import { useSpeechTranscription } from '../../composables/useSpeechTranscription'
 import { useWindowRegistration } from '../../composables/useWindowRegistry'
+import { useRagDocuments } from '../../composables/useRagDocuments'
 import AgentActionButtons from './AgentActionButtons.vue'
 import ModelSelector from './ModelSelector.vue'
 import ChatWindowSidebarAdapter from './ChatWindowSidebarAdapter.vue'
+import DocumentContextDropdown from '../rag/DocumentContextDropdown.vue'
+import { FileService } from '../../composables/fileService'
 
 interface Props {
   showChatWindow: boolean
@@ -37,6 +40,12 @@ const chatMessages = ref<HTMLElement>()
 
 // Chat sidebar state
 const showChatSidebar = ref(false)
+
+// RAG system
+const ragDocuments = useRagDocuments()
+const showDocumentDropdown = ref(false)
+const documentDropdownPosition = ref({ x: 0, y: 0 })
+const documentSearchQuery = ref('')
 
 // Agent and model selection state
 const currentAgent = ref('enteract')
@@ -67,6 +76,21 @@ const handleInput = (event: Event) => {
     
     // If there's no space after @, show suggestions
     if (!afterAt.includes(' ') && afterAt.length >= 0) {
+      // Check if it's a document context mention (starts with @context or just @)
+      if (afterAt === '' || afterAt.toLowerCase().startsWith('context') || afterAt.toLowerCase().startsWith('doc')) {
+        // Show document dropdown
+        const rect = target.getBoundingClientRect()
+        documentDropdownPosition.value = {
+          x: rect.left,
+          y: rect.bottom + 5
+        }
+        documentSearchQuery.value = '@' + afterAt
+        showDocumentDropdown.value = true
+        showMentionSuggestions.value = false
+        return
+      }
+      
+      // Otherwise check for agent mentions
       const filtered = availableAgents.filter(agent => 
         agent.name.toLowerCase().includes(('@' + afterAt).toLowerCase())
       )
@@ -75,12 +99,14 @@ const handleInput = (event: Event) => {
         mentionSuggestions.value = filtered
         mentionStartPos.value = lastAtIndex
         showMentionSuggestions.value = true
+        showDocumentDropdown.value = false
         return
       }
     }
   }
   
   showMentionSuggestions.value = false
+  showDocumentDropdown.value = false
 }
 
 // Ref for the chat input element
@@ -143,15 +169,31 @@ const handleEnhancedKeydown = (event: KeyboardEvent) => {
   }
 }
 
-// Enhanced send message with agent detection
+// Enhanced send message with agent detection and RAG context
 const sendMessageWithAgent = async () => {
   if (!chatMessage.value.trim()) return
   
-  const originalMessage = chatMessage.value.trim()
+  let originalMessage = chatMessage.value.trim()
   const cleanedMessage = parseAgentFromMessage(originalMessage)
+  
+  // Check if there are selected documents for RAG context
+  if (ragDocuments.selectedDocumentIds.value.size > 0) {
+    // Search relevant chunks from selected documents
+    const searchQuery = cleanedMessage || originalMessage
+    const chunks = await ragDocuments.searchDocuments(searchQuery, true)
+    
+    if (chunks.length > 0) {
+      // Format and append context to the message
+      const context = ragDocuments.formatContextForAI(chunks)
+      originalMessage = `${context}\n\nUser Question: ${originalMessage}`
+      
+      console.log('📚 RAG context added from', ragDocuments.selectedDocumentIds.value.size, 'documents')
+    }
+  }
   
   chatMessage.value = ''
   showMentionSuggestions.value = false
+  showDocumentDropdown.value = false
   
   await sendMessage(currentAgent.value, cleanedMessage || originalMessage)
 }
@@ -347,10 +389,44 @@ const handleClearChat = () => {
 
 
 
+// Document handling functions
+const handleDocumentSelect = (documentId: string) => {
+  ragDocuments.toggleDocumentSelection(documentId)
+}
+
+const handleDocumentDeselect = (documentId: string) => {
+  ragDocuments.selectedDocumentIds.value.delete(documentId)
+}
+
+const handleInsertReference = (fileName: string) => {
+  const input = chatInputRef.value
+  if (input && mentionStartPos.value !== -1) {
+    const beforeMention = chatMessage.value.substring(0, mentionStartPos.value)
+    const afterCursor = chatMessage.value.substring(input.selectionStart || 0)
+    
+    chatMessage.value = beforeMention + '@' + fileName + ' ' + afterCursor
+    showDocumentDropdown.value = false
+    
+    // Focus input
+    nextTick(() => {
+      input.focus()
+    })
+  }
+}
+
 // Setup speech events when component mounts
 onMounted(async () => {
   setupSpeechTranscriptionListeners()
   console.log('🎤 ChatWindow: Speech transcription listeners set up')
+  
+  // Initialize RAG system
+  try {
+    await ragDocuments.initialize()
+    FileService.setRagComposable(ragDocuments)
+    console.log('📚 RAG system initialized with', ragDocuments.documents.value.length, 'documents')
+  } catch (error) {
+    console.error('Failed to initialize RAG system:', error)
+  }
   
   // Initialize speech transcription for chat interface
   try {
@@ -581,6 +657,20 @@ onUnmounted(() => {
           </div>
         </div> <!-- End main-content -->
       </div> <!-- End window-content -->
+      
+      <!-- Document Context Dropdown -->
+      <DocumentContextDropdown
+        :documents="ragDocuments.documents.value"
+        :selected-document-ids="ragDocuments.selectedDocumentIds.value"
+        :show="showDocumentDropdown"
+        :position="documentDropdownPosition"
+        :search-query="documentSearchQuery"
+        :max-selections="5"
+        @select="handleDocumentSelect"
+        @deselect="handleDocumentDeselect"
+        @insert-reference="handleInsertReference"
+        @close="showDocumentDropdown = false"
+      />
     </div>
   </Transition>
 </template>

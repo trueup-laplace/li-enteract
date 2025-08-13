@@ -1,6 +1,8 @@
 // src-tauri/src/main.rs
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
+use tauri::Manager;
+
 // Import our modules
 mod transparency;
 mod window_manager;
@@ -13,6 +15,8 @@ mod data_store;
 mod audio_loopback; // New audio loopback module
 mod system_prompts; // System prompts module
 mod system_info; // System information module
+mod rag_system; // RAG document system module
+mod rag_commands; // RAG command handlers
 
 // Re-export the commands from modules
 use transparency::{set_window_transparency, emergency_restore_window, toggle_transparency};
@@ -56,6 +60,13 @@ use audio_loopback::{
 };
 use system_info::get_system_info;
 
+// Import RAG commands
+use rag_commands::{
+    RagSystemState, initialize_rag_system, upload_document, get_all_documents,
+    delete_document, search_documents, update_rag_settings, get_rag_settings,
+    get_storage_stats, generate_embeddings, clear_embedding_cache
+};
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -65,6 +76,7 @@ fn greet(name: &str) -> String {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .manage(RagSystemState(std::sync::Arc::new(std::sync::Mutex::new(None))))
         .setup(|app| {
             // Setup emergency global hotkey for transparency restore
             #[cfg(desktop)]
@@ -78,6 +90,24 @@ pub fn run() {
             }
             
             // Audio loopback functionality is initialized on-demand
+            
+            // Initialize RAG system on startup
+            let app_handle = app.handle().clone();
+            let rag_state = app.state::<RagSystemState>().inner().clone();
+            tauri::async_runtime::spawn(async move {
+                // Initialize in background to avoid blocking startup
+                if let Ok(mut state_guard) = rag_state.0.lock() {
+                    match crate::rag_system::RagSystem::new(&app_handle) {
+                        Ok(system) => {
+                            *state_guard = Some(system);
+                            println!("RAG system initialized successfully");
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to initialize RAG system: {}", e);
+                        }
+                    }
+                }
+            });
             
             Ok(())
         })
@@ -176,7 +206,19 @@ pub fn run() {
             
             // Conversation insights
             save_conversation_insight,
-            get_conversation_insights
+            get_conversation_insights,
+            
+            // RAG system commands
+            initialize_rag_system,
+            upload_document,
+            get_all_documents,
+            delete_document,
+            search_documents,
+            update_rag_settings,
+            get_rag_settings,
+            get_storage_stats,
+            generate_embeddings,
+            clear_embedding_cache
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
