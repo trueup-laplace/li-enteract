@@ -3,21 +3,23 @@ import { ref, watch, onMounted, nextTick } from 'vue'
 import {
   Cog6ToothIcon,
   XMarkIcon,
+  ArrowsPointingOutIcon,
+  TrashIcon,
+  ArrowDownTrayIcon,
   SpeakerWaveIcon,
   MicrophoneIcon,
   ComputerDesktopIcon,
   CpuChipIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  FolderIcon,
+  CloudArrowUpIcon,
+  ChartBarIcon
 } from '@heroicons/vue/24/outline'
 import { useAIModels } from '../../composables/useAIModels'
 import { useTransparency } from '../../composables/useTransparency'
 import { useWindowRegistration } from '../../composables/useWindowRegistry'
 import { useRagDocuments } from '../../composables/useRagDocuments'
 import { invoke } from '@tauri-apps/api/core'
-import ModelsTab from './settings/ModelsTab.vue'
-import AudioTab from './settings/AudioTab.vue'
-import DocumentsTab from './settings/DocumentsTab.vue'
-import GeneralTab from './settings/GeneralTab.vue'
 
 interface Props {
   showSettingsPanel: boolean
@@ -66,6 +68,7 @@ const activeTab = ref<'models' | 'audio' | 'documents' | 'general'>('models')
 
 // RAG Documents system
 const ragDocuments = useRagDocuments()
+const fileInputRef = ref<HTMLInputElement>()
 const isDragOver = ref(false)
 const isUploading = ref(false)
 
@@ -435,23 +438,6 @@ const selectAudioDevice = async (deviceId: string) => {
   }
 }
 
-// Local handlers for child interactions
-const handleSelectModel = (name: string) => {
-  selectedModel.value = name
-}
-
-const setAudioLoopbackEnabled = (value: boolean) => {
-  audioSettings.value.loopbackEnabled = value
-}
-
-const setBufferSize = (value: number) => {
-  audioSettings.value.bufferSize = value
-}
-
-const setSampleRate = (value: number) => {
-  audioSettings.value.sampleRate = value
-}
-
 onMounted(() => {
   loadSettings()
   fetchSystemInfo()
@@ -481,6 +467,11 @@ const formatGpuMemory = (memoryMb?: number): string => {
     return `${(memoryMb / 1024).toFixed(1)} GB`
   }
   return `${memoryMb} MB`
+}
+
+// Document Management Functions
+const triggerFileUpload = () => {
+  fileInputRef.value?.click()
 }
 
 const handleFileUpload = async (event: Event) => {
@@ -671,88 +662,861 @@ const formatFileSize = (bytes: number): string => {
           <!-- Settings Content -->
           <div class="settings-content">
             <!-- AI Models Tab -->
-            <ModelsTab
-              v-if="activeTab === 'models'"
-              :ollama-status="ollamaStatus"
-              :is-loading-models="isLoadingModels"
-              :models-error="modelsError"
-              :ollama-models="ollamaModels"
-              :selected-model="selectedModel"
-              :pulling-model="pullingModel"
-              :deleting-model="deletingModel"
-              :get-model-display-name="getModelDisplayName"
-              :format-model-size="formatModelSize"
-              :fetch-ollama-models="fetchOllamaModels"
-              :pull-model="pullModel"
-              :delete-model="deleteModel"
-              :clear-models-error="clearModelsError"
-              :on-select-model="handleSelectModel"
-            />
+            <div v-if="activeTab === 'models'" class="settings-section">
+            <div class="section-header">
+              <h2 class="section-title">AI Models</h2>
+              <p class="section-description">
+                Manage AI models for transcription analysis and intelligent responses. Enteract runs models locally for privacy and performance.
+              </p>
+            </div>
+            
+            <!-- Ollama Status -->
+            <div class="ollama-status">
+              <div v-if="ollamaStatus.status === 'running'" class="status-good">
+                <span class="text-green-400">● Model manager is running</span>
+                <span v-if="ollamaStatus.version" class="text-white/60 text-xs ml-2">v{{ ollamaStatus.version }}</span>
+              </div>
+              <div v-else-if="ollamaStatus.status === 'not_running'" class="status-error">
+                <span class="text-red-400">● Model manager is not running</span>
+                <p class="text-white/60 text-xs mt-1">Please start Model manager to manage models</p>
+              </div>
+              <div v-else-if="ollamaStatus.status === 'checking'" class="status-loading">
+                <span class="text-yellow-400">● Checking model manager status...</span>
+              </div>
+              <div v-else class="status-error">
+                <span class="text-red-400">● Failed to connect to model manager</span>
+              </div>
+            </div>
+            
+            <!-- Models Management -->
+            <div v-if="ollamaStatus.status === 'running'" class="models-section">
+              <div class="models-header">
+                <h3 class="text-white/90 font-medium">Available Models</h3>
+                <button 
+                  @click="() => fetchOllamaModels(true)" 
+                  :disabled="isLoadingModels"
+                  class="refresh-btn"
+                  title="Refresh Models"
+                >
+                  <ArrowsPointingOutIcon class="w-4 h-4" :class="{ 'animate-spin': isLoadingModels }" />
+                </button>
+              </div>
+              
+              <!-- Error Message -->
+              <div v-if="modelsError" class="error-message">
+                <span class="text-red-400 text-sm">{{ modelsError }}</span>
+                <button @click="clearModelsError" class="ml-2 text-white/60 hover:text-white">×</button>
+              </div>
+              
+              <!-- Loading State -->
+              <div v-if="isLoadingModels" class="loading-state">
+                <div class="animate-pulse text-white/60">Loading models...</div>
+              </div>
+              
+              <!-- Models List -->
+              <div v-else-if="ollamaModels.length > 0" class="models-list">
+                <div v-for="model in ollamaModels" :key="model.name" class="model-item">
+                  <div class="model-info">
+                    <div class="model-name">{{ getModelDisplayName(model) }}</div>
+                    <div class="model-details">
+                      <span class="model-size">{{ formatModelSize(model.size) }}</span>
+                      <span v-if="model.details?.parameter_size" class="model-params">
+                        {{ model.details.parameter_size }}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div class="model-actions">
+                    <button
+                      @click="selectedModel = model.name"
+                      :class="{ 'active': selectedModel === model.name }"
+                      class="select-btn"
+                      title="Select Model"
+                    >
+                      {{ selectedModel === model.name ? '✓' : '○' }}
+                    </button>
+                    
+                    <button
+                      @click="deleteModel(model.name)"
+                      :disabled="deletingModel === model.name"
+                      class="delete-btn"
+                      title="Delete Model"
+                    >
+                      <TrashIcon v-if="deletingModel !== model.name" class="w-3 h-3" />
+                      <div v-else class="w-3 h-3 animate-spin">⟳</div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- No Models -->
+              <div v-else class="no-models">
+                <p class="text-white/60 text-sm">No models available</p>
+                <p class="text-white/40 text-xs mt-1">Pull a model to get started</p>
+              </div>
+              
+              <!-- Pull Model Section -->
+              <div class="pull-model-section">
+                <h4 class="text-white/80 text-sm font-medium mb-2">Pull New Model</h4>
+                <div class="popular-models">
+                  <button 
+                    v-for="modelName in ['gemma3:1b-it-qat', 'qwen2.5vl:3b', 'qwen2.5-coder:1.5b', 'deepseek-r1:1.5b', 'llama3.2']" 
+                    :key="modelName"
+                    @click="pullModel(modelName)"
+                    :disabled="pullingModel === modelName"
+                    class="model-pull-btn"
+                    :class="{ 
+                      'recommended': modelName === 'gemma3:1b-it-qat',
+                      'vision-model': modelName === 'qwen2.5vl:3b',
+                      'coding-model': modelName === 'qwen2.5-coder:1.5b',
+                      'research-model': modelName === 'deepseek-r1:1.5b'
+                    }"
+                  >
+                    <ArrowDownTrayIcon v-if="pullingModel !== modelName" class="w-3 h-3" />
+                    <div v-else class="w-3 h-3 animate-spin">⟳</div>
+                    <span>{{ modelName }}</span>
+                    <span v-if="modelName === 'gemma3:1b-it-qat'" class="recommended-badge">Enteract Agent</span>
+                    <span v-if="modelName === 'qwen2.5vl:3b'" class="vision-badge">Vision</span>
+                    <span v-if="modelName === 'qwen2.5-coder:1.5b'" class="coding-badge">Coding</span>
+                    <span v-if="modelName === 'deepseek-r1:1.5b'" class="research-badge">Research</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
           
           <!-- Audio Loopback Tab -->
-          <AudioTab
-            v-if="activeTab === 'audio'"
-            :audio-devices="audioDevices"
-            :is-loading-audio-devices="isLoadingAudioDevices"
-            :audio-devices-error="audioDevicesError"
-            :testing-device-id="testingDeviceId"
-            :audio-settings="audioSettings"
-            :enumerate-audio-devices="enumerateAudioDevices"
-            :clear-audio-error="clearAudioError"
-            :select-audio-device="selectAudioDevice"
-            :get-device-icon="getDeviceIcon"
-            :get-device-method-badge="getDeviceMethodBadge"
-            :set-audio-loopback-enabled="setAudioLoopbackEnabled"
-            :set-buffer-size="setBufferSize"
-            :set-sample-rate="setSampleRate"
-           />
-           
-           <!-- Documents Management Tab -->
-          <DocumentsTab
-            v-if="activeTab === 'documents'"
-            :documents="ragDocuments.documents.value"
-            :cached-documents="ragDocuments.cachedDocuments.value"
-            :selected-ids="ragDocuments.selectedDocumentIds.value"
-            :total-storage-size-m-b="ragDocuments.totalStorageSizeMB.value"
-            :settings-max-doc-size-mb="ragDocuments.settings.value?.max_document_size_mb || 50"
-            :max-cached-documents="ragDocuments.settings.value?.max_cached_documents || 5"
-            :is-uploading="isUploading"
-            :is-drag-over="isDragOver"
-            :handle-file-upload="handleFileUpload"
-            :handle-drag-over="handleDragOver"
-            :handle-drag-leave="handleDragLeave"
-            :handle-drop="handleDrop"
-            :clear-all-selections="clearAllSelections"
-            :select-all-documents="ragDocuments.selectAllDocuments"
-            :toggle-document-selection="toggleDocumentSelection"
-            :delete-document="deleteDocument"
-            :generate-embeddings="generateEmbeddings"
-            :get-storage-stats="ragDocuments.getStorageStats"
-            :get-document-icon="getDocumentIcon"
-            :format-file-size="formatFileSize"
-            @clearCache="clearCache"
-          />
+          <div v-if="activeTab === 'audio'" class="settings-section">
+            <div class="section-header">
+              <h2 class="section-title">Audio Loopback</h2>
+              <p class="section-description">
+                Configure audio loopback to capture system audio for transcription. Perfect for meetings, videos, and any audio playing on your computer.
+              </p>
+            </div>
+            
+            <!-- Audio Settings Header -->
+            <div class="audio-settings-header">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-white/90 font-medium">Audio Loopback Devices</h3>
+                <button 
+                  @click="enumerateAudioDevices" 
+                  :disabled="isLoadingAudioDevices"
+                  class="refresh-btn"
+                  title="Refresh Audio Devices"
+                >
+                  <ArrowsPointingOutIcon class="w-4 h-4" :class="{ 'animate-spin': isLoadingAudioDevices }" />
+                </button>
+              </div>
+              
+              <!-- Loopback Enable Toggle -->
+              <div class="setting-item">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="audioSettings.loopbackEnabled"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Enable Audio Loopback</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Capture system audio for conversational interface</p>
+              </div>
+            </div>
+            
+            <!-- Error Message -->
+            <div v-if="audioDevicesError" class="error-message">
+              <span class="text-red-400 text-sm">{{ audioDevicesError }}</span>
+              <button @click="clearAudioError" class="ml-2 text-white/60 hover:text-white">×</button>
+            </div>
+            
+            <!-- Loading State -->
+            <div v-if="isLoadingAudioDevices" class="loading-state">
+              <div class="animate-pulse text-white/60">Scanning WASAPI audio devices...</div>
+            </div>
+            
+            <!-- Audio Devices List -->
+            <div v-else-if="audioDevices.length > 0" class="audio-devices-list">
+              <div v-for="device in audioDevices" :key="device.id" class="audio-device-item">
+                <div class="device-info">
+                  <div class="device-header">
+                    <component :is="getDeviceIcon(device)" class="w-4 h-4 text-white/80" />
+                    <div class="device-name">{{ device.name }}</div>
+                    <div v-if="device.is_default" class="default-badge">Default</div>
+                  </div>
+                  
+                  <div class="device-details">
+                    <span class="device-spec">{{ device.sample_rate }} Hz</span>
+                    <span class="device-spec">{{ device.channels }} ch</span>
+                    <span class="device-spec">{{ device.format }}</span>
+                    
+                    <span 
+                      class="method-badge"
+                      :class="getDeviceMethodBadge(device.loopback_method).class"
+                    >
+                      {{ getDeviceMethodBadge(device.loopback_method).text }}
+                    </span>
+                  </div>
+                </div>
+                
+                <div class="device-actions">
+                  <button
+                    @click="() => { console.log('Button clicked!', device.id); selectAudioDevice(device.id) }"
+                    :class="{ 'active': audioSettings.selectedLoopbackDevice === device.id }"
+                    class="select-btn"
+                    title="Select Device"
+                    :disabled="isLoadingAudioDevices || testingDeviceId !== null"
+                    type="button"
+                  >
+                    <span v-if="testingDeviceId === device.id" class="animate-spin">⟳</span>
+                    <span v-else>{{ audioSettings.selectedLoopbackDevice === device.id ? '✓' : '○' }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- No Audio Devices -->
+            <div v-else class="no-devices">
+              <p class="text-white/60 text-sm">No loopback devices found</p>
+              <p class="text-white/40 text-xs mt-1">Try enabling Stereo Mix in Windows Sound settings</p>
+            </div>
+            
+            <!-- Audio Buffer Settings -->
+            <div v-if="audioSettings.loopbackEnabled" class="audio-buffer-settings">
+              <h4 class="text-white/80 text-sm font-medium mb-3">Buffer Settings</h4>
+              
+              <div class="setting-item">
+                <label class="setting-label-full">
+                  <span class="text-white/90">Buffer Size: {{ audioSettings.bufferSize }} samples</span>
+                  <input 
+                    type="range" 
+                    v-model.number="audioSettings.bufferSize"
+                    min="1024"
+                    max="8192"
+                    step="1024"
+                    class="setting-range"
+                  >
+                </label>
+              </div>
+              
+              <div class="setting-item">
+                <label class="setting-label-full">
+                  <span class="text-white/90">Sample Rate: {{ audioSettings.sampleRate }} Hz</span>
+                  <select v-model.number="audioSettings.sampleRate" class="setting-select">
+                    <option :value="16000">16000 Hz (Whisper)</option>
+                    <option :value="44100">44100 Hz (CD Quality)</option>
+                    <option :value="48000">48000 Hz (Studio)</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Documents Management Tab -->
+          <div v-if="activeTab === 'documents'" class="settings-section">
+            <div class="section-header">
+              <h2 class="section-title">Document Management</h2>
+              <p class="section-description">
+                Manage your RAG knowledge base. Upload documents to enhance AI responses with relevant context from your files.
+              </p>
+            </div>
+            
+            <!-- Hidden file input -->
+            <input
+              ref="fileInputRef"
+              type="file"
+              multiple
+              accept=".pdf,.txt,.md,.doc,.docx,.rtf"
+              @change="handleFileUpload"
+              class="hidden"
+            />
+            
+            <!-- Upload Area -->
+            <div class="documents-upload-section">
+              <div class="upload-header">
+                <h3 class="text-white/90 font-medium">Upload Documents</h3>
+                <div class="upload-actions">
+                  <button 
+                    @click="triggerFileUpload" 
+                    :disabled="isUploading"
+                    class="upload-btn"
+                    title="Select Files"
+                  >
+                    <CloudArrowUpIcon class="w-4 h-4" />
+                    {{ isUploading ? 'Uploading...' : 'Upload Files' }}
+                  </button>
+                </div>
+              </div>
+              
+              <!-- Drag and Drop Zone -->
+              <div
+                class="upload-dropzone"
+                :class="{ 
+                  'drag-over': isDragOver,
+                  'uploading': isUploading
+                }"
+                @dragover="handleDragOver"
+                @dragleave="handleDragLeave"
+                @drop="handleDrop"
+                @click="triggerFileUpload"
+              >
+                <div class="dropzone-content">
+                  <FolderIcon class="w-12 h-12 text-white/40 mb-4" />
+                  <p class="text-white/80 font-medium mb-2">
+                    {{ isUploading ? 'Processing files...' : 'Drop files here or click to upload' }}
+                  </p>
+                  <p class="text-white/50 text-sm">
+                    Supports PDF, TXT, MD, DOC, DOCX files (up to {{ ragDocuments.settings.value?.max_document_size_mb || 50 }}MB each)
+                  </p>
+                  
+                  <div v-if="isUploading" class="upload-progress mt-4">
+                    <div class="progress-bar">
+                      <div class="progress-fill"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Storage Statistics -->
+            <div class="storage-stats-section">
+              <div class="stats-header">
+                <h4 class="text-white/80 font-medium flex items-center gap-2">
+                  <ChartBarIcon class="w-4 h-4" />
+                  Storage Statistics
+                </h4>
+                <button 
+                  @click="ragDocuments.getStorageStats"
+                  class="refresh-btn"
+                  title="Refresh Stats"
+                >
+                  <ArrowsPointingOutIcon class="w-4 h-4" />
+                </button>
+              </div>
+              
+              <div class="stats-grid">
+                <div class="stat-item">
+                  <div class="stat-value">{{ ragDocuments.documents.value.length }}</div>
+                  <div class="stat-label">Total Documents</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-value">{{ ragDocuments.selectedDocumentIds.value.size }}</div>
+                  <div class="stat-label">Active Context</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-value">{{ ragDocuments.cachedDocuments.value.length }}</div>
+                  <div class="stat-label">Cached</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-value">{{ (ragDocuments.totalStorageSizeMB.value).toFixed(1) }}MB</div>
+                  <div class="stat-label">Storage Used</div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Document Library -->
+            <div class="documents-library-section">
+              <div class="library-header">
+                <h4 class="text-white/80 font-medium">Document Library</h4>
+                <div class="library-actions">
+                  <button 
+                    @click="clearAllSelections"
+                    :disabled="ragDocuments.selectedDocumentIds.value.size === 0"
+                    class="action-btn secondary"
+                    title="Clear Selection"
+                  >
+                    Clear Selection
+                  </button>
+                  <button 
+                    @click="ragDocuments.selectAllDocuments"
+                    :disabled="ragDocuments.documents.value.length === 0"
+                    class="action-btn secondary"
+                    title="Select All"
+                  >
+                    Select All
+                  </button>
+                </div>
+              </div>
+              
+              <!-- Document List -->
+              <div v-if="ragDocuments.documents.value.length > 0" class="documents-list">
+                <div 
+                  v-for="doc in ragDocuments.documents.value"
+                  :key="doc.id"
+                  class="document-item"
+                  :class="{ 
+                    'selected': ragDocuments.selectedDocumentIds.value.has(doc.id),
+                    'cached': doc.is_cached
+                  }"
+                >
+                  <div class="document-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="ragDocuments.selectedDocumentIds.value.has(doc.id)"
+                      @change="toggleDocumentSelection(doc.id)"
+                      class="setting-checkbox"
+                    />
+                  </div>
+                  
+                  <div class="document-icon">
+                    {{ getDocumentIcon(doc.file_type) }}
+                  </div>
+                  
+                  <div class="document-info">
+                    <div class="document-name">{{ doc.file_name }}</div>
+                    <div class="document-meta">
+                      <span>{{ formatFileSize(doc.file_size) }}</span>
+                      <span class="separator">•</span>
+                      <span>{{ new Date(doc.created_at).toLocaleDateString() }}</span>
+                      <span v-if="doc.access_count > 0" class="separator">•</span>
+                      <span v-if="doc.access_count > 0">Used {{ doc.access_count }}x</span>
+                    </div>
+                  </div>
+                  
+                  <div class="document-status">
+                    <div v-if="doc.is_cached" class="cache-badge active">
+                      ⚡ Cached
+                    </div>
+                    <div v-else class="cache-badge">
+                      💤 Not Cached
+                    </div>
+                  </div>
+                  
+                  <div class="document-actions">
+                    <button
+                      @click="generateEmbeddings(doc.id)"
+                      :disabled="doc.is_cached"
+                      class="action-btn small"
+                      title="Generate Embeddings"
+                    >
+                      🧠
+                    </button>
+                    <button
+                      @click="deleteDocument(doc.id)"
+                      class="action-btn small danger"
+                      title="Delete Document"
+                    >
+                      <TrashIcon class="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Empty State -->
+              <div v-else class="empty-documents">
+                <DocumentTextIcon class="w-16 h-16 text-white/20 mb-4" />
+                <p class="text-white/60 font-medium mb-2">No documents uploaded</p>
+                <p class="text-white/40 text-sm mb-4">
+                  Upload documents to create a knowledge base for your AI conversations
+                </p>
+                <button 
+                  @click="triggerFileUpload"
+                  class="upload-btn"
+                >
+                  <CloudArrowUpIcon class="w-4 h-4" />
+                  Upload Your First Document
+                </button>
+              </div>
+            </div>
+            
+            <!-- Cache Management -->
+            <div v-if="ragDocuments.cachedDocuments.value.length > 0" class="cache-management-section">
+              <div class="cache-header">
+                <h4 class="text-white/80 font-medium">Cache Management</h4>
+                <div class="cache-info">
+                  <span class="text-white/60 text-sm">
+                    {{ ragDocuments.cachedDocuments.value.length }} / {{ ragDocuments.settings.value?.max_cached_documents || 5 }} documents cached
+                  </span>
+                </div>
+              </div>
+              
+              <div class="cache-actions">
+                <button 
+                  @click="clearCache"
+                  class="action-btn danger"
+                  title="Clear All Cache"
+                >
+                  Clear Embedding Cache
+                </button>
+              </div>
+              
+              <div class="cache-documents">
+                <div 
+                  v-for="doc in ragDocuments.cachedDocuments.value"
+                  :key="doc.id"
+                  class="cache-document-item"
+                >
+                  <div class="cache-doc-icon">{{ getDocumentIcon(doc.file_type) }}</div>
+                  <div class="cache-doc-info">
+                    <div class="cache-doc-name">{{ doc.file_name }}</div>
+                    <div class="cache-doc-meta">
+                      Last accessed: {{ doc.last_accessed ? new Date(doc.last_accessed).toLocaleString() : 'Never' }}
+                    </div>
+                  </div>
+                  <div class="cache-indicator">⚡</div>
+                </div>
+              </div>
+            </div>
+          </div>
           
           <!-- General Settings Tab -->
-          <GeneralTab
-            v-if="activeTab === 'general'"
-            :general-settings="generalSettings"
-            :transparency="transparency"
-            :handle-transparency-level-change="handleTransparencyLevelChange"
-            :fetch-system-info="fetchSystemInfo"
-            :system-info="systemInfo"
-            :is-loading-system-info="isLoadingSystemInfo"
-            :system-info-error="systemInfoError"
-            :format-gpu-memory="formatGpuMemory"
-            :set-general-setting="(key: string, value: any) => { (generalSettings as any).value[key] = value }"
-          />
+          <div v-if="activeTab === 'general'" class="settings-section">
+            <div class="section-header">
+              <h2 class="section-title">General Settings</h2>
+              <p class="section-description">
+                Customize Enteract's behavior and appearance to match your workflow preferences.
+              </p>
+            </div>
+            
+            <div class="settings-group">
+              <div class="setting-item">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.autoStartOllama"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Auto-start Ollama</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Automatically start Ollama when the app launches</p>
+              </div>
+              
+              <div class="setting-item">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.enableNotifications"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Enable Notifications</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Show desktop notifications for important events</p>
+              </div>
+              
+              <div class="setting-item">
+                <label class="setting-label-full">
+                  <span class="text-white/90">Theme</span>
+                  <select v-model="generalSettings.theme" class="setting-select">
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                    <option value="auto">Auto</option>
+                  </select>
+                </label>
+              </div>
+              
+              <div class="setting-item">
+                <label class="setting-label-full">
+                  <span class="text-white/90">Log Level</span>
+                  <select v-model="generalSettings.logLevel" class="setting-select">
+                    <option value="debug">Debug</option>
+                    <option value="info">Info</option>
+                    <option value="warn">Warning</option>
+                    <option value="error">Error</option>
+                  </select>
+                </label>
+              </div>
+              
+              <div class="setting-separator"></div>
+              
+              <h4 class="text-white/80 text-sm font-medium mb-3">Startup & Window</h4>
+              
+              <div class="setting-item">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.startWithSystem"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Start with System</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Launch Enteract when your computer starts</p>
+              </div>
+              
+              <div class="setting-item">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.startMinimized"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Start Minimized</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Start in the system tray instead of showing the window</p>
+              </div>
+              
+              <div class="setting-item">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.saveWindowPosition"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Remember Window Position</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Restore window size and position on startup</p>
+              </div>
+              
+              <div class="setting-separator"></div>
+              
+              <h4 class="text-white/80 text-sm font-medium mb-3">Transcription</h4>
+              
+              <div class="setting-item">
+                <label class="setting-label-full">
+                  <span class="text-white/90">Default Language</span>
+                  <select v-model="generalSettings.transcriptionLanguage" class="setting-select">
+                    <option value="en">English</option>
+                    <option value="es">Spanish</option>
+                    <option value="fr">French</option>
+                    <option value="de">German</option>
+                    <option value="it">Italian</option>
+                    <option value="pt">Portuguese</option>
+                    <option value="ru">Russian</option>
+                    <option value="ja">Japanese</option>
+                    <option value="ko">Korean</option>
+                    <option value="zh">Chinese</option>
+                  </select>
+                </label>
+              </div>
+              
+              <div class="setting-item">
+                <label class="setting-label-full">
+                  <span class="text-white/90">Microphone Whisper Model</span>
+                  <select v-model="generalSettings.microphoneWhisperModel" class="setting-select">
+                    <option value="tiny">Tiny (Fastest, Good accuracy)</option>
+                    <option value="base">Base (Balanced speed/accuracy)</option>
+                    <option value="small">Small (Best accuracy, Slower)</option>
+                  </select>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Model used for microphone transcription. Tiny is recommended for real-time performance.</p>
+              </div>
+              
+              <div class="setting-item">
+                <label class="setting-label-full">
+                  <span class="text-white/90">System Audio Whisper Model</span>
+                  <select v-model="generalSettings.loopbackWhisperModel" class="setting-select">
+                    <option value="tiny">Tiny (Fastest, Good accuracy)</option>
+                    <option value="base">Base (Balanced speed/accuracy)</option>
+                    <option value="small">Small (Best accuracy, Slower)</option>
+                  </select>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Model used for system audio loopback transcription. Base is recommended for better accuracy with recorded audio.</p>
+              </div>
+              
+              <div class="setting-item">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.enableKeyboardShortcuts"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Enable Keyboard Shortcuts</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Use global keyboard shortcuts for quick actions</p>
+              </div>
+              
+              <div class="setting-separator"></div>
+              
+              <h4 class="text-white/80 text-sm font-medium mb-3">Auto-save</h4>
+              
+              <div class="setting-item">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.enableAutoSave"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Enable Auto-save</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Automatically save chat sessions</p>
+              </div>
+              
+              <div class="setting-item" v-if="generalSettings.enableAutoSave">
+                <label class="setting-label-full">
+                  <span class="text-white/90">Auto-save Interval: {{ generalSettings.autoSaveInterval }} minutes</span>
+                  <input 
+                    type="range" 
+                    v-model.number="generalSettings.autoSaveInterval"
+                    min="1"
+                    max="30"
+                    step="1"
+                    class="setting-range"
+                  >
+                </label>
+              </div>
+              
+              <div class="setting-separator"></div>
+              
+              <h4 class="text-white/80 text-sm font-medium mb-3">Transparency</h4>
+              
+              <div class="setting-item">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.enableTransparency"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Enable Transparency</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Allow window transparency effects</p>
+              </div>
+              
+              <div class="setting-item" v-if="generalSettings.enableTransparency">
+                <label class="setting-label-full">
+                  <span class="text-white/90">Default Transparency Level: {{ Math.round(generalSettings.defaultTransparencyLevel * 100) }}%</span>
+                  <input 
+                    type="range" 
+                    v-model.number="generalSettings.defaultTransparencyLevel"
+                    min="0.1"
+                    max="1.0"
+                    step="0.1"
+                    class="setting-range"
+                    @input="handleTransparencyLevelChange"
+                  >
+                </label>
+                <p class="text-white/60 text-xs mt-1">Default opacity when transparency is enabled</p>
+              </div>
+              
+
+              
+              <div class="setting-item" v-if="generalSettings.enableTransparency">
+                <label class="setting-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="generalSettings.autoRestoreOnError"
+                    class="setting-checkbox"
+                  >
+                  <span class="text-white/90">Auto-restore on Error</span>
+                </label>
+                <p class="text-white/60 text-xs mt-1">Automatically restore window if transparency fails</p>
+              </div>
+              
+              <!-- Current Transparency Status -->
+              <div v-if="generalSettings.enableTransparency" class="transparency-status-section">
+                <div class="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+                  <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full" :class="{
+                      'bg-green-400': transparency.isVisible.value && !transparency.isClickThrough.value,
+                      'bg-yellow-400': transparency.isClickThrough.value,
+                      'bg-red-400': !transparency.isVisible.value
+                    }"></div>
+                    <span class="text-white/80 text-sm">Current Status: {{ transparency.getVisibilityStatus() }}</span>
+                  </div>
+                  <div class="text-white/60 text-xs">
+                    {{ transparency.getTransparencyPercentage() }}% opacity
+                  </div>
+                </div>
+                
+                <!-- Quick Transparency Controls -->
+                <div class="flex gap-2 mt-3">
+                  <button
+                    @click="() => { console.log('🔧 Solid button clicked'); generalSettings.defaultTransparencyLevel = 1.0; handleTransparencyLevelChange(); }"
+                    class="px-3 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+                  >
+                    Solid
+                  </button>
+                  <button
+                    @click="() => { console.log('🔧 Semi button clicked'); generalSettings.defaultTransparencyLevel = 0.7; handleTransparencyLevelChange(); }"
+                    class="px-3 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+                  >
+                    Semi
+                  </button>
+                  <button
+                    @click="() => { console.log('🔧 Ghost button clicked'); generalSettings.defaultTransparencyLevel = 0.3; handleTransparencyLevelChange(); }"
+                    class="px-3 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+                  >
+                    Ghost
+                  </button>
+                  <button
+                    @click="() => { console.log('🔧 Restore button clicked'); generalSettings.defaultTransparencyLevel = 1.0; handleTransparencyLevelChange(); }"
+                    class="px-3 py-1.5 text-xs rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 hover:text-red-300 transition-colors"
+                  >
+                    Restore
+                  </button>
+                </div>
+              </div>
+              
+              <div class="setting-separator"></div>
+              
+              <!-- System Information -->
+              <h4 class="text-white/80 text-sm font-medium mb-3">System Information</h4>
+              
+              <div v-if="isLoadingSystemInfo" class="text-white/60 text-sm">
+                Loading system information...
+              </div>
+              
+              <div v-else-if="systemInfoError" class="text-red-400 text-sm">
+                Failed to load system info: {{ systemInfoError }}
+              </div>
+              
+              <div v-else-if="systemInfo" class="system-info">
+                <div class="info-item">
+                  <span class="info-label">OS:</span>
+                  <span class="info-value">{{ systemInfo.os }}</span>
+                </div>
+                
+                <div class="info-item">
+                  <span class="info-label">CPU:</span>
+                  <span class="info-value">{{ systemInfo.cpu_name }}</span>
+                </div>
+                
+                <div class="info-item">
+                  <span class="info-label">Memory:</span>
+                  <span class="info-value">{{ systemInfo.memory_gb.toFixed(1) }} GB</span>
+                </div>
+                
+                <div v-if="systemInfo.gpus.length > 0" class="gpu-section">
+                  <div class="info-item">
+                    <span class="info-label">GPU{{ systemInfo.gpus.length > 1 ? 's' : '' }}:</span>
+                  </div>
+                  
+                  <div v-for="(gpu, index) in systemInfo.gpus" :key="index" class="gpu-info">
+                    <div class="gpu-header">
+                      <CpuChipIcon class="w-4 h-4 text-white/60" />
+                      <span class="gpu-name">{{ gpu.name }}</span>
+                      <span class="gpu-vendor">({{ gpu.vendor }})</span>
+                    </div>
+                    
+                    <div class="gpu-details">
+                      <div v-if="gpu.memory_mb" class="gpu-detail">
+                        <span class="detail-label">Memory:</span>
+                        <span class="detail-value">{{ formatGpuMemory(gpu.memory_mb) }}</span>
+                      </div>
+                      
+                      <div v-if="gpu.driver_version" class="gpu-detail">
+                        <span class="detail-label">Driver:</span>
+                        <span class="detail-value">{{ gpu.driver_version }}</span>
+                      </div>
+                      
+                      <div v-if="gpu.temperature_celsius !== undefined" class="gpu-detail">
+                        <span class="detail-label">Temperature:</span>
+                        <span class="detail-value">{{ gpu.temperature_celsius }}°C</span>
+                      </div>
+                      
+                      <div v-if="gpu.utilization_percent !== undefined" class="gpu-detail">
+                        <span class="detail-label">Usage:</span>
+                        <span class="detail-value">{{ gpu.utilization_percent }}%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div v-else class="info-item">
+                  <span class="info-label">GPU:</span>
+                  <span class="info-value text-white/60">No dedicated GPU detected</span>
+                </div>
+                
+                <button @click="fetchSystemInfo" class="refresh-button mt-3">
+                  <ArrowsPointingOutIcon class="w-4 h-4" />
+                  Refresh System Info
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </Transition>
 </template>
 
-<style>
+<style scoped>
 /* Settings Drawer - Standalone Window */
 .settings-drawer {
   @apply backdrop-blur-xl border border-white/15 rounded-2xl;
