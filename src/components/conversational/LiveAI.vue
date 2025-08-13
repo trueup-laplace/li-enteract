@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { 
   XMarkIcon, 
   PlayIcon, 
@@ -7,42 +7,28 @@ import {
   ClipboardDocumentIcon,
   CheckIcon,
   BoltIcon,
-  PhoneIcon,
-  UserGroupIcon,
-  ComputerDesktopIcon,
   SparklesIcon,
-  CogIcon,
-  DocumentTextIcon
+  ArrowsPointingInIcon,
+  ArrowsPointingOutIcon
 } from '@heroicons/vue/24/outline'
 
-interface SuggestionItem {
+interface InsightItem {
   id: string
   text: string
   timestamp: number
   contextLength: number
-  responseType?: string
-  priority?: 'immediate' | 'soon' | 'normal' | 'low'
-  confidence?: number
+  type: 'insight' | 'welcome' | 'question' | 'answer'
 }
 
-interface ConversationTempo {
-  pace: 'slow' | 'moderate' | 'fast' | 'rapid'
-  averageMessageInterval: number
-  lastSpeaker: 'user' | 'system' | null
-  turnTakingPattern: 'alternating' | 'one-sided' | 'balanced'
-  urgencyLevel: 'low' | 'medium' | 'high'
-  conversationType: 'casual' | 'business' | 'technical' | 'support'
-}
 
- interface Props {
+interface Props {
   show: boolean
   isActive?: boolean
   processing?: boolean
   response?: string
-  suggestions?: SuggestionItem[]
+  insights?: InsightItem[]
   error?: string | null
   sessionId?: string | null
-  conversationTempo?: ConversationTempo | null
   // AI Assistant props (simplified)
   aiProcessing?: boolean
   aiResponse?: string
@@ -56,7 +42,7 @@ interface Emits {
   (e: 'close'): void
   (e: 'toggle-live'): void
   (e: 'ai-query', query: string): void
-  (e: 'update-system-prompt', prompt: string): void
+  (e: 'toggle-compact'): void
 }
 
 const props = defineProps<Props>()
@@ -64,53 +50,32 @@ const emit = defineEmits<Emits>()
 
 // UI State
 const copiedStates = ref<Record<string, boolean>>({})
-const showSettings = ref(false)
-const customPrompt = ref('')
-const selectedTemplate = ref('sales')
-const promptValidationError = ref<string | null>(null)
+const insightsContainer = ref<HTMLElement | null>(null)
+const isCompactMode = ref(false)
+const questionInput = ref('')
+const isAskingQuestion = ref(false)
 
-// Predefined prompt templates for different scenarios
-const promptTemplates = ref([
-  {
-    id: 'sales',
-    name: 'Sales Call',
-    icon: '💼',
-    description: 'For sales conversations and client meetings',
-    prompt: `You are a sales conversation assistant. Provide natural, contextual responses based on the conversation flow. Focus on building rapport and closing deals. Keep responses concise and conversational.`
-  },
-  {
-    id: 'support',
-    name: 'Customer Support',
-    icon: '🤝',
-    description: 'For customer service and troubleshooting',
-    prompt: `You are a customer support assistant. Provide empathetic, helpful responses based on the customer's needs. Focus on problem-solving and customer satisfaction. Keep responses natural and concise.`
-  },
-  {
-    id: 'technical',
-    name: 'Technical Meeting',
-    icon: '⚡',
-    description: 'For technical discussions and problem-solving',
-    prompt: `You are a technical conversation assistant. Provide accurate, relevant responses based on the technical discussion. Focus on problem-solving and clarity. Keep responses concise and to the point.`
-  },
-  {
-    id: 'general',
-    name: 'General Business',
-    icon: '💬',
-    description: 'For general business conversations',
-    prompt: `You are a business conversation assistant. Provide professional, relevant responses based on the conversation context. Focus on moving the discussion forward productively. Keep responses natural and concise.`
-  },
-  {
-    id: 'custom',
-    name: 'Custom',
-    icon: '✏️',
-    description: 'Create your own custom prompt',
-    prompt: ''
-  }
-])
 
 
 const handleClose = () => emit('close')
 const handleToggleLive = () => emit('toggle-live')
+const handleToggleCompact = () => {
+  isCompactMode.value = !isCompactMode.value
+  emit('toggle-compact')
+}
+
+const handleAskQuestion = () => {
+  if (!questionInput.value.trim() || isAskingQuestion.value) return
+  
+  isAskingQuestion.value = true
+  emit('ai-query', questionInput.value.trim())
+  
+  // Clear input after sending
+  setTimeout(() => {
+    questionInput.value = ''
+    isAskingQuestion.value = false
+  }, 500)
+}
 
 
 const copyToClipboard = async (text: string, id?: string) => {
@@ -130,140 +95,56 @@ const copyToClipboard = async (text: string, id?: string) => {
   }
 }
 
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (insightsContainer.value) {
+      insightsContainer.value.scrollTop = insightsContainer.value.scrollHeight
+    }
+  })
+}
+
+const formatTimestamp = (timestamp: number) => {
+  return new Date(timestamp).toLocaleTimeString('en-US', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+// Auto-scroll when new insights are added
+watch(() => props.insights?.length, () => {
+  scrollToBottom()
+}, { flush: 'post' })
+
 const getConversationIcon = computed(() => {
-  switch (props.conversationTempo?.conversationType) {
-    case 'business': return PhoneIcon
-    case 'support': return UserGroupIcon
-    case 'technical': return ComputerDesktopIcon
-    default: return SparklesIcon
-  }
+  return SparklesIcon
 })
 
 const statusText = computed(() => {
-  if (!props.isActive) return 'Start Live Assistant'
-  if (props.processing) return 'Listening...'
-  
-  const tempo = props.conversationTempo
-  if (tempo) {
-    const typeMap = {
-      business: '💼',
-      support: '🤝',
-      technical: '⚡',
-      casual: '💬'
-    }
-    return `${typeMap[tempo.conversationType] || '💬'} Live`
-  }
-  
-  return 'Live Active'
+  if (!props.isActive) return 'Start Conversation Coach'
+  if (props.processing) return 'Analyzing...'
+  return 'Coach Active'
 })
 
-const currentTemplate = computed(() => {
-  return promptTemplates.value.find(t => t.id === selectedTemplate.value)
-})
-
-// Removed unused effectivePrompt computed
-
-// Initialize with sales template
-const initializePrompt = () => {
-  const template = promptTemplates.value.find(t => t.id === selectedTemplate.value)
-  if (template && template.prompt) {
-    emit('update-system-prompt', template.prompt)
-  }
-}
-
-const applyTemplate = (templateId: string) => {
-  selectedTemplate.value = templateId
-  const template = promptTemplates.value.find(t => t.id === templateId)
-  
-  if (template) {
-    if (templateId === 'custom') {
-      // For custom, validate before emitting
-      const validation = validatePrompt(customPrompt.value)
-      promptValidationError.value = validation.error
-      
-      if (validation.isValid) {
-        emit('update-system-prompt', customPrompt.value)
-      }
-    } else {
-      // Clear any validation errors for pre-defined templates
-      promptValidationError.value = null
-      emit('update-system-prompt', template.prompt)
-    }
-  }
-}
-
-const updateCustomPrompt = () => {
-  if (selectedTemplate.value === 'custom') {
-    const validation = validatePrompt(customPrompt.value)
-    promptValidationError.value = validation.error
-    
-    // Save to localStorage even if invalid (for persistence)
-    saveCustomPrompt()
-    
-    if (validation.isValid) {
-      emit('update-system-prompt', customPrompt.value)
-    }
-  }
-}
-
-const validatePrompt = (prompt: string) => {
-  const trimmed = prompt.trim()
-  const isValid = trimmed.length >= 10 && trimmed.length <= 2000
-  return {
-    isValid,
-    error: !isValid ? 
-      (trimmed.length < 10 ? 'Prompt must be at least 10 characters' : 
-       'Prompt must be less than 2000 characters') : null
-  }
-}
-
-// Load saved custom prompt from localStorage
-const loadSavedPrompt = () => {
-  try {
-    const saved = localStorage.getItem('liveai-custom-prompt')
-    if (saved) {
-      customPrompt.value = saved
-    }
-  } catch (error) {
-    console.warn('Failed to load saved custom prompt:', error)
-  }
-}
-
-// Save custom prompt to localStorage
-const saveCustomPrompt = () => {
-  try {
-    localStorage.setItem('liveai-custom-prompt', customPrompt.value)
-  } catch (error) {
-    console.warn('Failed to save custom prompt:', error)
-  }
-}
-
-// Initialize on mount
-watch(() => props.show, (newValue) => {
-  if (newValue) {
-    loadSavedPrompt()
-    initializePrompt()
-  }
-}, { immediate: true })
 </script>
 
 <template>
-  <div v-if="show" :class="['live-assistant', 'live-ai-drawer', { 'fullscreen': props.fullScreen || props.isActive }]">
+  <div v-if="show" :class="['live-assistant', 'live-ai-drawer', { 'fullscreen': props.fullScreen, 'compact-mode': isCompactMode }]">
     <!-- Minimal Header -->
     <div class="assistant-header">
       <div class="header-left">
-        <component :is="getConversationIcon" class="w-4 h-4 text-blue-500" />
+        <component :is="getConversationIcon" class="w-4 h-4 text-orange-500" />
         <span class="header-title">{{ statusText }}</span>
         <div v-if="isActive" class="live-dot"></div>
       </div>
       <div class="header-right">
         <button 
-          @click="showSettings = !showSettings" 
-          class="settings-button"
-          :class="{ 'active': showSettings }"
-          title="Settings"
+          @click="handleToggleCompact"
+          class="compact-button"
+          :class="{ 'active': isCompactMode }"
+          :title="isCompactMode ? 'Expand drawer to normal width' : 'Compact mode (25% width)'"
         >
-          <CogIcon class="w-4 h-4" />
+          <component :is="isCompactMode ? ArrowsPointingOutIcon : ArrowsPointingInIcon" class="w-4 h-4" />
         </button>
         <button @click="handleClose" class="close-button">
           <XMarkIcon class="w-4 h-4" />
@@ -271,60 +152,6 @@ watch(() => props.show, (newValue) => {
       </div>
     </div>
     
-    <!-- Settings Panel -->
-    <div v-if="showSettings" class="settings-panel">
-      <div class="settings-header">
-        <DocumentTextIcon class="w-4 h-4 text-purple-400" />
-        <span class="text-sm font-medium text-white/90">Conversation Type</span>
-      </div>
-      
-      <!-- Template Selection -->
-      <div class="template-grid">
-        <button
-          v-for="template in promptTemplates"
-          :key="template.id"
-          @click="applyTemplate(template.id)"
-          class="template-btn"
-          :class="{ 'selected': selectedTemplate === template.id }"
-        >
-          <span class="template-icon">{{ template.icon }}</span>
-          <div class="template-info">
-            <span class="template-name">{{ template.name }}</span>
-            <span class="template-desc">{{ template.description }}</span>
-          </div>
-        </button>
-      </div>
-      
-      <!-- Custom Prompt Editor -->
-      <div v-if="selectedTemplate === 'custom'" class="custom-prompt">
-        <label class="prompt-label">Custom System Prompt:</label>
-        <textarea
-          v-model="customPrompt"
-          @input="updateCustomPrompt"
-          class="prompt-textarea"
-          :class="{ 'error': promptValidationError }"
-          rows="4"
-          placeholder="Enter your custom prompt here..."
-        />
-        <div v-if="promptValidationError" class="validation-error">
-          {{ promptValidationError }}
-        </div>
-        <div class="prompt-counter">
-          {{ customPrompt.length }}/2000
-        </div>
-      </div>
-      
-      <!-- Current Template Preview -->
-      <div v-else-if="currentTemplate" class="template-preview">
-        <div class="preview-header">
-          <span class="text-xs text-white/60">Current Template:</span>
-          <span class="text-xs text-blue-400">{{ currentTemplate.name }}</span>
-        </div>
-        <div class="preview-content">
-          <p class="text-xs text-white/70 leading-relaxed">{{ currentTemplate.prompt.split('\n')[0] }}</p>
-        </div>
-      </div>
-    </div>
     
     <!-- Main Content -->
     <div class="assistant-content">
@@ -336,77 +163,94 @@ watch(() => props.show, (newValue) => {
           :class="{ 'active': isActive }"
         >
           <component :is="isActive ? StopIcon : PlayIcon" class="w-4 h-4" />
-          <span>{{ isActive ? 'Stop' : 'Start' }}</span>
+          <span>{{ isActive ? 'Stop Coach' : 'Start Coach' }}</span>
         </button>
       </div>
       
-      <!-- Large Recommendations Area -->
-      <div class="recommendations-area">
-        <div v-if="processing || aiProcessing" class="processing">
-          <BoltIcon class="w-5 h-5 animate-pulse text-blue-500" />
-          <span>Thinking...</span>
-        </div>
-        
-        <div v-else-if="suggestions && suggestions.length > 0" class="suggestions">
-          <div class="suggestions-header">
-            <SparklesIcon class="w-4 h-4 text-blue-500" />
-            <span class="suggestions-title">AI Response Suggestion</span>
-          </div>
-          <!-- Display primary suggestion prominently -->
-          <div class="primary-suggestion">
-            <div
-              v-for="suggestion in suggestions"
-              :key="suggestion.id"
-              @click="copyToClipboard(suggestion.text, suggestion.id)"
-              class="suggestion-card"
+      <!-- Question Input Bar -->
+      <div v-if="isActive" class="question-bar">
+        <input
+          v-model="questionInput"
+          @keyup.enter="handleAskQuestion"
+          type="text"
+          placeholder="Ask a specific question about this conversation..."
+          class="question-input"
+          :disabled="isAskingQuestion"
+        />
+        <button 
+          @click="handleAskQuestion"
+          class="ask-button"
+          :disabled="!questionInput.trim() || isAskingQuestion"
+        >
+          <BoltIcon class="w-4 h-4" />
+        </button>
+      </div>
+      
+      <!-- Chat-like Insights Feed -->
+      <div class="insights-feed">
+        <div ref="insightsContainer" class="insights-container">
+          <!-- Show insights as chat messages -->
+          <div v-if="insights && insights.length > 0" class="insights-list">
+            <div 
+              v-for="insight in insights" 
+              :key="insight.id"
+              class="insight-message"
               :class="{ 
-                'urgent': suggestion.priority === 'immediate',
-                'copied': copiedStates[suggestion.id]
+                'welcome-message': insight.type === 'welcome',
+                'question-message': insight.type === 'question',
+                'answer-message': insight.type === 'answer'
               }"
             >
-              <div class="suggestion-text">{{ suggestion.text }}</div>
-              <div class="suggestion-actions">
-                <span class="confidence-badge">{{ Math.round((suggestion.confidence || 0.8) * 100) }}% confidence</span>
-                <button class="copy-btn" :class="{ 'copied': copiedStates[suggestion.id] }">
-                  <ClipboardDocumentIcon v-if="!copiedStates[suggestion.id]" class="w-4 h-4" />
-                  <CheckIcon v-else class="w-4 h-4 text-green-500" />
-                  <span>{{ copiedStates[suggestion.id] ? 'Copied!' : 'Copy' }}</span>
+              <div class="message-header">
+                <div class="message-icon">
+                  <SparklesIcon v-if="insight.type === 'insight' || insight.type === 'welcome'" class="w-3 h-3 text-orange-400" />
+                  <BoltIcon v-else-if="insight.type === 'answer'" class="w-3 h-3 text-blue-400" />
+                  <component v-else :is="insight.type === 'question' ? 'span' : SparklesIcon" class="w-3 h-3 text-gray-400">
+                    {{ insight.type === 'question' ? 'Q:' : '' }}
+                  </component>
+                </div>
+                <span class="message-time">{{ formatTimestamp(insight.timestamp) }}</span>
+                <button 
+                  @click="copyToClipboard(insight.text, insight.id)"
+                  class="copy-btn"
+                  :class="{ 'copied': copiedStates[insight.id] }"
+                  title="Copy insight"
+                >
+                  <ClipboardDocumentIcon v-if="!copiedStates[insight.id]" class="w-3 h-3" />
+                  <CheckIcon v-else class="w-3 h-3 text-green-400" />
                 </button>
+              </div>
+              <div class="message-content">
+                <div class="insight-text" v-html="insight.text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')" />
               </div>
             </div>
           </div>
-        </div>
-        
-        <div v-else-if="aiResponse" class="ai-response">
-          <div class="response-header">
-            <SparklesIcon class="w-4 h-4 text-blue-500" />
-            <span class="response-title">AI Analysis</span>
-            <button 
-              @click="copyToClipboard(aiResponse, 'ai-response')"
-              class="copy-btn"
-              :class="{ 'copied': copiedStates['ai-response'] }"
-            >
-              <component 
-                :is="copiedStates['ai-response'] ? CheckIcon : ClipboardDocumentIcon" 
-                class="w-3 h-3" 
-              />
-            </button>
+          
+          <!-- Processing indicator -->
+          <div v-if="processing || aiProcessing" class="processing-message">
+            <div class="message-header">
+              <div class="message-icon">
+                <BoltIcon class="w-3 h-3 animate-pulse text-orange-400" />
+              </div>
+              <span class="message-time">{{ formatTimestamp(Date.now()) }}</span>
+            </div>
+            <div class="message-content">
+              <div class="processing-text">Analyzing conversation...</div>
+            </div>
           </div>
-          <p class="response-text">{{ aiResponse }}</p>
-        </div>
-        
-        <div v-else class="empty-state">
-          <div class="empty-icon">
-            <component :is="isActive ? BoltIcon : SparklesIcon" 
-              class="w-8 h-8 text-gray-400" 
-            />
+          
+          <!-- Empty state -->
+          <div v-if="(!insights || insights.length === 0) && !processing && !aiProcessing" class="empty-state">
+            <div class="empty-icon">
+              <SparklesIcon class="w-8 h-8 text-gray-400" />
+            </div>
+            <p class="empty-title">
+              {{ isActive ? 'Listening for insights...' : 'Conversation Coach Ready' }}
+            </p>
+            <p class="empty-subtitle">
+              {{ isActive ? 'Real-time insights will appear here as the conversation progresses' : 'Start to enable conversation coaching' }}
+            </p>
           </div>
-          <p class="empty-title">
-            {{ isActive ? 'Analyzing conversation...' : 'AI Assistant Ready' }}
-          </p>
-          <p class="empty-subtitle">
-            {{ isActive ? 'Contextual responses will appear automatically' : 'Start to enable smart response suggestions' }}
-          </p>
         </div>
       </div>
       
@@ -422,10 +266,16 @@ watch(() => props.show, (newValue) => {
 <style scoped>
 .live-assistant {
   @apply bg-white/[0.02] backdrop-blur-xl border-l border-white/10;
-  @apply flex flex-col h-full;
+  @apply flex flex-col h-full transition-all duration-300 ease-in-out;
   width: 340px;
   min-width: 340px;
   max-width: 400px;
+}
+
+.live-assistant.compact-mode {
+  width: 25vw;
+  min-width: 280px;
+  max-width: 25vw;
 }
 
 .live-assistant.fullscreen {
@@ -439,9 +289,14 @@ watch(() => props.show, (newValue) => {
   @apply border border-white/10 rounded-none;
 }
 
+.live-assistant.fullscreen.compact-mode {
+  width: 100%;
+  max-width: none;
+}
+
 .assistant-header {
   @apply flex items-center justify-between px-4 py-3 border-b border-white/10;
-  @apply bg-gradient-to-r from-blue-500/5 to-transparent;
+  @apply bg-gradient-to-r from-orange-500/5 to-transparent;
 }
 
 .header-left {
@@ -460,13 +315,14 @@ watch(() => props.show, (newValue) => {
   @apply w-2 h-2 bg-green-400 rounded-full animate-pulse;
 }
 
-.settings-button {
+
+.compact-button {
   @apply p-1.5 rounded-lg hover:bg-white/10 transition-colors;
   @apply text-white/40 hover:text-white/70;
 }
 
-.settings-button.active {
-  @apply bg-purple-500/20 text-purple-400;
+.compact-button.active {
+  @apply bg-orange-500/20 text-orange-400;
 }
 
 .close-button {
@@ -474,83 +330,6 @@ watch(() => props.show, (newValue) => {
   @apply text-white/60 hover:text-white/90;
 }
 
-.settings-panel {
-  @apply border-b border-white/10 bg-white/[0.02] p-3;
-}
-
-.settings-header {
-  @apply flex items-center gap-2 mb-3;
-}
-
-.template-grid {
-  @apply grid grid-cols-2 gap-2 mb-3;
-}
-
-.template-btn {
-  @apply flex items-center gap-2 p-2 rounded-lg;
-  @apply bg-white/[0.02] hover:bg-white/[0.05] border border-white/10;
-  @apply transition-all duration-200 text-left;
-}
-
-.template-btn.selected {
-  @apply bg-blue-500/20 border-blue-500/40;
-}
-
-.template-icon {
-  @apply text-lg flex-shrink-0;
-}
-
-.template-info {
-  @apply flex flex-col min-w-0;
-}
-
-.template-name {
-  @apply text-xs font-medium text-white/90;
-}
-
-.template-desc {
-  @apply text-xs text-white/50 leading-tight;
-  font-size: 10px;
-}
-
-.custom-prompt {
-  @apply space-y-2;
-}
-
-.prompt-label {
-  @apply text-xs text-white/70 font-medium;
-}
-
-.prompt-textarea {
-  @apply w-full border border-white/20 rounded-lg px-2 py-2 text-white;
-  @apply placeholder-white/50 focus:outline-none focus:border-purple-500/50;
-  @apply bg-white/[0.03] transition-all duration-200 resize-none;
-  font-size: 11px;
-}
-
-.prompt-textarea.error {
-  @apply border-red-500/50 focus:border-red-500/70;
-}
-
-.validation-error {
-  @apply text-xs text-red-400 mt-1;
-}
-
-.prompt-counter {
-  @apply text-xs text-white/40 mt-1 text-right;
-}
-
-.template-preview {
-  @apply space-y-2;
-}
-
-.preview-header {
-  @apply flex items-center justify-between;
-}
-
-.preview-content {
-  @apply p-2 rounded bg-white/[0.02] border border-white/10;
-}
 
 .assistant-content {
   @apply flex-1 flex flex-col p-4 gap-4 overflow-y-auto;
@@ -562,8 +341,8 @@ watch(() => props.show, (newValue) => {
 
 .toggle-button {
   @apply flex items-center gap-2 px-4 py-2 rounded-xl font-medium;
-  @apply bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 hover:text-blue-300;
-  @apply border border-blue-500/30 hover:border-blue-500/50;
+  @apply bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 hover:text-orange-300;
+  @apply border border-orange-500/30 hover:border-orange-500/50;
   @apply transition-all duration-200;
 }
 
@@ -572,100 +351,127 @@ watch(() => props.show, (newValue) => {
   @apply border-green-500/30 hover:border-green-500/50;
 }
 
-.recommendations-area {
-  @apply flex-1 flex flex-col min-h-[200px] bg-white/[0.02] rounded-xl p-3;
-  @apply border border-white/10;
+.insights-feed {
+  @apply flex-1 flex flex-col min-h-[200px];
 }
 
-.primary-suggestion {
+.insights-container {
+  @apply flex-1 overflow-y-auto bg-white/[0.02] rounded-xl border border-white/10;
+  @apply p-3 space-y-3 scroll-smooth;
+  max-height: calc(100vh - 200px);
+}
+
+.compact-mode .insights-container {
+  @apply p-2 space-y-2;
+}
+
+.compact-mode .insight-text {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.compact-mode .message-header {
+  @apply px-2 py-1;
+}
+
+.compact-mode .message-content {
+  @apply p-2;
+}
+
+.insights-list {
   @apply space-y-3;
 }
 
-.suggestion-card {
-  @apply p-4 rounded-xl bg-white/[0.05] hover:bg-white/[0.08];
-  @apply border border-white/10 hover:border-white/20;
-  @apply cursor-pointer transition-all duration-200;
+.insight-message {
+  @apply bg-white/[0.03] rounded-lg border border-white/10;
+  @apply transition-all duration-200;
 }
 
-.suggestion-card.urgent {
-  @apply border-orange-500/40 bg-orange-500/10;
-  animation: gentle-pulse 2s infinite;
+.insight-message.welcome-message {
+  @apply bg-orange-500/10 border-orange-500/30;
 }
 
-.suggestion-card.copied {
-  @apply bg-green-500/20 border-green-500/40;
+.insight-message.question-message {
+  @apply bg-gray-500/10 border-gray-500/30;
+  @apply ml-4;
 }
 
-.processing {
-  @apply flex items-center justify-center gap-2 py-8 text-blue-400;
+.insight-message.answer-message {
+  @apply bg-blue-500/10 border-blue-500/30;
 }
 
-.suggestions-header {
-  @apply flex items-center gap-2 mb-3 pb-2 border-b border-white/10;
+/* Question Input Bar Styles */
+.question-bar {
+  @apply flex gap-2 px-4 py-3 border-b border-white/10;
+  @apply bg-white/[0.02];
 }
 
-.suggestions-title {
-  @apply text-sm font-semibold text-white/90;
+.question-input {
+  @apply flex-1 px-3 py-2 text-sm rounded-lg;
+  @apply bg-white/[0.05] border border-white/10;
+  @apply text-white/90 placeholder-white/30;
+  @apply focus:outline-none focus:border-orange-500/50 focus:bg-white/[0.08];
+  @apply transition-all duration-200;
 }
 
-.suggestion-text {
-  @apply text-sm text-white/90 leading-relaxed mb-3;
-  font-size: 14px;
-  line-height: 1.6;
+.question-input:disabled {
+  @apply opacity-50 cursor-not-allowed;
 }
 
-.suggestion-actions {
-  @apply flex items-center justify-between;
+.ask-button {
+  @apply px-3 py-2 rounded-lg;
+  @apply bg-orange-500/20 hover:bg-orange-500/30;
+  @apply text-orange-400 hover:text-orange-300;
+  @apply border border-orange-500/30 hover:border-orange-500/50;
+  @apply transition-all duration-200;
+  @apply disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
-.confidence-badge {
-  @apply text-xs text-white/50 bg-white/10 px-2 py-1 rounded-full;
+.message-header {
+  @apply flex items-center justify-between px-3 py-2 border-b border-white/10;
+  @apply bg-white/[0.02] rounded-t-lg;
 }
 
-.copy-btn {
-  @apply flex items-center gap-1 px-3 py-1.5 rounded-lg;
-  @apply bg-white/10 hover:bg-white/20 text-white/70 hover:text-white/90;
-  @apply transition-all duration-200 text-xs font-medium;
+.message-icon {
+  @apply flex items-center gap-2;
 }
 
-.copy-btn.copied {
-  @apply bg-green-500/20 text-green-400;
+.message-time {
+  @apply text-xs text-white/40 font-mono;
 }
 
-@keyframes gentle-pulse {
-  0%, 100% { border-color: rgba(251, 146, 60, 0.4); }
-  50% { border-color: rgba(251, 146, 60, 0.6); }
+.message-content {
+  @apply p-3;
 }
 
-.ai-response {
-  @apply p-3 rounded-lg bg-blue-500/10 border border-blue-500/30;
+.insight-text {
+  @apply text-sm text-white/90 leading-relaxed whitespace-pre-wrap;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.response-header {
-  @apply flex items-center gap-2 mb-2;
+.processing-message {
+  @apply bg-orange-500/10 rounded-lg border border-orange-500/30;
 }
 
-.response-title {
-  @apply text-sm font-medium text-blue-400 flex-1;
+.processing-text {
+  @apply text-sm text-orange-400 italic;
 }
+
+
 
 .copy-btn {
   @apply p-1 rounded hover:bg-white/10 text-white/40 hover:text-white/80;
-  @apply transition-colors;
+  @apply transition-colors duration-200;
 }
 
 .copy-btn.copied {
   @apply text-green-400;
 }
 
-.response-text {
-  @apply text-xs text-white/80 leading-relaxed whitespace-pre-wrap;
-  font-size: 12px;
-  line-height: 1.5;
-}
 
 .empty-state {
-  @apply flex-1 flex flex-col items-center justify-center py-8 text-center;
+  @apply flex-1 flex flex-col items-center justify-center py-12 text-center;
 }
 
 .empty-icon {
@@ -687,12 +493,26 @@ watch(() => props.show, (newValue) => {
 
 /* Responsive adjustments */
 @media (max-height: 700px) {
-  .recommendations-area {
-    @apply min-h-[150px];
+  .insights-container {
+    max-height: calc(100vh - 180px);
   }
-  
-  .template-grid {
-    @apply grid-cols-1;
-  }
+}
+
+/* Scrollbar styling */
+.insights-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.insights-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.insights-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.insights-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 </style>

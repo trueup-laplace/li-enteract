@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useMessagePersistence } from '../composables/useMessagePersistence'
 
@@ -18,6 +18,14 @@ export interface ConversationMessage {
   saveError?: string
 }
 
+export interface ConversationInsight {
+  id: string
+  text: string
+  timestamp: number
+  contextLength: number
+  type: 'insight' | 'welcome' | 'question' | 'answer'
+}
+
 export interface ConversationSession {
   id: string
   name: string
@@ -25,6 +33,7 @@ export interface ConversationSession {
   endTime?: number
   messages: ConversationMessage[]
   isActive: boolean
+  insights: ConversationInsight[]
 }
 
 export const useConversationStore = defineStore('conversation', () => {
@@ -45,8 +54,14 @@ export const useConversationStore = defineStore('conversation', () => {
     try {
       console.log('📁 Store: Attempting to load conversations from backend...')
       const response = await invoke<{conversations: ConversationSession[]}>('load_conversations')
-      sessions.value = response.conversations
-      console.log(`📁 Store: Successfully loaded ${sessions.value.length} conversation sessions from backend:`, sessions.value.map(s => ({ id: s.id, name: s.name, messageCount: s.messages.length })))
+      
+      // Migrate old sessions that don't have insights field
+      sessions.value = response.conversations.map(session => ({
+        ...session,
+        insights: session.insights || [] // Add empty insights array if missing
+      }))
+      
+      console.log(`📁 Store: Successfully loaded ${sessions.value.length} conversation sessions from backend:`, sessions.value.map(s => ({ id: s.id, name: s.name, messageCount: s.messages.length, insightCount: s.insights?.length || 0 })))
     } catch (error) {
       console.error('📁 Store: Failed to load conversation sessions from backend:', error)
       // Fallback to localStorage for migration
@@ -54,7 +69,11 @@ export const useConversationStore = defineStore('conversation', () => {
         const stored = localStorage.getItem(STORAGE_KEY)
         if (stored) {
           const parsed = JSON.parse(stored)
-          sessions.value = parsed
+          // Migrate old sessions that don't have insights field
+          sessions.value = parsed.map((session: any) => ({
+            ...session,
+            insights: session.insights || [] // Add empty insights array if missing
+          }))
           console.log(`📁 Store: Migrated ${parsed.length} conversation sessions from localStorage`)
           // Save to backend and clear localStorage
           await saveSessions()
@@ -165,7 +184,8 @@ export const useConversationStore = defineStore('conversation', () => {
         name: name || `Conversation ${new Date().toLocaleTimeString()}`,
         startTime: Date.now(),
         messages: [],
-        isActive: true
+        isActive: true,
+        insights: []
       }
 
       // Deactivate any existing current session
@@ -660,6 +680,59 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
+  // Insight management functions
+  const addInsight = async (insight: ConversationInsight) => {
+    if (!currentSession.value) {
+      console.warn('No active session to add insight to')
+      return
+    }
+
+    try {
+      // Add to current session
+      currentSession.value.insights.push(insight)
+      
+      // Save to backend
+      await invoke('save_conversation_insight', {
+        sessionId: currentSession.value.id,
+        insight: {
+          id: insight.id,
+          text: insight.text,
+          timestamp: insight.timestamp,
+          contextLength: insight.contextLength,
+          insightType: insight.type
+        }
+      })
+      
+      console.log('💡 Added insight to session:', insight.id)
+    } catch (error) {
+      console.error('Failed to save insight:', error)
+    }
+  }
+
+  const getInsightsForSession = async (sessionId: string): Promise<ConversationInsight[]> => {
+    try {
+      const insights = await invoke<ConversationInsight[]>('get_conversation_insights', {
+        sessionId
+      })
+      return insights
+    } catch (error) {
+      console.error('Failed to load insights for session:', sessionId, error)
+      return []
+    }
+  }
+
+  const loadCurrentSessionInsights = async () => {
+    if (!currentSession.value) return
+
+    try {
+      const insights = await getInsightsForSession(currentSession.value.id)
+      currentSession.value.insights = insights
+      console.log(`💡 Loaded ${insights.length} insights for current session`)
+    } catch (error) {
+      console.error('Failed to load insights for current session:', error)
+    }
+  }
+
   return {
     // State
     currentSession,
@@ -706,6 +779,11 @@ export const useConversationStore = defineStore('conversation', () => {
     disableAutoSave,
     enableAutoSave,
     waitForSaveCompletion,
+    
+    // Insight management
+    addInsight,
+    getInsightsForSession,
+    loadCurrentSessionInsights,
     
     // Message persistence
     getMessagePersistenceStatus: () => messagePersistence.getQueueStatus(),

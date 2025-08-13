@@ -63,6 +63,7 @@ const showExportControls = ref(false)
 // Sidebar and panel states
 const showConversationSidebar = ref(false)
 const showLiveAI = ref(false)
+const isLiveAIFullScreen = ref(false)
 
 // Speech transcription
 const {
@@ -111,14 +112,12 @@ const {
 const {
   isActive: isLiveAIActive,
   response: liveAIResponse,
-  suggestions: liveAISuggestions,
+  insights: liveAIInsights,
   isProcessing: liveAIIsProcessing,
   error: liveAIError,
-  currentTempo: liveAITempo,
   startLiveAI,
   stopLiveAI,
-  onConversationChange,
-  updateSystemPrompt
+  onConversationChange
 } = useLiveAI()
 
 // Computed
@@ -410,22 +409,51 @@ const handleDeleteConversation = async (id: string) => {
 
 const handleAIQuery = async (query: string) => {
   const currentMessages = conversationStore.currentMessages || []
-  await queryAI(query, currentMessages)
+  
+  // First, save the question as an insight
+  const questionInsight = {
+    id: `question-${Date.now()}`,
+    text: query,
+    timestamp: Date.now(),
+    contextLength: currentMessages.length,
+    type: 'question' as const
+  }
+  await conversationStore.addInsight(questionInsight)
+  
+  // Get AI response
+  const response = await queryAI(query, currentMessages)
+  
+  // Save the answer as an insight
+  if (response) {
+    const answerInsight = {
+      id: `answer-${Date.now()}`,
+      text: response,
+      timestamp: Date.now(),
+      contextLength: currentMessages.length,
+      type: 'answer' as const
+    }
+    await conversationStore.addInsight(answerInsight)
+  }
 }
 
-const handleSystemPromptUpdate = (prompt: string) => {
-  updateSystemPrompt(prompt)
-}
 
 // Live AI actions
 const toggleLiveAI = () => {
   if (showLiveAI.value) {
     // If already open, just close it
     showLiveAI.value = false
+    isLiveAIFullScreen.value = false
   } else {
     // Close other drawers first, then open Live AI
     showLiveAI.value = true
+    // Start in fullscreen mode when first opened
+    isLiveAIFullScreen.value = true
   }
+}
+
+const handleLiveAIToggleCompact = () => {
+  // Toggle between fullscreen and compact mode
+  isLiveAIFullScreen.value = !isLiveAIFullScreen.value
 }
 
 const toggleLiveAIActive = async () => {
@@ -609,18 +637,17 @@ const formatSessionDuration = () => {
           :is-active="isLiveAIActive"
           :processing="liveAIIsProcessing"
           :response="liveAIResponse"
-          :suggestions="liveAISuggestions"
+          :insights="liveAIInsights"
           :error="liveAIError"
-          :conversation-tempo="liveAITempo"
           :ai-processing="aiIsProcessing"
           :ai-response="aiResponse"
           :ai-error="aiError"
           :message-count="messages.length"
-          :full-screen="isLiveAIActive"
+          :full-screen="isLiveAIFullScreen"
           @close="showLiveAI = false"
           @toggle-live="toggleLiveAIActive"
           @ai-query="handleAIQuery"
-          @update-system-prompt="handleSystemPromptUpdate"
+          @toggle-compact="handleLiveAIToggleCompact"
         />
       </div>
     </div>
