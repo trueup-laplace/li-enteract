@@ -47,7 +47,9 @@ bytemuck = "1.13"
 dirs = "5.0"
 
 # RAG system dependencies
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { version = "0.31", features = ["bundled", "blob"] }
+tantivy = { version = "0.22", features = ["mmap"] }
+tiktoken-rs = "0.5"
 
 # Additional dependencies for enhanced error handling
 thiserror = { version = "1.0", optional = true }
