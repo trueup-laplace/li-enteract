@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { SessionManager } from './sessionManager'
 import { ContextManager } from './contextManager'
+import { enhancedRagService } from '../services/enhancedRagService'
 
 let messageIdCounter = 1
 
@@ -113,7 +114,7 @@ export class AgentService {
 
 
   // Send message function
-  static async sendMessage(userMessage: string, selectedModel: string | null, agentType: string = 'enteract') {
+  static async sendMessage(userMessage: string, selectedModel: string | null, agentType: string = 'enteract', selectedDocumentIds: string[] = []) {
     // Ensure we have an active chat session
     const currentChatSession = SessionManager.getCurrentChatSession().value
     if (!currentChatSession) {
@@ -355,18 +356,46 @@ export class AgentService {
         }
       }, 2000)
       
-      // Generate truncated context for AI (max 4000 tokens)
-      const maxTokens = 4000
+      // Perform RAG search if documents are selected
+      let ragContext = ''
+      if (selectedDocumentIds.length > 0) {
+        try {
+          console.log(`🔍 Performing RAG search with ${selectedDocumentIds.length} selected documents`)
+          const ragResults = await enhancedRagService.searchDocuments(userMessage, selectedDocumentIds)
+          
+          if (ragResults.length > 0) {
+            ragContext = enhancedRagService.formatContextForAI(ragResults)
+            console.log(`📚 RAG context retrieved: ${ragResults.length} chunks, ${ragContext.length} characters`)
+          } else {
+            console.log('📚 No relevant content found in selected documents')
+          }
+        } catch (error) {
+          console.error('❌ RAG search failed:', error)
+          // Continue without RAG context if search fails
+        }
+      }
+      
+      // Generate truncated context for AI (max 4000 tokens, reserve space for RAG if needed)
+      const maxTokens = ragContext ? 3000 : 4000 // Reserve space for RAG context
       const truncatedContext = ContextManager.getLimitedContext(SessionManager.getCurrentChatHistory().value, maxTokens)
       
       console.log(`📊 Context prepared: ${truncatedContext.length} messages, estimated ~${truncatedContext.reduce((sum, msg) => sum + ContextManager.estimateTokens(msg.content), 0)} tokens`)
+      
+      // Prepare enhanced prompt with RAG context if available
+      const enhancedPrompt = ragContext 
+        ? `Context from documents:\n${ragContext}\n\nUser question: ${userMessage}\n\nPlease answer the question using the provided document context when relevant.`
+        : userMessage
+      
+      if (ragContext) {
+        console.log(`📚 Enhanced prompt with RAG context: ${enhancedPrompt.length} characters`)
+      }
       
       // Route to appropriate agent based on type
       switch (agentType) {
         case 'coding':
           console.log('💻 FRONTEND: Calling generate_coding_agent_response (should use qwen2.5-coder:1.5b)')
           await invoke('generate_coding_agent_response', {
-            prompt: userMessage,
+            prompt: enhancedPrompt,
             context: truncatedContext,
             sessionId: sessionId
           })
@@ -375,7 +404,7 @@ export class AgentService {
         case 'research':
           console.log('🧠 FRONTEND: Calling generate_deep_research (should use deepseek-r1:1.5b)')
           await invoke('generate_deep_research', {
-            prompt: userMessage,
+            prompt: enhancedPrompt,
             context: truncatedContext,
             sessionId: sessionId
           })
@@ -385,7 +414,7 @@ export class AgentService {
           console.log('👁️ FRONTEND: Calling generate_vision_analysis (should use qwen2.5vl:3b)')
           // Note: Vision analysis typically needs an image, but we'll call it anyway
           await invoke('generate_vision_analysis', {
-            prompt: userMessage,
+            prompt: enhancedPrompt,
             imageBase64: '', // Empty for text-only requests
             sessionId: sessionId
           })
@@ -395,7 +424,7 @@ export class AgentService {
         default:
           console.log('🛡️ FRONTEND: Calling generate_enteract_agent_response (should use gemma3:1b-it-qat)')
           await invoke('generate_enteract_agent_response', {
-            prompt: userMessage,
+            prompt: enhancedPrompt,
             context: truncatedContext,
             sessionId: sessionId
           })

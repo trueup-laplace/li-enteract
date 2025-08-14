@@ -29,7 +29,7 @@ export const useChatManagement = (selectedModel: string | null, scrollChatToBott
   const currentChatSession = SessionManager.getCurrentChatSession()
 
   // Send message function that uses AgentService
-  const sendMessage = async (agentType: string = 'enteract', customMessage?: string) => {
+  const sendMessage = async (agentType: string = 'enteract', customMessage?: string, selectedDocumentIds: string[] = []) => {
     // Use custom message if provided, otherwise use chatMessage.value
     const messageToSend = customMessage || chatMessage.value.trim()
     if (!messageToSend) return
@@ -39,7 +39,7 @@ export const useChatManagement = (selectedModel: string | null, scrollChatToBott
       chatMessage.value = ''
     }
     
-    await AgentService.sendMessage(messageToSend, selectedModel, agentType)
+    await AgentService.sendMessage(messageToSend, selectedModel, agentType, selectedDocumentIds)
   }
   
   // Cancel an active AI response
