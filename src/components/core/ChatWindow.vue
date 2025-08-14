@@ -179,26 +179,18 @@ const sendMessageWithAgent = async () => {
   let originalMessage = chatMessage.value.trim()
   const cleanedMessage = parseAgentFromMessage(originalMessage)
   
-  // Check if there are selected documents for RAG context
-  if (ragDocuments.selectedDocumentIds.value.size > 0) {
-    // Search relevant chunks from selected documents
-    const searchQuery = cleanedMessage || originalMessage
-    const chunks = await ragDocuments.searchDocuments(searchQuery, true)
-    
-    if (chunks.length > 0) {
-      // Format and append context to the message
-      const context = ragDocuments.formatContextForAI(chunks)
-      originalMessage = `${context}\n\nUser Question: ${originalMessage}`
-      
-      console.log('📚 RAG context added from', ragDocuments.selectedDocumentIds.value.size, 'documents')
-    }
+  // Prepare selected document IDs for RAG search
+  const selectedDocIds = Array.from(ragDocuments.selectedDocumentIds.value)
+  
+  if (selectedDocIds.length > 0) {
+    console.log(`📚 Sending message with ${selectedDocIds.length} selected documents for RAG context`)
   }
   
   chatMessage.value = ''
   showMentionSuggestions.value = false
   showDocumentDropdown.value = false
   
-  await sendMessage(currentAgent.value, cleanedMessage || originalMessage)
+  await sendMessage(currentAgent.value, cleanedMessage || originalMessage, selectedDocIds)
 }
 
 // Handle model and agent selection
