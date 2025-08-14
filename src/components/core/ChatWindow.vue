@@ -7,7 +7,8 @@ import {
   ExclamationTriangleIcon,
   MicrophoneIcon,
   StopIcon,
-  QueueListIcon
+  QueueListIcon,
+  DocumentTextIcon
 } from '@heroicons/vue/24/outline'
 import { useChatManagement } from '../../composables/useChatManagement'
 import { useSpeechEvents } from '../../composables/useSpeechEvents'
@@ -61,40 +62,35 @@ const availableAgents = [
   { id: 'vision', name: '@vision', description: 'Visual content analysis' }
 ]
 
-// Handle @ mention input
+// Handle mention input: '@' for agent/model, '/' for documents
 const handleInput = (event: Event) => {
   const target = event.target as HTMLInputElement
   const value = target.value
   const cursorPos = target.selectionStart || 0
   
-  // Check for @ mention
   const beforeCursor = value.substring(0, cursorPos)
+
+  // Document context with '/'
+  const lastSlashIndex = beforeCursor.lastIndexOf('/')
+  if (lastSlashIndex !== -1) {
+    const afterSlash = beforeCursor.substring(lastSlashIndex + 1)
+    if (!afterSlash.includes(' ') && afterSlash.length >= 0) {
+      const rect = target.getBoundingClientRect()
+      documentDropdownPosition.value = { x: rect.left, y: rect.bottom + 5 }
+      documentSearchQuery.value = '/' + afterSlash
+      showDocumentDropdown.value = true
+      showMentionSuggestions.value = false
+      mentionStartPos.value = lastSlashIndex
+      return
+    }
+  }
+
+  // Agent/model mentions with '@'
   const lastAtIndex = beforeCursor.lastIndexOf('@')
-  
   if (lastAtIndex !== -1) {
     const afterAt = beforeCursor.substring(lastAtIndex + 1)
-    
-    // If there's no space after @, show suggestions
     if (!afterAt.includes(' ') && afterAt.length >= 0) {
-      // Check if it's a document context mention (starts with @context or just @)
-      if (afterAt === '' || afterAt.toLowerCase().startsWith('context') || afterAt.toLowerCase().startsWith('doc')) {
-        // Show document dropdown
-        const rect = target.getBoundingClientRect()
-        documentDropdownPosition.value = {
-          x: rect.left,
-          y: rect.bottom + 5
-        }
-        documentSearchQuery.value = '@' + afterAt
-        showDocumentDropdown.value = true
-        showMentionSuggestions.value = false
-        return
-      }
-      
-      // Otherwise check for agent mentions
-      const filtered = availableAgents.filter(agent => 
-        agent.name.toLowerCase().includes(('@' + afterAt).toLowerCase())
-      )
-      
+      const filtered = availableAgents.filter(agent => agent.name.toLowerCase().includes(('@' + afterAt).toLowerCase()))
       if (filtered.length > 0) {
         mentionSuggestions.value = filtered
         mentionStartPos.value = lastAtIndex
@@ -104,7 +100,7 @@ const handleInput = (event: Event) => {
       }
     }
   }
-  
+
   showMentionSuggestions.value = false
   showDocumentDropdown.value = false
 }
@@ -404,7 +400,7 @@ const handleInsertReference = (fileName: string) => {
     const beforeMention = chatMessage.value.substring(0, mentionStartPos.value)
     const afterCursor = chatMessage.value.substring(input.selectionStart || 0)
     
-    chatMessage.value = beforeMention + '@' + fileName + ' ' + afterCursor
+    chatMessage.value = beforeMention + '/' + fileName + ' ' + afterCursor
     showDocumentDropdown.value = false
     
     // Focus input
@@ -610,13 +606,26 @@ onUnmounted(() => {
           <!-- Chat Input -->
           <div class="chat-input-container">
             <div class="input-wrapper">
+              <!-- Referenced Documents Pills -->
+              <div v-if="ragDocuments.selectedDocumentIds.value.size > 0" class="doc-pills">
+                <div
+                  v-for="doc in ragDocuments.documents.value.filter(d => ragDocuments.selectedDocumentIds.value.has(d.id))"
+                  :key="doc.id"
+                  class="doc-pill"
+                  title="Included in context"
+                >
+                  <DocumentTextIcon class="w-3 h-3" />
+                  <span class="pill-text">{{ doc.file_name }}</span>
+                  <button class="pill-close" @click.stop="handleDocumentDeselect(doc.id)">×</button>
+                </div>
+              </div>
               <input 
                 ref="chatInputRef"
                 v-model="chatMessage"
                 @input="handleInput"
                 @keydown="handleEnhancedKeydown"
                 class="chat-input"
-                placeholder="Ask any AI agent... (use @ to mention specific agents)"
+                placeholder="Ask any AI agent... (use @ to mention agents, / to add documents)"
                 type="text"
               />
               
@@ -897,6 +906,31 @@ onUnmounted(() => {
 
 .input-wrapper {
   @apply flex-1 relative;
+}
+
+.doc-pills {
+  @apply absolute -top-8 left-0 right-0 flex flex-wrap gap-2 px-1 pb-1; 
+}
+
+.doc-pill {
+  @apply inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs border transition-all duration-200; 
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(147, 51, 234, 0.12) 100%);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.doc-pill:hover {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.pill-text {
+  @apply truncate max-w-[180px];
+}
+
+.pill-close {
+  @apply ml-1 text-white/60 hover:text-white transition-colors;
 }
 
 .chat-input {

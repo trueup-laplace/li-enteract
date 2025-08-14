@@ -59,7 +59,7 @@ const canSelectMore = computed(() => {
 
 // Watch for search query from parent
 watch(() => props.searchQuery, (newQuery) => {
-  if (newQuery && newQuery.startsWith('@')) {
+  if (newQuery && (newQuery.startsWith('/') || newQuery.startsWith('@'))) {
     searchInput.value = newQuery.substring(1)
   }
 })
@@ -207,9 +207,9 @@ onMounted(() => {
             <button 
               class="insert-btn"
               @click.stop="insertReference(doc)"
-              title="Insert @reference"
+              title="Insert /reference"
             >
-              @
+              /
             </button>
           </div>
         </div>
@@ -256,9 +256,9 @@ onMounted(() => {
             <button 
               class="insert-btn"
               @click.stop="insertReference(doc)"
-              title="Insert @reference"
+              title="Insert /reference"
             >
-              @
+              /
             </button>
           </div>
         </div>
@@ -282,7 +282,7 @@ onMounted(() => {
           </span>
         </div>
         <div class="footer-hint">
-          Type @ to reference documents
+          Type / to reference documents
         </div>
       </div>
     </div>
