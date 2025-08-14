@@ -13,15 +13,6 @@ pub async fn initialize_enhanced_rag_system(
     app_handle: tauri::AppHandle,
     state: State<'_, EnhancedRagSystemState>,
 ) -> Result<String, String> {
-    // Check if already initialized
-    {
-        let rag_state = state.0.lock().map_err(|e| e.to_string())?;
-        if rag_state.is_some() {
-            return Ok("Enhanced RAG system already initialized".to_string());
-        }
-    }
-    
-    // Initialize new system
     match EnhancedRagSystem::new(&app_handle).await {
         Ok(system) => {
             let mut rag_state = state.0.lock().map_err(|e| e.to_string())?;
