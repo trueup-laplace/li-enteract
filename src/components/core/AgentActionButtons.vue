@@ -61,7 +61,7 @@ defineEmits<Emits>()
 }
 
 .inline-buttons {
-  @apply flex items-center justify-center gap-3 flex-wrap;
+  @apply flex items-center justify-end gap-3 flex-wrap;
 }
 
 .tool-btn {

@@ -145,6 +145,13 @@ const parseAgentFromMessage = (message: string): string => {
 
 // Enhanced keyboard handler
 const handleEnhancedKeydown = (event: KeyboardEvent) => {
+  if (showDocumentDropdown.value) {
+    if (event.key === 'Escape') {
+      handleDocumentDropdownClose()
+      return
+    }
+  }
+  
   if (showMentionSuggestions.value) {
     if (event.key === 'Escape') {
       showMentionSuggestions.value = false
@@ -394,6 +401,23 @@ const handleDocumentDeselect = (documentId: string) => {
   ragDocuments.selectedDocumentIds.value.delete(documentId)
 }
 
+const handleDocumentUpload = async (files: FileList) => {
+  try {
+    const uploadedDocs = await ragDocuments.uploadDocuments(files)
+    console.log(`📚 Uploaded ${uploadedDocs.length} documents via dropdown`)
+    
+    // Auto-select uploaded documents
+    uploadedDocs.forEach(doc => {
+      ragDocuments.selectedDocumentIds.value.add(doc.id)
+    })
+    
+    // Close dropdown after successful upload
+    showDocumentDropdown.value = false
+  } catch (error) {
+    console.error('Failed to upload documents:', error)
+  }
+}
+
 const handleInsertReference = (fileName: string) => {
   const input = chatInputRef.value
   if (input && mentionStartPos.value !== -1) {
@@ -408,6 +432,25 @@ const handleInsertReference = (fileName: string) => {
       input.focus()
     })
   }
+}
+
+// Handle dropdown close to remove '/' if nothing was selected
+const handleDocumentDropdownClose = () => {
+  if (mentionStartPos.value !== -1 && chatMessage.value.charAt(mentionStartPos.value) === '/') {
+    // Check if there's anything after the '/' that looks like a file reference
+    const input = chatInputRef.value
+    if (input) {
+      const beforeMention = chatMessage.value.substring(0, mentionStartPos.value)
+      const afterMention = chatMessage.value.substring(mentionStartPos.value + 1)
+      
+      // If there's only whitespace or nothing after '/', remove the '/'
+      if (!afterMention.trim() || afterMention.startsWith(' ')) {
+        chatMessage.value = beforeMention + afterMention
+      }
+    }
+  }
+  showDocumentDropdown.value = false
+  mentionStartPos.value = -1
 }
 
 // Setup speech events when component mounts
@@ -678,7 +721,8 @@ onUnmounted(() => {
         @select="handleDocumentSelect"
         @deselect="handleDocumentDeselect"
         @insert-reference="handleInsertReference"
-        @close="showDocumentDropdown = false"
+        @upload-documents="handleDocumentUpload"
+        @close="handleDocumentDropdownClose"
       />
     </div>
   </Transition>
