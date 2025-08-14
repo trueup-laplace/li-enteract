@@ -82,6 +82,13 @@ impl SearchService {
         // Create or open index
         std::fs::create_dir_all(&index_dir)?;
         
+        // Clean up potential stale lock files
+        let lock_file = index_dir.join(".tantivy-writer.lock");
+        if lock_file.exists() {
+            println!("Found potential stale lock file, attempting to remove: {:?}", lock_file);
+            let _ = std::fs::remove_file(&lock_file); // Ignore errors, might be in use
+        }
+        
         let index = if index_dir.join("meta.json").exists() {
             Index::open_in_dir(&index_dir)?
         } else {
@@ -276,6 +283,15 @@ impl SearchService {
         writer.delete_all_documents()?;
         writer.commit()?;
         
+        Ok(())
+    }
+    
+    pub fn close_writer(&self) -> Result<()> {
+        let mut writer_guard = self.writer.lock().map_err(|e| anyhow!("Mutex lock failed: {}", e))?;
+        if let Some(mut writer) = writer_guard.take() {
+            writer.commit()?;
+            println!("IndexWriter closed and committed");
+        }
         Ok(())
     }
 }
