@@ -106,23 +106,7 @@ pub fn run() {
             
             // Audio loopback functionality is initialized on-demand
             
-            // Initialize Enhanced RAG system on startup
-            let app_handle = app.handle().clone();
-            let enhanced_rag_state = app.state::<EnhancedRagSystemState>().inner().clone();
-            tauri::async_runtime::spawn(async move {
-                // Initialize in background to avoid blocking startup
-                match crate::enhanced_rag_system::EnhancedRagSystem::new(&app_handle).await {
-                    Ok(system) => {
-                        if let Ok(mut state_guard) = enhanced_rag_state.0.lock() {
-                            *state_guard = Some(system);
-                            println!("Enhanced RAG system initialized successfully");
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to initialize Enhanced RAG system: {}", e);
-                    }
-                }
-            });
+            // Enhanced RAG system will be initialized on-demand from frontend
             
             // Keep legacy RAG system for compatibility
             let app_handle_legacy = app.handle().clone();
