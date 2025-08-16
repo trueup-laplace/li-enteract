@@ -459,7 +459,3 @@ The enhanced RAG system provides a significant upgrade over the legacy implement
 The system is designed to grow with your application's needs while maintaining excellent performance on desktop hardware.
 
 ---
-
-*Last Updated: August 2024*
-*Version: 1.0.0*
-*Author: Enhanced RAG Implementation Team*
