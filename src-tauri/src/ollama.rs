@@ -3,12 +3,12 @@ use serde_json;
 use reqwest;
 use std::collections::HashMap;
 use std::sync::Arc;
-// use std::time::{Duration, Instant};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 use futures_util::StreamExt;
 use lazy_static::lazy_static;
 use tokio::sync::Semaphore;
-// use tokio::time::timeout; 
+use tokio::time::timeout;
 use std::sync::Mutex;
 use crate::system_prompts::{
     ENTERACT_AGENT_PROMPT, 
@@ -18,14 +18,15 @@ use crate::system_prompts::{
     CODING_AGENT_PROMPT
 };
 use crate::system_info::get_gpu_info;
+
 // Shared HTTP client for better connection pooling and memory efficiency
 lazy_static! {
     static ref HTTP_CLIENT: Arc<reqwest::Client> = Arc::new(
         reqwest::Client::builder()
             .pool_max_idle_per_host(16)  // More idle connections for faster reuse
-            .pool_idle_timeout(std::time::Duration::from_secs(60))
-            .tcp_keepalive(Some(std::time::Duration::from_secs(60)))
-            .timeout(std::time::Duration::from_secs(60))  // Shorter timeout to fail fast
+            .pool_idle_timeout(Duration::from_secs(60))
+            .tcp_keepalive(Some(Duration::from_secs(60)))
+            .timeout(Duration::from_secs(60))  // Shorter timeout to fail fast
             .build()
             .expect("Failed to create HTTP client")
     );
@@ -108,7 +109,126 @@ pub struct GenerateResponse {
 
 const OLLAMA_BASE_URL: &str = "http://localhost:11434";
 
+// Stream state tracking for timeouts and pattern detection
+#[derive(Debug)]
+struct StreamState {
+    start_time: Instant,
+    last_chunk_time: Instant,
+    chunk_count: usize,
+    last_chunk_text: String,
+    repeat_count: usize,
+    empty_chunk_count: usize,
+}
 
+#[derive(Debug)]
+enum ChunkResult {
+    Continue,
+    Exit(String), // Exit with message
+}
+
+impl StreamState {
+    fn new() -> Self {
+        let now = Instant::now();
+        Self {
+            start_time: now,
+            last_chunk_time: now,
+            chunk_count: 0,
+            last_chunk_text: String::new(),
+            repeat_count: 0,
+            empty_chunk_count: 0,
+        }
+    }
+
+    fn update_chunk(&mut self, chunk_text: &str) -> ChunkResult {
+        self.last_chunk_time = Instant::now();
+        self.chunk_count += 1;
+
+        // Track empty chunks
+        if chunk_text.trim().is_empty() {
+            self.empty_chunk_count += 1;
+            return ChunkResult::Continue; // Don't block empty chunks, but count them
+        }
+
+        // Check for consecutive identical chunks (dynamic repetition)
+        if !self.last_chunk_text.is_empty() && self.last_chunk_text == chunk_text {
+            self.repeat_count += 1;
+            println!("⚠️ Consecutive repeat detected: '{}' (count: {})", 
+                    chunk_text.chars().take(50).collect::<String>(), self.repeat_count);
+            
+            // More aggressive detection for very short or UI-related chunks
+            if chunk_text.trim().len() <= 20 && self.repeat_count > 3 {
+                println!("🛑 Exiting stream due to short repeat (likely UI artifact)");
+                return ChunkResult::Exit(format!("Stream terminated: Detected repetitive short chunk '{}' ({} times) - possible AI confusion", 
+                    chunk_text.chars().take(20).collect::<String>(), self.repeat_count));
+            }
+            
+            // Standard detection for longer content
+            if chunk_text.trim().len() > 20 && self.repeat_count > 8 {
+                println!("🛑 Exiting stream due to excessive content repeat");
+                return ChunkResult::Exit(format!("Stream terminated: Excessive repetition of content '{}' ({} times)", 
+                    chunk_text.chars().take(30).collect::<String>(), self.repeat_count));
+            }
+            
+            // Continue but keep counting
+            return ChunkResult::Continue;
+        } else {
+            self.repeat_count = 0; // Reset counter for different text
+            self.last_chunk_text = chunk_text.to_string();
+        }
+
+        ChunkResult::Continue
+    }
+
+    fn should_timeout(&self, max_total_duration: Duration, max_chunk_gap: Duration) -> Option<String> {
+        let now = Instant::now();
+        
+        // Check total stream timeout
+        if now.duration_since(self.start_time) > max_total_duration {
+            return Some(format!("Total stream timeout after {:?}", max_total_duration));
+        }
+        
+        // Check gap between chunks timeout
+        if now.duration_since(self.last_chunk_time) > max_chunk_gap {
+            return Some(format!("Chunk gap timeout after {:?}", max_chunk_gap));
+        }
+        
+        None
+    }
+
+    fn should_terminate_patterns(&self, max_repeats: usize, max_empty_chunks: usize) -> Option<String> {
+        // Only terminate on very excessive repetition (adjusted thresholds)
+        if self.repeat_count >= max_repeats * 3 {  // Triple the threshold for termination
+            return Some(format!("Too many consecutive repeats: {}", self.repeat_count));
+        }
+        
+        if self.empty_chunk_count > max_empty_chunks {
+            return Some(format!("Too many empty chunks: {}", self.empty_chunk_count));
+        }
+        
+        None
+    }
+}
+
+// Enhanced streaming configuration
+pub struct StreamConfig {
+    max_total_duration: Duration,
+    max_chunk_gap: Duration,
+    chunk_timeout: Duration,
+    max_consecutive_repeats: usize,
+    max_empty_chunks: usize,
+}
+
+impl Default for StreamConfig {
+    fn default() -> Self {
+        Self {
+            max_total_duration: Duration::from_secs(300), // 5 minutes total
+            max_chunk_gap: Duration::from_secs(30),       // 30 seconds between chunks
+            chunk_timeout: Duration::from_secs(10),       // 10 seconds per chunk read
+            max_consecutive_repeats: 5,                   // Max 5 consecutive identical chunks
+            max_empty_chunks: 20,                         // Max 20 empty chunks
+        }
+    }
+}
 
 // Helper function to build prompt with chat context
 fn build_prompt_with_context(current_prompt: String, context: Option<Vec<ChatContextMessage>>) -> String {
@@ -248,12 +368,13 @@ fn cleanup_session(session_id: &str) {
     sessions.remove(session_id);
 }
 
-// Shared streaming logic
-async fn stream_ollama_response(
+// Enhanced streaming logic with timeout and pattern detection
+async fn stream_ollama_response_enhanced(
     app_handle: AppHandle,
     url: String,
     request: GenerateRequest,
     session_id: String,
+    config: StreamConfig,
 ) -> Result<(), String> {
     // Register the session as active
     {
@@ -262,132 +383,214 @@ async fn stream_ollama_response(
     }
 
     let client = Arc::clone(&HTTP_CLIENT);
-    // Send with shorter connect timeout by spawning and imposing a small timeout for first bytes
-    match client.post(&url).json(&request).send().await {
-        Ok(response) => {
-            if response.status().is_success() {
-                let mut stream = response.bytes_stream();
-                let mut buffer = Vec::new();
-                // Emit a tiny nudge to UI so it can render quickly even before first chunk
-                if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                    "type": "chunk",
-                    "text": "",
-                    "done": false
-                })) {
-                    eprintln!("Failed to emit priming chunk: {}", e);
-                }
+    
+    // Make request with timeout
+    let response = timeout(Duration::from_secs(30), client.post(&url).json(&request).send())
+        .await
+        .map_err(|_| "Request timeout".to_string())?
+        .map_err(|e| format!("Request failed: {}", e))?;
 
-                while let Some(chunk_result) = stream.next().await {
-                    match chunk_result {
-                        Ok(chunk) => {
-                            buffer.extend_from_slice(&chunk);
+    if !response.status().is_success() {
+        let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        let error_msg = format!("Generation failed: {}", error_text);
+        
+        emit_error(&app_handle, &session_id, &error_msg).await;
+        cleanup_session(&session_id);
+        return Err(error_msg);
+    }
 
-                            // Process complete lines from buffer
-                            while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
-                                // Check for cancellation
-                                if is_session_cancelled(&session_id) {
-                                    println!("🛑 Session cancelled: {}", session_id);
+    let mut stream = response.bytes_stream();
+    let mut buffer = Vec::new();
+    let mut state = StreamState::new();
 
-                                    if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                                        "type": "cancelled",
-                                        "message": "Response cancelled by user"
-                                    })) {
-                                        eprintln!("Failed to emit cancellation event: {}", e);
-                                    }
+    // Emit a tiny nudge to UI so it can render quickly even before first chunk
+    if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+        "type": "chunk",
+        "text": "",
+        "done": false
+    })) {
+        eprintln!("Failed to emit priming chunk: {}", e);
+    }
 
-                                    cleanup_session(&session_id);
-                                    return Ok(());
+    loop {
+        // Check for cancellation first
+        if is_session_cancelled(&session_id) {
+            println!("🛑 Session cancelled: {}", session_id);
+            if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                "type": "cancelled",
+                "message": "Response cancelled by user"
+            })) {
+                eprintln!("Failed to emit cancellation event: {}", e);
+            }
+            cleanup_session(&session_id);
+            return Ok(());
+        }
+
+        // Check timeouts
+        if let Some(timeout_reason) = state.should_timeout(config.max_total_duration, config.max_chunk_gap) {
+            println!("⏰ Stream timeout: {}", timeout_reason);
+            emit_timeout(&app_handle, &session_id, &timeout_reason).await;
+            cleanup_session(&session_id);
+            return Err(timeout_reason);
+        }
+
+        // Check problematic patterns
+        if let Some(pattern_reason) = state.should_terminate_patterns(config.max_consecutive_repeats, config.max_empty_chunks) {
+            println!("🔁 Pattern termination: {}", pattern_reason);
+            emit_error(&app_handle, &session_id, &pattern_reason).await;
+            cleanup_session(&session_id);
+            return Err(pattern_reason);
+        }
+
+        // Read next chunk with timeout
+        let chunk_result = timeout(config.chunk_timeout, stream.next()).await;
+        
+        let chunk_result = match chunk_result {
+            Ok(Some(chunk_result)) => chunk_result,
+            Ok(None) => {
+                // Stream ended naturally
+                println!("✅ Stream completed naturally for session: {}", session_id);
+                emit_complete(&app_handle, &session_id).await;
+                cleanup_session(&session_id);
+                return Ok(());
+            }
+            Err(_) => {
+                let error_msg = format!("Chunk read timeout after {:?}", config.chunk_timeout);
+                println!("⏰ {}", error_msg);
+                emit_timeout(&app_handle, &session_id, &error_msg).await;
+                cleanup_session(&session_id);
+                return Err(error_msg);
+            }
+        };
+
+        match chunk_result {
+            Ok(chunk) => {
+                buffer.extend_from_slice(&chunk);
+
+                // Process complete lines from buffer
+                while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
+                    let line = buffer.drain(..=newline_pos).collect::<Vec<u8>>();
+                    let line_str = String::from_utf8_lossy(&line[..line.len()-1]);
+
+                    if line_str.trim().is_empty() {
+                        continue;
+                    }
+
+                    match serde_json::from_str::<GenerateResponse>(&line_str) {
+                        Ok(response_chunk) => {
+                            // Check patterns and update state
+                            match state.update_chunk(&response_chunk.response) {
+                                ChunkResult::Continue => { 
+                                    // Process chunk normally
                                 }
+                                ChunkResult::Exit(reason) => {
+                                // 1. Send termination event with details
+                                emit_termination(&app_handle, &session_id, &reason, state.chunk_count, state.repeat_count).await;
+                                
+                                // 2. Send completion event to reset UI state  
+                                emit_complete(&app_handle, &session_id).await;
+                                
+                                // 3. Clean up session
+                                cleanup_session(&session_id);
+                                
+                                return Ok(());
+                            }
+                            }
 
-                                let line = buffer.drain(..=newline_pos).collect::<Vec<u8>>();
-                                let line_str = String::from_utf8_lossy(&line[..line.len()-1]);
+                            // Skip empty chunks to reduce UI overhead but still emit important ones
+                            if response_chunk.response.is_empty() && !response_chunk.done {
+                                continue;
+                            }
 
-                                if line_str.trim().is_empty() {
-                                    continue;
-                                }
+                            if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+                                "type": "chunk",
+                                "text": response_chunk.response,
+                                "done": response_chunk.done,
+                                "chunk_count": state.chunk_count,
+                                "repeat_count": state.repeat_count
+                            })) {
+                                eprintln!("Failed to emit chunk event: {}", e);
+                            }
 
-                                match serde_json::from_str::<GenerateResponse>(&line_str) {
-                                    Ok(response_chunk) => {
-                                        // Skip empty chunks to reduce UI overhead
-                                        if response_chunk.response.is_empty() {
-                                            continue;
-                                        }
-                                        if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                                            "type": "chunk",
-                                            "text": response_chunk.response,
-                                            "done": response_chunk.done
-                                        })) {
-                                            eprintln!("Failed to emit chunk event: {}", e);
-                                        }
-
-                                        if response_chunk.done {
-                                            println!("✅ Agent streaming completed for session: {}", session_id);
-                                            cleanup_session(&session_id);
-                                            break;
-                                        }
-                                    }
-                                    Err(e) => {
-                                        eprintln!("Failed to parse streaming response: {} - Line: {}", e, line_str);
-                                        continue;
-                                    }
-                                }
+                            if response_chunk.done {
+                                println!("✅ Agent streaming completed for session: {} (chunks: {}, repeats: {})", 
+                                        session_id, state.chunk_count, state.repeat_count);
+                                emit_complete(&app_handle, &session_id).await;
+                                cleanup_session(&session_id);
+                                return Ok(());
                             }
                         }
                         Err(e) => {
-                            let error_msg = format!("Stream error: {}", e);
-                            eprintln!("{}", error_msg);
-
-                            if let Err(emit_err) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                                "type": "error",
-                                "error": error_msg
-                            })) {
-                                eprintln!("Failed to emit error event: {}", emit_err);
-                            }
-
-                            return Err(error_msg);
+                            eprintln!("Failed to parse streaming response: {} - Line: {}", e, line_str);
+                            continue;
                         }
                     }
                 }
-
-                // Emit completion event
-                if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                    "type": "complete"
-                })) {
-                    eprintln!("Failed to emit complete event: {}", e);
-                }
-
-                Ok(())
-            } else {
-                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                let error_msg = format!("Generation failed: {}", error_text);
-
-                if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                    "type": "error",
-                    "error": error_msg
-                })) {
-                    eprintln!("Failed to emit error event: {}", e);
-                }
-
-                Err(error_msg)
             }
-        }
-        Err(e) => {
-            let error_msg = format!("Failed to connect to Ollama: {}", e);
+            Err(e) => {
+                let error_msg = format!("Stream error: {}", e);
+                eprintln!("{}", error_msg);
 
-            if let Err(emit_err) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                "type": "error",
-                "error": error_msg
-            })) {
-                eprintln!("Failed to emit error event: {}", emit_err);
+                emit_error(&app_handle, &session_id, &error_msg).await;
+                cleanup_session(&session_id);
+                return Err(error_msg);
             }
-
-            Err(error_msg)
         }
     }
 }
 
+// Shared streaming logic (backwards compatibility)
+async fn stream_ollama_response(
+    app_handle: AppHandle,
+    url: String,
+    request: GenerateRequest,
+    session_id: String,
+) -> Result<(), String> {
+    stream_ollama_response_enhanced(app_handle, url, request, session_id, StreamConfig::default()).await
+}
 
+// Use enhanced streaming with default config - remove any old stream_ollama_response calls
+// All streaming now goes through stream_ollama_response_enhanced
 
+// Helper emit functions
+async fn emit_error(app_handle: &AppHandle, session_id: &str, error: &str) {
+    if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+        "type": "error",
+        "error": error
+    })) {
+        eprintln!("Failed to emit error: {}", e);
+    }
+}
+
+async fn emit_timeout(app_handle: &AppHandle, session_id: &str, reason: &str) {
+    if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+        "type": "timeout",
+        "reason": reason
+    })) {
+        eprintln!("Failed to emit timeout: {}", e);
+    }
+}
+
+async fn emit_complete(app_handle: &AppHandle, session_id: &str) {
+    if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+        "type": "complete"
+    })) {
+        eprintln!("Failed to emit complete: {}", e);
+    }
+}
+
+async fn emit_termination(app_handle: &AppHandle, session_id: &str, reason: &str, chunk_count: usize, repeat_count: usize) {
+    if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+        "type": "terminated",
+        "reason": reason,
+        "chunk_count": chunk_count,
+        "repeat_count": repeat_count
+    })) {
+        eprintln!("Failed to emit termination: {}", e);
+    }
+}
+
+// All your existing Tauri commands remain the same...
 
 #[tauri::command]
 pub async fn get_ollama_models() -> Result<Vec<OllamaModel>, String> {
@@ -533,7 +736,6 @@ pub async fn generate_ollama_response_stream(
     prompt: String,
     session_id: String,
 ) -> Result<(), String> {
-    let client = Arc::clone(&HTTP_CLIENT);
     let url = format!("{}/api/generate", OLLAMA_BASE_URL);
     
     // Detect GPU and set acceleration options
@@ -568,105 +770,8 @@ pub async fn generate_ollama_response_stream(
         return Err(format!("Failed to emit start event: {}", e));
     }
     
-    match client.post(&url).json(&request).send().await {
-        Ok(response) => {
-            if response.status().is_success() {
-                let mut stream = response.bytes_stream();
-                let mut buffer = Vec::new();
-                
-                while let Some(chunk_result) = stream.next().await {
-                    match chunk_result {
-                        Ok(chunk) => {
-                            buffer.extend_from_slice(&chunk);
-                            
-                            // Process complete lines from buffer
-                            while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
-                                let line = buffer.drain(..=newline_pos).collect::<Vec<u8>>();
-                                let line_str = String::from_utf8_lossy(&line[..line.len()-1]); // Remove newline
-                                
-                                if line_str.trim().is_empty() {
-                                    continue;
-                                }
-                                
-                                // Parse JSON response
-                                match serde_json::from_str::<GenerateResponse>(&line_str) {
-                                    Ok(response_chunk) => {
-                                        // Emit chunk event
-                                        if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                                            "type": "chunk",
-                                            "text": response_chunk.response,
-                                            "done": response_chunk.done
-                                        })) {
-                                            eprintln!("Failed to emit chunk event: {}", e);
-                                        }
-                                        
-                                        // If done, break the loop
-                                        if response_chunk.done {
-                                            println!("✅ Streaming completed for session: {}", session_id);
-                                            break;
-                                        }
-                                    }
-                                    Err(e) => {
-                                        eprintln!("Failed to parse streaming response: {} - Line: {}", e, line_str);
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            let error_msg = format!("Stream error: {}", e);
-                            eprintln!("{}", error_msg);
-                            
-                            // Emit error event
-                            if let Err(emit_err) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                                "type": "error",
-                                "error": error_msg
-                            })) {
-                                eprintln!("Failed to emit error event: {}", emit_err);
-                            }
-                            
-                            return Err(error_msg);
-                        }
-                    }
-                }
-                
-                // Emit completion event
-                if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                    "type": "complete"
-                })) {
-                    eprintln!("Failed to emit complete event: {}", e);
-                }
-                
-                Ok(())
-            } else {
-                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                let error_msg = format!("Generation failed: {}", error_text);
-                
-                // Emit error event
-                if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                    "type": "error",
-                    "error": error_msg
-                })) {
-                    eprintln!("Failed to emit error event: {}", e);
-                }
-                
-                Err(error_msg)
-            }
-        }
-        Err(e) => {
-            let error_msg = format!("Failed to connect to Ollama: {}", e);
-            
-            // Emit error event
-            if let Err(emit_err) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
-                "type": "error",
-                "error": error_msg
-            })) {
-                eprintln!("Failed to emit error event: {}", emit_err);
-            }
-            
-            Err(error_msg)
-        }
-    }
+    // Use enhanced streaming with default config
+    stream_ollama_response_enhanced(app_handle, url, request, session_id, StreamConfig::default()).await
 }
 
 #[tauri::command]
@@ -735,7 +840,7 @@ pub async fn generate_conversational_ai(
     app_handle: AppHandle,
     conversation_context: String,
     session_id: String,
-    custom_system_prompt: Option<String>,
+    _custom_system_prompt: Option<String>, // Prefixed with underscore to indicate intentionally unused
 ) -> Result<(), String> {
     // Fast 1B model for instant responses (quantized)
     let model = "gemma3:1b-it-qat".to_string();
@@ -750,7 +855,6 @@ pub async fn generate_conversational_ai(
     
     generate_agent_response_stream(app_handle, model, full_prompt, system_prompt, None, session_id, "conversational_ai".to_string()).await
 }
-
 
 // Helper function for streaming with system prompt
 async fn generate_agent_response_stream(
@@ -778,7 +882,7 @@ async fn generate_agent_response_stream(
     let options = if agent_type == "conversational_ai" {
         // Balanced for comprehensive but focused conversation coaching
         let mut opts = serde_json::json!({
-            "num_predict": 200,
+            "num_predict": 1000,
             "temperature": 0.7,
             "top_p": 0.9,
             "repeat_penalty": 1.05
@@ -835,7 +939,16 @@ async fn generate_agent_response_stream(
         return Err(format!("Failed to emit start event: {}", e));
     }
     
-    let result = stream_ollama_response(app_handle, url, request, session_id.clone()).await;
+    // Use enhanced streaming with tighter config for agents
+    let agent_config = StreamConfig {
+        max_total_duration: Duration::from_secs(180), // 3 minutes for agents
+        max_chunk_gap: Duration::from_secs(20),       // 20 seconds between chunks
+        chunk_timeout: Duration::from_secs(8),        // 8 seconds per chunk
+        max_consecutive_repeats: 3,                   // Max 3 consecutive repeats for agents
+        max_empty_chunks: 15,                         // Max 15 empty chunks
+    };
+    
+    let result = stream_ollama_response_enhanced(app_handle, url, request, session_id.clone(), agent_config).await;
     
     // Semaphore is automatically released when _permit goes out of scope
     println!("🔓 Released request semaphore for {} agent (session: {})", agent_type, session_id);
@@ -897,7 +1010,16 @@ async fn generate_agent_response_stream_with_image(
         return Err(format!("Failed to emit start event: {}", e));
     }
     
-    let result = stream_ollama_response(app_handle, url, request, session_id.clone()).await;
+    // Use enhanced streaming with vision-specific config
+    let vision_config = StreamConfig {
+        max_total_duration: Duration::from_secs(120), // 2 minutes for vision
+        max_chunk_gap: Duration::from_secs(25),       // 25 seconds between chunks
+        chunk_timeout: Duration::from_secs(10),       // 10 seconds per chunk
+        max_consecutive_repeats: 4,                   // Max 4 consecutive repeats for vision
+        max_empty_chunks: 18,                         // Max 18 empty chunks
+    };
+    
+    let result = stream_ollama_response_enhanced(app_handle, url, request, session_id.clone(), vision_config).await;
     
     // Semaphore is automatically released when _permit goes out of scope
     println!("🔓 Released request semaphore for {} agent (session: {})", agent_type, session_id);
@@ -928,4 +1050,59 @@ pub async fn get_ollama_model_info(model_name: String) -> Result<serde_json::Val
         }
         Err(e) => Err(format!("Failed to connect to Ollama: {}", e)),
     }
-} 
+}
+
+// Additional helper function for custom timeout streaming (for specific use cases)
+#[tauri::command]
+pub async fn generate_with_custom_timeouts(
+    app_handle: AppHandle,
+    model: String,
+    prompt: String,
+    session_id: String,
+    total_timeout_secs: u64,
+    chunk_gap_secs: u64,
+    max_repeats: usize,
+) -> Result<(), String> {
+    let url = format!("{}/api/generate", OLLAMA_BASE_URL);
+    
+    let gpu_layers = detect_gpu_layers();
+    let options = if gpu_layers > 0 {
+        Some(serde_json::json!({
+            "num_gpu": gpu_layers,
+            "num_thread": 4
+        }))
+    } else {
+        None
+    };
+    
+    let request = GenerateRequest {
+        model: model.clone(),
+        prompt,
+        stream: Some(true),
+        context: None,
+        images: None,
+        system: None,
+        options,
+    };
+    
+    println!("🚀 Starting custom timeout streaming for session: {} (total: {}s, gap: {}s, repeats: {})", 
+             session_id, total_timeout_secs, chunk_gap_secs, max_repeats);
+    
+    // Emit start event
+    if let Err(e) = app_handle.emit(&format!("ollama-stream-{}", session_id), serde_json::json!({
+        "type": "start",
+        "model": model
+    })) {
+        return Err(format!("Failed to emit start event: {}", e));
+    }
+    
+    let custom_config = StreamConfig {
+        max_total_duration: Duration::from_secs(total_timeout_secs),
+        max_chunk_gap: Duration::from_secs(chunk_gap_secs),
+        chunk_timeout: Duration::from_secs(10),
+        max_consecutive_repeats: max_repeats,
+        max_empty_chunks: 20,
+    };
+    
+    stream_ollama_response_enhanced(app_handle, url, request, session_id, custom_config).await
+}
