@@ -181,11 +181,14 @@ impl StreamState {
                     chunk_text.chars().take(30).collect::<String>(), self.repeat_count));
             }
             
-            // Continue but keep counting
+            // Continue but keep counting - don't update last_chunk_text since it's the same
             return ChunkResult::Continue;
         } else {
-            self.repeat_count = 0; // Reset counter for different text
-            self.last_chunk_text = chunk_text.to_string();
+            // FIXED: Only reset counter and update text when we have DIFFERENT content
+            if !chunk_text.trim().is_empty() {
+                self.repeat_count = 0; // Reset counter for different text
+                self.last_chunk_text = chunk_text.to_string(); // Store new text
+            }
         }
 
         ChunkResult::Continue
@@ -445,6 +448,7 @@ async fn stream_ollama_response_enhanced(
         if let Some(timeout_reason) = state.should_timeout(config.max_total_duration, config.max_chunk_gap) {
             println!("⏰ Stream timeout: {}", timeout_reason);
             emit_timeout(&app_handle, &session_id, &timeout_reason).await;
+            emit_complete(&app_handle, &session_id).await;
             cleanup_session(&session_id);
             return Err(timeout_reason);
         }
@@ -453,6 +457,7 @@ async fn stream_ollama_response_enhanced(
         if let Some(pattern_reason) = state.should_terminate_patterns(config.max_consecutive_repeats, config.max_consecutive_empty_chunks) {
             println!("🔁 Pattern termination: {}", pattern_reason);
             emit_error(&app_handle, &session_id, &pattern_reason).await;
+            emit_complete(&app_handle, &session_id).await;
             cleanup_session(&session_id);
             return Err(pattern_reason);
         }
@@ -473,6 +478,7 @@ async fn stream_ollama_response_enhanced(
                 let error_msg = format!("Chunk read timeout after {:?}", config.chunk_timeout);
                 println!("⏰ {}", error_msg);
                 emit_timeout(&app_handle, &session_id, &error_msg).await;
+                emit_complete(&app_handle, &session_id).await;
                 cleanup_session(&session_id);
                 return Err(error_msg);
             }
