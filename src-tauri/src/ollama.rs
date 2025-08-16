@@ -117,7 +117,8 @@ struct StreamState {
     chunk_count: usize,
     last_chunk_text: String,
     repeat_count: usize,
-    empty_chunk_count: usize,
+    consecutive_empty_count: usize, // Changed: track consecutive empty chunks
+    total_empty_count: usize,       // Added: track total for debugging
 }
 
 #[derive(Debug)]
@@ -135,7 +136,8 @@ impl StreamState {
             chunk_count: 0,
             last_chunk_text: String::new(),
             repeat_count: 0,
-            empty_chunk_count: 0,
+            consecutive_empty_count: 0,
+            total_empty_count: 0,
         }
     }
 
@@ -145,8 +147,18 @@ impl StreamState {
 
         // Track empty chunks
         if chunk_text.trim().is_empty() {
-            self.empty_chunk_count += 1;
-            return ChunkResult::Continue; // Don't block empty chunks, but count them
+            self.consecutive_empty_count += 1;
+            self.total_empty_count += 1;
+            
+            // Optional: Log excessive consecutive empty chunks for debugging
+            if self.consecutive_empty_count > 10 {
+                println!("⚠️ {} consecutive empty chunks received", self.consecutive_empty_count);
+            }
+            
+            return ChunkResult::Continue;
+        } else {
+            // Reset consecutive empty count when we get content
+            self.consecutive_empty_count = 0;
         }
 
         // Check for consecutive identical chunks (dynamic repetition)
@@ -195,28 +207,31 @@ impl StreamState {
         None
     }
 
-    fn should_terminate_patterns(&self, max_repeats: usize, max_empty_chunks: usize) -> Option<String> {
+    fn should_terminate_patterns(&self, max_repeats: usize, max_consecutive_empty_chunks: usize) -> Option<String> {
         // Only terminate on very excessive repetition (adjusted thresholds)
         if self.repeat_count >= max_repeats * 3 {  // Triple the threshold for termination
             return Some(format!("Too many consecutive repeats: {}", self.repeat_count));
         }
         
-        if self.empty_chunk_count > max_empty_chunks {
-            return Some(format!("Too many empty chunks: {}", self.empty_chunk_count));
+        // Check consecutive empty chunks instead of total
+        if self.consecutive_empty_count > max_consecutive_empty_chunks {
+            return Some(format!("Too many consecutive empty chunks: {} (total empty: {})", 
+                self.consecutive_empty_count, self.total_empty_count));
         }
         
         None
     }
 }
 
-// Enhanced streaming configuration
+// Base streaming configuration
 pub struct StreamConfig {
     max_total_duration: Duration,
     max_chunk_gap: Duration,
     chunk_timeout: Duration,
     max_consecutive_repeats: usize,
-    max_empty_chunks: usize,
+    max_consecutive_empty_chunks: usize, 
 }
+
 
 impl Default for StreamConfig {
     fn default() -> Self {
@@ -225,7 +240,7 @@ impl Default for StreamConfig {
             max_chunk_gap: Duration::from_secs(30),       // 30 seconds between chunks
             chunk_timeout: Duration::from_secs(10),       // 10 seconds per chunk read
             max_consecutive_repeats: 5,                   // Max 5 consecutive identical chunks
-            max_empty_chunks: 20,                         // Max 20 empty chunks
+            max_consecutive_empty_chunks: 25,             // Max 25 consecutive empty chunks (increased)
         }
     }
 }
@@ -435,7 +450,7 @@ async fn stream_ollama_response_enhanced(
         }
 
         // Check problematic patterns
-        if let Some(pattern_reason) = state.should_terminate_patterns(config.max_consecutive_repeats, config.max_empty_chunks) {
+        if let Some(pattern_reason) = state.should_terminate_patterns(config.max_consecutive_repeats, config.max_consecutive_empty_chunks) {
             println!("🔁 Pattern termination: {}", pattern_reason);
             emit_error(&app_handle, &session_id, &pattern_reason).await;
             cleanup_session(&session_id);
@@ -880,9 +895,10 @@ async fn generate_agent_response_stream(
     let gpu_layers = detect_gpu_layers();
     
     let options = if agent_type == "conversational_ai" {
+        println!("AI agent type: {}", agent_type);
         // Balanced for comprehensive but focused conversation coaching
         let mut opts = serde_json::json!({
-            "num_predict": 1000,
+            "num_predict": 2048,
             "temperature": 0.7,
             "top_p": 0.9,
             "repeat_penalty": 1.05
@@ -894,7 +910,7 @@ async fn generate_agent_response_stream(
         Some(opts)
     } else if agent_type == "coding" {
         let mut opts = serde_json::json!({
-            "num_predict": 512,
+            "num_predict": 1024,
             "temperature": 0.2,
             "top_p": 0.9,
             "repeat_penalty": 1.1
@@ -906,7 +922,7 @@ async fn generate_agent_response_stream(
         Some(opts)
     } else {
         let mut opts = serde_json::json!({
-            "num_predict": 256,
+            "num_predict": 1024,
             "temperature": 0.7,
             "top_p": 0.9,
             "repeat_penalty": 1.1
@@ -945,8 +961,9 @@ async fn generate_agent_response_stream(
         max_chunk_gap: Duration::from_secs(20),       // 20 seconds between chunks
         chunk_timeout: Duration::from_secs(8),        // 8 seconds per chunk
         max_consecutive_repeats: 3,                   // Max 3 consecutive repeats for agents
-        max_empty_chunks: 15,                         // Max 15 empty chunks
+        max_consecutive_empty_chunks: 30,             // Max 30 consecutive empty chunks (increased)
     };
+
     
     let result = stream_ollama_response_enhanced(app_handle, url, request, session_id.clone(), agent_config).await;
     
@@ -987,7 +1004,7 @@ async fn generate_agent_response_stream_with_image(
         options: {
             let gpu_layers = detect_gpu_layers();
             let mut opts = serde_json::json!({
-                "num_predict": 256,
+                "num_predict": 1024,
                 "temperature": 0.5,
                 "top_p": 0.9
             });
@@ -1016,9 +1033,9 @@ async fn generate_agent_response_stream_with_image(
         max_chunk_gap: Duration::from_secs(25),       // 25 seconds between chunks
         chunk_timeout: Duration::from_secs(10),       // 10 seconds per chunk
         max_consecutive_repeats: 4,                   // Max 4 consecutive repeats for vision
-        max_empty_chunks: 18,                         // Max 18 empty chunks
+        max_consecutive_empty_chunks: 25,             // Max 25 consecutive empty chunks (increased)
     };
-    
+
     let result = stream_ollama_response_enhanced(app_handle, url, request, session_id.clone(), vision_config).await;
     
     // Semaphore is automatically released when _permit goes out of scope
@@ -1101,7 +1118,7 @@ pub async fn generate_with_custom_timeouts(
         max_chunk_gap: Duration::from_secs(chunk_gap_secs),
         chunk_timeout: Duration::from_secs(10),
         max_consecutive_repeats: max_repeats,
-        max_empty_chunks: 20,
+        max_consecutive_empty_chunks: 25,
     };
     
     stream_ollama_response_enhanced(app_handle, url, request, session_id, custom_config).await
