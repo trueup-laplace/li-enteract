@@ -9,6 +9,7 @@ export interface ChatMessage {
     confidence?: number
     isStreaming?: boolean
     sessionId?: string
+    metadata?: any
   }
   
   export interface ChatSession {

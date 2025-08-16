@@ -7,15 +7,19 @@ import {
   ExclamationTriangleIcon,
   MicrophoneIcon,
   StopIcon,
-  QueueListIcon
+  QueueListIcon,
+  DocumentTextIcon
 } from '@heroicons/vue/24/outline'
 import { useChatManagement } from '../../composables/useChatManagement'
 import { useSpeechEvents } from '../../composables/useSpeechEvents'
 import { useSpeechTranscription } from '../../composables/useSpeechTranscription'
 import { useWindowRegistration } from '../../composables/useWindowRegistry'
+import { useRagDocuments } from '../../composables/useRagDocuments'
 import AgentActionButtons from './AgentActionButtons.vue'
 import ModelSelector from './ModelSelector.vue'
 import ChatWindowSidebarAdapter from './ChatWindowSidebarAdapter.vue'
+import DocumentContextDropdown from '../rag/DocumentContextDropdown.vue'
+import { FileService } from '../../composables/fileService'
 
 interface Props {
   showChatWindow: boolean
@@ -38,6 +42,12 @@ const chatMessages = ref<HTMLElement>()
 // Chat sidebar state
 const showChatSidebar = ref(false)
 
+// RAG system
+const ragDocuments = useRagDocuments()
+const showDocumentDropdown = ref(false)
+const documentDropdownPosition = ref({ x: 0, y: 0 })
+const documentSearchQuery = ref('')
+
 // Agent and model selection state
 const currentAgent = ref('enteract')
 const showMentionSuggestions = ref(false)
@@ -52,35 +62,47 @@ const availableAgents = [
   { id: 'vision', name: '@vision', description: 'Visual content analysis' }
 ]
 
-// Handle @ mention input
+// Handle mention input: '@' for agent/model, '/' for documents
 const handleInput = (event: Event) => {
   const target = event.target as HTMLInputElement
   const value = target.value
   const cursorPos = target.selectionStart || 0
   
-  // Check for @ mention
   const beforeCursor = value.substring(0, cursorPos)
+
+  // Document context with '/'
+  const lastSlashIndex = beforeCursor.lastIndexOf('/')
+  if (lastSlashIndex !== -1) {
+    const afterSlash = beforeCursor.substring(lastSlashIndex + 1)
+    if (!afterSlash.includes(' ') && afterSlash.length >= 0) {
+      const rect = target.getBoundingClientRect()
+      documentDropdownPosition.value = { x: rect.left, y: rect.bottom + 5 }
+      documentSearchQuery.value = '/' + afterSlash
+      showDocumentDropdown.value = true
+      showMentionSuggestions.value = false
+      mentionStartPos.value = lastSlashIndex
+      return
+    }
+  }
+
+  // Agent/model mentions with '@'
   const lastAtIndex = beforeCursor.lastIndexOf('@')
-  
   if (lastAtIndex !== -1) {
     const afterAt = beforeCursor.substring(lastAtIndex + 1)
-    
-    // If there's no space after @, show suggestions
     if (!afterAt.includes(' ') && afterAt.length >= 0) {
-      const filtered = availableAgents.filter(agent => 
-        agent.name.toLowerCase().includes(('@' + afterAt).toLowerCase())
-      )
-      
+      const filtered = availableAgents.filter(agent => agent.name.toLowerCase().includes(('@' + afterAt).toLowerCase()))
       if (filtered.length > 0) {
         mentionSuggestions.value = filtered
         mentionStartPos.value = lastAtIndex
         showMentionSuggestions.value = true
+        showDocumentDropdown.value = false
         return
       }
     }
   }
-  
+
   showMentionSuggestions.value = false
+  showDocumentDropdown.value = false
 }
 
 // Ref for the chat input element
@@ -123,6 +145,13 @@ const parseAgentFromMessage = (message: string): string => {
 
 // Enhanced keyboard handler
 const handleEnhancedKeydown = (event: KeyboardEvent) => {
+  if (showDocumentDropdown.value) {
+    if (event.key === 'Escape') {
+      handleDocumentDropdownClose()
+      return
+    }
+  }
+  
   if (showMentionSuggestions.value) {
     if (event.key === 'Escape') {
       showMentionSuggestions.value = false
@@ -143,17 +172,25 @@ const handleEnhancedKeydown = (event: KeyboardEvent) => {
   }
 }
 
-// Enhanced send message with agent detection
+// Enhanced send message with agent detection and RAG context
 const sendMessageWithAgent = async () => {
   if (!chatMessage.value.trim()) return
   
-  const originalMessage = chatMessage.value.trim()
+  let originalMessage = chatMessage.value.trim()
   const cleanedMessage = parseAgentFromMessage(originalMessage)
+  
+  // Prepare selected document IDs for RAG search
+  const selectedDocIds = Array.from(ragDocuments.selectedDocumentIds.value)
+  
+  if (selectedDocIds.length > 0) {
+    console.log(`📚 Sending message with ${selectedDocIds.length} selected documents for RAG context`)
+  }
   
   chatMessage.value = ''
   showMentionSuggestions.value = false
+  showDocumentDropdown.value = false
   
-  await sendMessage(currentAgent.value, cleanedMessage || originalMessage)
+  await sendMessage(currentAgent.value, cleanedMessage || originalMessage, selectedDocIds)
 }
 
 // Handle model and agent selection
@@ -347,10 +384,80 @@ const handleClearChat = () => {
 
 
 
+// Document handling functions
+const handleDocumentSelect = (documentId: string) => {
+  ragDocuments.toggleDocumentSelection(documentId)
+}
+
+const handleDocumentDeselect = (documentId: string) => {
+  ragDocuments.selectedDocumentIds.value.delete(documentId)
+}
+
+const handleDocumentUpload = async (files: FileList) => {
+  try {
+    const uploadedDocs = await ragDocuments.uploadDocuments(files)
+    console.log(`📚 Uploaded ${uploadedDocs.length} documents via dropdown`)
+    
+    // Auto-select uploaded documents
+    uploadedDocs.forEach(doc => {
+      ragDocuments.selectedDocumentIds.value.add(doc.id)
+    })
+    
+    // Close dropdown after successful upload
+    showDocumentDropdown.value = false
+  } catch (error) {
+    console.error('Failed to upload documents:', error)
+  }
+}
+
+const handleInsertReference = (fileName: string) => {
+  const input = chatInputRef.value
+  if (input && mentionStartPos.value !== -1) {
+    const beforeMention = chatMessage.value.substring(0, mentionStartPos.value)
+    const afterCursor = chatMessage.value.substring(input.selectionStart || 0)
+    
+    chatMessage.value = beforeMention + '/' + fileName + ' ' + afterCursor
+    showDocumentDropdown.value = false
+    
+    // Focus input
+    nextTick(() => {
+      input.focus()
+    })
+  }
+}
+
+// Handle dropdown close to remove '/' if nothing was selected
+const handleDocumentDropdownClose = () => {
+  if (mentionStartPos.value !== -1 && chatMessage.value.charAt(mentionStartPos.value) === '/') {
+    // Check if there's anything after the '/' that looks like a file reference
+    const input = chatInputRef.value
+    if (input) {
+      const beforeMention = chatMessage.value.substring(0, mentionStartPos.value)
+      const afterMention = chatMessage.value.substring(mentionStartPos.value + 1)
+      
+      // If there's only whitespace or nothing after '/', remove the '/'
+      if (!afterMention.trim() || afterMention.startsWith(' ')) {
+        chatMessage.value = beforeMention + afterMention
+      }
+    }
+  }
+  showDocumentDropdown.value = false
+  mentionStartPos.value = -1
+}
+
 // Setup speech events when component mounts
 onMounted(async () => {
   setupSpeechTranscriptionListeners()
   console.log('🎤 ChatWindow: Speech transcription listeners set up')
+  
+  // Initialize RAG system
+  try {
+    await ragDocuments.initialize()
+    FileService.setRagComposable(ragDocuments)
+    console.log('📚 RAG system initialized with', ragDocuments.documents.value.length, 'documents')
+  } catch (error) {
+    console.error('Failed to initialize RAG system:', error)
+  }
   
   // Initialize speech transcription for chat interface
   try {
@@ -534,13 +641,26 @@ onUnmounted(() => {
           <!-- Chat Input -->
           <div class="chat-input-container">
             <div class="input-wrapper">
+              <!-- Referenced Documents Pills -->
+              <div v-if="ragDocuments.selectedDocumentIds.value.size > 0" class="doc-pills">
+                <div
+                  v-for="doc in ragDocuments.documents.value.filter(d => ragDocuments.selectedDocumentIds.value.has(d.id))"
+                  :key="doc.id"
+                  class="doc-pill"
+                  title="Included in context"
+                >
+                  <DocumentTextIcon class="w-3 h-3" />
+                  <span class="pill-text">{{ doc.file_name }}</span>
+                  <button class="pill-close" @click.stop="handleDocumentDeselect(doc.id)">×</button>
+                </div>
+              </div>
               <input 
                 ref="chatInputRef"
                 v-model="chatMessage"
                 @input="handleInput"
                 @keydown="handleEnhancedKeydown"
                 class="chat-input"
-                placeholder="Ask any AI agent... (use @ to mention specific agents)"
+                placeholder="Ask any AI agent... (use @ to mention agents, / to add documents)"
                 type="text"
               />
               
@@ -581,6 +701,21 @@ onUnmounted(() => {
           </div>
         </div> <!-- End main-content -->
       </div> <!-- End window-content -->
+      
+      <!-- Document Context Dropdown -->
+      <DocumentContextDropdown
+        :documents="ragDocuments.documents.value"
+        :selected-document-ids="ragDocuments.selectedDocumentIds.value"
+        :show="showDocumentDropdown"
+        :position="documentDropdownPosition"
+        :search-query="documentSearchQuery"
+        :max-selections="5"
+        @select="handleDocumentSelect"
+        @deselect="handleDocumentDeselect"
+        @insert-reference="handleInsertReference"
+        @upload-documents="handleDocumentUpload"
+        @close="handleDocumentDropdownClose"
+      />
     </div>
   </Transition>
 </template>
@@ -807,6 +942,31 @@ onUnmounted(() => {
 
 .input-wrapper {
   @apply flex-1 relative;
+}
+
+.doc-pills {
+  @apply absolute -top-8 left-0 right-0 flex flex-wrap gap-2 px-1 pb-1; 
+}
+
+.doc-pill {
+  @apply inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs border transition-all duration-200; 
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(147, 51, 234, 0.12) 100%);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.doc-pill:hover {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.pill-text {
+  @apply truncate max-w-[180px];
+}
+
+.pill-close {
+  @apply ml-1 text-white/60 hover:text-white transition-colors;
 }
 
 .chat-input {

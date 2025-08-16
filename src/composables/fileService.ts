@@ -5,9 +5,14 @@ let messageIdCounter = 1
 
 export class FileService {
   private static scrollChatToBottom: () => void
+  private static ragDocumentsComposable: any = null
 
   static init(scrollCallback: () => void) {
     FileService.scrollChatToBottom = scrollCallback
+  }
+
+  static setRagComposable(ragComposable: any) {
+    FileService.ragDocumentsComposable = ragComposable
   }
 
   static triggerFileUpload(fileInput: HTMLInputElement | undefined) {
@@ -34,13 +39,36 @@ export class FileService {
           SessionManager.addMessageToCurrentChat({
             id: messageIdCounter++,
             sender: 'system',
-            text: `📁 File uploaded: **${file.name}** (${file.type}, ${(file.size / 1024).toFixed(1)} KB)`,
+            text: `📁 Uploading: **${file.name}** (${file.type}, ${(file.size / 1024).toFixed(1)} KB)...`,
             timestamp: new Date(),
             messageType: 'text'
           })
           
-          // Show upload success feedback
-          setTimeout(() => {
+          // Upload to RAG system if available
+          if (FileService.ragDocumentsComposable) {
+            const document = await FileService.ragDocumentsComposable.uploadDocument(file)
+            if (document) {
+              
+              // Update message with success
+              SessionManager.addMessageToCurrentChat({
+                id: messageIdCounter++,
+                sender: 'system',
+                text: `✅ Document **${file.name}** uploaded and indexed successfully!\n\n` +
+                      `📊 Document ID: ${document.id}\n` +
+                      `📝 Extracted ${document.content.length} characters\n` +
+                      `🔍 Ready for RAG-powered questions\n\n` +
+                      `Use @${file.name} to reference this document in your questions.`,
+                timestamp: new Date(),
+                messageType: 'text',
+                metadata: {
+                  documentId: document.id,
+                  fileName: file.name,
+                  fileType: file.type
+                }
+              })
+            }
+          } else {
+            // Fallback to simple upload notification
             SessionManager.addMessageToCurrentChat({
               id: messageIdCounter++,
               sender: 'system',
@@ -48,12 +76,12 @@ export class FileService {
               timestamp: new Date(),
               messageType: 'text'
             })
-            
-            // Auto-scroll to show the uploaded file message
-            setTimeout(() => {
-              FileService.scrollChatToBottom()
-            }, 100)
-          }, 500)
+          }
+          
+          // Auto-scroll to show the uploaded file message
+          setTimeout(() => {
+            FileService.scrollChatToBottom()
+          }, 100)
           
         } catch (error) {
           console.error('File upload error:', error)
