@@ -8,7 +8,8 @@ import {
   MicrophoneIcon,
   StopIcon,
   QueueListIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  CloudArrowUpIcon
 } from '@heroicons/vue/24/outline'
 import { useChatManagement } from '../../composables/useChatManagement'
 import { useSpeechEvents } from '../../composables/useSpeechEvents'
@@ -47,6 +48,11 @@ const ragDocuments = useRagDocuments()
 const showDocumentDropdown = ref(false)
 const documentDropdownPosition = ref({ x: 0, y: 0 })
 const documentSearchQuery = ref('')
+
+// Upload states (added for document upload functionality)
+const isDragOver = ref(false)
+const isUploading = ref(false)
+const fileInputRef = ref<HTMLInputElement>()
 
 // Agent and model selection state
 const currentAgent = ref('enteract')
@@ -169,6 +175,61 @@ const handleEnhancedKeydown = (event: KeyboardEvent) => {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     sendMessageWithAgent()
+  }
+}
+
+// File upload handlers (using the same logic as SettingsPanel)
+const handleFileUploadInput = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const files = input.files
+  if (!files) return
+  
+  isUploading.value = true
+  try {
+    const uploadedDocs = await ragDocuments.uploadDocuments(files)
+    console.log(`📚 Uploaded ${uploadedDocs.length} documents via ChatWindow`)
+    
+    // Auto-select uploaded documents (same as settings implementation)
+    uploadedDocs.forEach(doc => {
+      ragDocuments.selectedDocumentIds.value.add(doc.id)
+    })
+  } catch (error) {
+    console.error('Failed to upload documents:', error)
+  } finally {
+    isUploading.value = false
+    input.value = ''
+  }
+}
+
+const handleDragOver = (event: DragEvent) => {
+  event.preventDefault()
+  isDragOver.value = true
+}
+
+const handleDragLeave = () => {
+  isDragOver.value = false
+}
+
+const handleDrop = async (event: DragEvent) => {
+  event.preventDefault()
+  isDragOver.value = false
+  
+  const files = event.dataTransfer?.files
+  if (!files) return
+  
+  isUploading.value = true
+  try {
+    const uploadedDocs = await ragDocuments.uploadDocuments(files)
+    console.log(`📚 Uploaded ${uploadedDocs.length} documents via ChatWindow drag & drop`)
+    
+    // Auto-select uploaded documents (same as settings implementation)
+    uploadedDocs.forEach(doc => {
+      ragDocuments.selectedDocumentIds.value.add(doc.id)
+    })
+  } catch (error) {
+    console.error('Failed to upload documents:', error)
+  } finally {
+    isUploading.value = false
   }
 }
 
@@ -487,7 +548,15 @@ onUnmounted(() => {
 
 <template>
   <Transition name="chat-window">
-    <div v-if="showChatWindow" ref="chatWindowRef" class="chat-window">
+    <div 
+      v-if="showChatWindow" 
+      ref="chatWindowRef" 
+      class="chat-window"
+      :class="{ 'drag-over': isDragOver }"
+      @dragover="handleDragOver"
+      @dragleave="handleDragLeave"
+      @drop="handleDrop"
+    >
       <!-- Window Header -->
       <div class="window-header">
         <div class="header-title">
@@ -525,6 +594,23 @@ onUnmounted(() => {
         </button>
       </div>
       
+      <!-- RAG Context Status -->
+      <div v-if="ragDocuments.selectedDocumentIds.value.size > 0" class="rag-context-status">
+        <div class="rag-status-content">
+          <span class="rag-icon">📚</span>
+          <span class="rag-text">
+            {{ ragDocuments.selectedDocumentIds.value.size }} document{{ ragDocuments.selectedDocumentIds.value.size !== 1 ? 's' : '' }} selected for context
+          </span>
+          <button 
+            @click="ragDocuments.clearSelection()" 
+            class="clear-selection-btn"
+            title="Clear document selection"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+      
       <!-- Window Content Container -->
       <div class="window-content">
         <!-- Chat Sidebar -->
@@ -540,6 +626,16 @@ onUnmounted(() => {
         
         <!-- Main Content Area -->
         <div class="main-content" :class="{ 'with-sidebar': showChatSidebar }">
+          <!-- Hidden file input for upload documents -->
+          <input
+            ref="fileInputRef"
+            type="file"
+            multiple
+            accept=".pdf,.txt,.md,.doc,.docx,.rtf"
+            @change="handleFileUploadInput"
+            class="hidden"
+          />
+          
           <!-- Chat Messages Area -->
           <div ref="chatMessages" class="chat-area">
             <div v-if="chatHistory.length === 0" class="empty-state">
@@ -626,16 +722,17 @@ onUnmounted(() => {
             </div>
           </div>
           
-          <!-- Agent Action Buttons -->
+          <!-- Agent Action Buttons with Upload Docs -->
           <AgentActionButtons
             :file-input="fileInput"
+            :is-uploading="isUploading"
             @take-screenshot="handleTakeScreenshot"
             @start-deep-research="handleStartDeepResearch"
             @start-conversational="handleStartConversational"
             @start-coding="handleStartCoding"
             @start-computer-use="handleStartComputerUse"
-            @trigger-file-upload="triggerFileUpload"
-            @handle-file-upload="handleFileUploadEvent"
+            @trigger-file-upload="() => fileInputRef?.click()"
+            @handle-file-upload="handleFileUploadInput"
           />
           
           <!-- Chat Input -->
@@ -744,6 +841,30 @@ onUnmounted(() => {
     inset 0 -1px 0 rgba(0, 0, 0, 0.1);
 }
 
+/* Drag and drop visual feedback */
+.chat-window.drag-over {
+  border-color: rgba(59, 130, 246, 0.6) !important;
+  background: linear-gradient(to bottom, 
+    rgba(10, 10, 12, 0.95) 0%, 
+    rgba(5, 5, 7, 0.98) 100%
+  ) !important;
+}
+
+.chat-window.drag-over::after {
+  content: '📁 Drop files here to upload to RAG system';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(59, 130, 246, 0.9);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  z-index: 1000;
+  pointer-events: none;
+}
+
 /* When sidebar is shown, make window wider and use row layout */
 .chat-window:has(.chat-window-sidebar) {
   width: 1200px;
@@ -783,12 +904,82 @@ onUnmounted(() => {
   @apply bg-blue-500/20 text-blue-400 hover:bg-blue-500/30;
 }
 
+/* Agent Actions Container */
+.agent-actions-container {
+  @apply flex items-center gap-3;
+}
+
+/* Upload Docs Button (replaces Upload Files in action area) */
+.upload-docs-btn {
+  @apply flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium transition-all duration-200;
+  background: linear-gradient(135deg, 
+    rgba(34, 197, 94, 0.8) 0%, 
+    rgba(22, 163, 74, 0.8) 100%
+  );
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  color: white;
+}
+
+.upload-docs-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, 
+    rgba(34, 197, 94, 0.9) 0%, 
+    rgba(22, 163, 74, 0.9) 100%
+  );
+  border-color: rgba(34, 197, 94, 0.6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.upload-docs-btn:disabled {
+  background: rgba(75, 85, 99, 0.8);
+  border-color: rgba(75, 85, 99, 0.4);
+  color: rgba(255, 255, 255, 0.3);
+  cursor: not-allowed;
+}
+
 .export-btn {
   @apply rounded-full p-1 hover:bg-white/10 transition-all duration-200 text-white/60 hover:text-white/90;
 }
 
 .export-btn.active {
   @apply bg-blue-500/20 text-blue-400 hover:bg-blue-500/30;
+}
+
+/* RAG Context Status Bar */
+.rag-context-status {
+  @apply px-4 py-2 border-b border-white/10 flex-shrink-0;
+  background: linear-gradient(135deg, 
+    rgba(59, 130, 246, 0.1) 0%, 
+    rgba(99, 102, 241, 0.1) 100%
+  );
+}
+
+.rag-status-content {
+  @apply flex items-center justify-between text-sm;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.rag-icon {
+  @apply mr-2 text-base;
+}
+
+.rag-text {
+  @apply font-medium flex-1;
+}
+
+.clear-selection-btn {
+  @apply ml-3 px-2 py-1 rounded hover:bg-white/10 transition-colors text-white/60 hover:text-white/90;
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Enhanced drag feedback for RAG status */
+.chat-window.drag-over .rag-context-status {
+  background: linear-gradient(135deg, 
+    rgba(59, 130, 246, 0.2) 0%, 
+    rgba(99, 102, 241, 0.2) 100%
+  );
+  border-color: rgba(59, 130, 246, 0.4);
 }
 
 .model-indicator {
@@ -1132,4 +1323,4 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
 }
-</style> 
+</style>
