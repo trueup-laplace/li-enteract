@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import {
-  DocumentIcon,
+  CloudArrowUpIcon,
   PhotoIcon
 } from '@heroicons/vue/24/outline'
 
 interface Props {
   fileInput: HTMLInputElement | undefined
+  isUploading?: boolean
 }
 
 interface Emits {
@@ -18,7 +19,9 @@ interface Emits {
   (e: 'handleFileUpload', event: Event): void
 }
 
-defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  isUploading: false
+})
 defineEmits<Emits>()
 </script>
 
@@ -27,18 +30,15 @@ defineEmits<Emits>()
   <div class="quick-actions">
     <div class="actions-container">
       <div class="inline-buttons">
-        <!-- Quick Tools -->
-        <input 
-          type="file" 
-          ref="fileInput" 
-          @change="$emit('handleFileUpload', $event)"
-          multiple
-          accept="image/*,.pdf,.txt,.md,.doc,.docx"
-          class="hidden"
-        />
-        <button @click="$emit('triggerFileUpload')" class="tool-btn upload-files" title="Upload Files - Add documents, images, and other files">
-          <DocumentIcon class="w-4 h-4" />
-          <span class="tool-label">Upload Files</span>
+        <!-- Upload Documents Button (replaces Upload Files) -->
+        <button 
+          @click="$emit('triggerFileUpload')" 
+          :disabled="isUploading"
+          class="tool-btn upload-docs" 
+          :title="isUploading ? 'Uploading documents...' : 'Upload Documents - Add documents for RAG context'"
+        >
+          <CloudArrowUpIcon class="w-4 h-4" />
+          <span class="tool-label">{{ isUploading ? 'Uploading...' : 'Upload Docs' }}</span>
         </button>
         
         <button @click="$emit('takeScreenshot')" class="tool-btn take-screenshot" title="Take Screenshot - Capture and analyze screen content">
@@ -73,7 +73,7 @@ defineEmits<Emits>()
   font-weight: 500;
 }
 
-.tool-btn:hover {
+.tool-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.2);
   color: white;
@@ -81,16 +81,23 @@ defineEmits<Emits>()
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
-.tool-btn.upload-files {
+.tool-btn.upload-docs {
   background: rgba(34, 197, 94, 0.1);
   border-color: rgba(34, 197, 94, 0.2);
   color: rgb(134, 239, 172);
 }
 
-.tool-btn.upload-files:hover {
+.tool-btn.upload-docs:hover:not(:disabled) {
   background: rgba(34, 197, 94, 0.2);
   border-color: rgba(34, 197, 94, 0.4);
   color: rgb(187, 247, 208);
+}
+
+.tool-btn.upload-docs:disabled {
+  background: rgba(75, 85, 99, 0.1);
+  border-color: rgba(75, 85, 99, 0.2);
+  color: rgba(255, 255, 255, 0.3);
+  cursor: not-allowed;
 }
 
 .tool-btn.take-screenshot {
@@ -112,4 +119,4 @@ defineEmits<Emits>()
 .hidden {
   display: none !important;
 }
-</style> 
+</style>
