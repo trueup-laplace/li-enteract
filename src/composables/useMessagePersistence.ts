@@ -24,6 +24,7 @@ export function useMessagePersistence() {
   const pendingQueue = ref<MessageSaveRequest[]>([])
   const failedQueue = ref<MessageSaveRequest[]>([])
   const isSaving = ref(false)
+  const concurrentSaves = ref(0)
   const saveStats = ref({
     totalSaved: 0,
     totalFailed: 0,
@@ -31,12 +32,13 @@ export function useMessagePersistence() {
     averageSaveTime: 0
   })
 
-  // Configuration
+  // Configuration  
   const MAX_RETRY_COUNT = 3
   const RETRY_DELAY_BASE = 1000 // Base delay in ms
-  const BATCH_SIZE = 10
-  const SAVE_DEBOUNCE_MS = 500
+  const BATCH_SIZE = 5 // Reduced batch size for better reliability
+  const SAVE_DEBOUNCE_MS = 200 // Faster debounce for better responsiveness
   const OFFLINE_CHECK_INTERVAL = 5000
+  const MAX_CONCURRENT_SAVES = 2 // Limit concurrent operations
 
   // Timers
   let saveTimer: number | null = null
@@ -81,26 +83,50 @@ export function useMessagePersistence() {
     try {
       const startTime = Date.now()
       
-      await invoke('save_conversation_message', {
-        sessionId,
+      // Debug logging
+      console.log('📤 Sending message to backend:', {
+        sessionId: sessionId,
+        messageId: message.id,
+        messageType: message.type,
+        source: message.source,
+        contentLength: message.content.length,
+        timestamp: message.timestamp
+      })
+      
+      console.log(`🚀 Invoking Tauri command for message: ${message.id}`)
+      
+      const invokeResult = await invoke('save_conversation_message', {
+        sessionId: sessionId, // Tauri expects camelCase and converts to snake_case
         message: {
           id: message.id,
-          type: message.type,
+          type: message.type, // Serde expects 'type' due to rename attribute
           source: message.source,
           content: message.content,
           timestamp: message.timestamp,
-          confidence: message.confidence
+          confidence: message.confidence,
+          // Optional fields with correct naming for serde
+          isPreview: message.isPreview || false,
+          isTyping: message.isTyping || false,
+          persistenceState: message.persistenceState,
+          retryCount: message.retryCount || 0,
+          lastSaveAttempt: message.lastSaveAttempt,
+          saveError: message.saveError
         }
       })
       
+      console.log(`🎊 Tauri invoke completed successfully for message: ${message.id}`, invokeResult)
+      
       const saveTime = Date.now() - startTime
       updateSaveStats(true, saveTime)
+      
+      console.log(`📊 Save stats updated, returning success for message: ${message.id}`)
       
       return {
         success: true,
         messageId: message.id
       }
     } catch (error) {
+      console.error('❌ saveMessageToBackend error:', error)
       updateSaveStats(false)
       return {
         success: false,
@@ -116,14 +142,21 @@ export function useMessagePersistence() {
       const startTime = Date.now()
       
       await invoke('batch_save_conversation_messages', {
-        sessionId: batch.sessionId,
+        sessionId: batch.sessionId, // Tauri expects camelCase and converts to snake_case
         messages: batch.messages.map(msg => ({
           id: msg.id,
-          type: msg.type,
+          type: msg.type, // Serde expects 'type' due to rename attribute
           source: msg.source,
           content: msg.content,
           timestamp: msg.timestamp,
-          confidence: msg.confidence
+          confidence: msg.confidence,
+          // Optional fields with correct naming for serde
+          isPreview: msg.isPreview || false,
+          isTyping: msg.isTyping || false,
+          persistenceState: msg.persistenceState,
+          retryCount: msg.retryCount || 0,
+          lastSaveAttempt: msg.lastSaveAttempt,
+          saveError: msg.saveError
         }))
       })
       
@@ -199,9 +232,9 @@ export function useMessagePersistence() {
     }
   }
 
-  // Process pending message queue
+  // Process pending message queue with concurrency control
   const processPendingQueue = async () => {
-    if (isSaving.value || pendingQueue.value.length === 0) {
+    if (concurrentSaves.value >= MAX_CONCURRENT_SAVES || pendingQueue.value.length === 0) {
       return
     }
     
@@ -210,6 +243,7 @@ export function useMessagePersistence() {
       return
     }
     
+    concurrentSaves.value++
     isSaving.value = true
     
     try {
@@ -251,7 +285,8 @@ export function useMessagePersistence() {
             console.log(`✅ Batch saved ${messages.length} messages`)
           }
         } catch (error) {
-          console.error('❌ Failed to save messages:', error)
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          console.error('❌ Failed to save messages:', errorMessage)
           
           // Move failed messages to retry queue
           requests.forEach(req => {
@@ -259,12 +294,30 @@ export function useMessagePersistence() {
             req.message.persistenceState = 'failed'
             req.message.retryCount = req.retryCount
             req.message.lastSaveAttempt = Date.now()
+            req.message.saveError = errorMessage
+            
+            // Emit error event for UI feedback
+            window.dispatchEvent(new CustomEvent('message-save-error', {
+              detail: {
+                messageId: req.message.id,
+                error: errorMessage,
+                retryCount: req.message.retryCount
+              }
+            }))
             
             if (req.retryCount < MAX_RETRY_COUNT) {
               failedQueue.value.push(req)
             } else {
               console.error(`🚫 Message ${req.message.id} exceeded max retry count`)
               req.message.saveError = 'Max retries exceeded'
+              
+              // Emit final failure event
+              window.dispatchEvent(new CustomEvent('message-save-final-failure', {
+                detail: {
+                  messageId: req.message.id,
+                  error: errorMessage
+                }
+              }))
             }
           })
         }
@@ -275,7 +328,8 @@ export function useMessagePersistence() {
         setTimeout(() => processPendingQueue(), 100)
       }
     } finally {
-      isSaving.value = false
+      concurrentSaves.value--
+      isSaving.value = concurrentSaves.value > 0
     }
   }
 
@@ -329,31 +383,69 @@ export function useMessagePersistence() {
     sessionId: string
   ): Promise<boolean> => {
     if (!isOnline.value) {
+      console.log('📴 Offline - queueing message for later save')
       queueMessage(message, sessionId)
       return false
     }
     
-    message.persistenceState = 'saving'
-    const result = await saveMessageToBackend(message, sessionId)
-    
-    if (result.success) {
-      message.persistenceState = 'saved'
-      message.retryCount = 0
-      message.saveError = undefined
-      return true
-    } else {
+    try {
+      message.persistenceState = 'saving'
+      console.log(`💾 Attempting immediate save for message: ${message.id}`)
+      console.log(`📋 Message state before save: ${message.persistenceState}`)
+      console.log(`🔍 Message object reference:`, message)
+      
+      const result = await saveMessageToBackend(message, sessionId)
+      console.log(`📋 Backend result:`, result)
+      
+      if (result.success) {
+        console.log(`🎯 Setting message ${message.id} to 'saved' state`)
+        message.persistenceState = 'saved'
+        message.retryCount = 0
+        message.saveError = undefined
+        console.log(`📋 Message state after save: ${message.persistenceState}`)
+        console.log(`🔍 Message object after update:`, message)
+        console.log(`✅ Message ${message.id} saved successfully`)
+        
+        // Force trigger reactivity by creating a small delay
+        setTimeout(() => {
+          console.log(`🔄 Delayed check - message ${message.id} state: ${message.persistenceState}`)
+        }, 100)
+        
+        return true
+      } else {
+        console.log(`❌ Backend reported failure for message ${message.id}`)
+        message.persistenceState = 'failed'
+        message.saveError = result.error
+        message.lastSaveAttempt = Date.now()
+        message.retryCount = 1
+        
+        console.error(`❌ Message ${message.id} save failed: ${result.error}`)
+        
+        // Emit error event for UI feedback
+        window.dispatchEvent(new CustomEvent('message-save-error', {
+          detail: {
+            messageId: message.id,
+            error: result.error,
+            retryCount: 1
+          }
+        }))
+        
+        // Queue for retry
+        failedQueue.value.push({
+          message,
+          sessionId,
+          retryCount: 1
+        })
+        
+        processFailedQueue()
+        return false
+      }
+    } catch (error) {
+      console.error(`🚨 Unexpected error in saveMessageImmediately for ${message.id}:`, error)
       message.persistenceState = 'failed'
-      message.saveError = result.error
+      message.saveError = error instanceof Error ? error.message : 'Unexpected error'
       message.lastSaveAttempt = Date.now()
-      
-      // Queue for retry
-      failedQueue.value.push({
-        message,
-        sessionId,
-        retryCount: 1
-      })
-      
-      processFailedQueue()
+      message.retryCount = 1
       return false
     }
   }
@@ -366,8 +458,8 @@ export function useMessagePersistence() {
   ): Promise<boolean> => {
     try {
       await invoke('update_conversation_message', {
-        sessionId,
-        messageId,
+        sessionId: sessionId, // Tauri expects camelCase and converts to snake_case
+        messageId: messageId, // Tauri expects camelCase and converts to snake_case
         updates: {
           content: updates.content,
           confidence: updates.confidence,
@@ -388,8 +480,8 @@ export function useMessagePersistence() {
   ): Promise<boolean> => {
     try {
       await invoke('delete_conversation_message', {
-        sessionId,
-        messageId
+        sessionId: sessionId, // Tauri expects camelCase and converts to snake_case
+        messageId: messageId  // Tauri expects camelCase and converts to snake_case
       })
       return true
     } catch (error) {

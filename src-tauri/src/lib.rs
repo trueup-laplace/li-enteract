@@ -11,7 +11,7 @@ mod speech;
 mod ollama;
 mod screenshot;
 mod file_handler;
-mod data_store;
+mod data; // Data storage module (JSON, SQLite, migration, hybrid)
 mod audio_loopback; // New audio loopback module
 mod system_prompts; // System prompts module
 mod system_info; // System information module
@@ -53,13 +53,7 @@ use file_handler::{
     upload_file_base64, validate_file_upload, get_file_upload_config,
     process_clipboard_image, cleanup_temp_files
 };
-use data_store::{
-    save_chat_sessions, load_chat_sessions, save_conversations, load_conversations, 
-    delete_conversation, clear_all_conversations, restore_from_backup, list_backups,
-    save_conversation_message, batch_save_conversation_messages, 
-    update_conversation_message, delete_conversation_message, ping_backend,
-    save_conversation_insight, get_conversation_insights
-};
+// Data storage imports are now handled above in the SQLite section
 
 // Import new audio loopback commands
 use audio_loopback::{
@@ -93,6 +87,23 @@ use mcp::{
     list_active_mcp_sessions, create_mcp_session_manager, get_mcp_tool_schema,
     get_mcp_session_status, create_execution_plan, approve_execution_plan,
     execute_approved_plan, MCPSessionManager
+};
+
+// Import SQLite data storage commands
+use data::{
+    // Database initialization and management
+    initialize_database, get_database_info, cleanup_legacy_files, check_database_health,
+    // Chat operations (Claude conversations)
+    save_chat_sessions, load_chat_sessions,
+    // Conversation operations (Audio conversations)
+    save_conversations, load_conversations, delete_conversation, clear_all_conversations,
+    save_conversation_message, batch_save_conversation_messages,
+    update_conversation_message, delete_conversation_message,
+    save_conversation_insight, get_conversation_insights,
+    update_session_metadata, update_session_active_state, ping_backend,
+    // Logging commands
+    get_database_logs, get_database_logs_by_operation, get_database_logs_by_level,
+    get_database_log_stats, clear_database_logs
 };
 
 #[tauri::command]
@@ -142,6 +153,51 @@ pub fn run() {
             // Initialize MCP session manager
             let mcp_sessions = create_mcp_session_manager();
             app.manage(mcp_sessions);
+            
+            // Initialize SQLite database with comprehensive health checks
+            let app_handle_db = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // First check database health
+                match crate::data::check_database_health(app_handle_db.clone()) {
+                    Ok(health) => {
+                        if health.is_healthy {
+                            println!("✅ Database is already healthy and ready");
+                        } else {
+                            println!("⚠️ Database health issues detected: {:?}", health.errors);
+                            println!("🔧 Attempting to initialize/repair database...");
+                            
+                            match crate::data::initialize_database(app_handle_db.clone()) {
+                                Ok(result) => {
+                                    println!("✅ Database initialization completed: {}", result);
+                                    
+                                    // Verify health after initialization
+                                    match crate::data::check_database_health(app_handle_db) {
+                                        Ok(post_health) => {
+                                            if post_health.is_healthy {
+                                                println!("🎉 Database is now healthy after initialization");
+                                            } else {
+                                                eprintln!("❌ Database still has issues after initialization: {:?}", post_health.errors);
+                                            }
+                                        }
+                                        Err(e) => eprintln!("❌ Failed to verify database health after init: {}", e),
+                                    }
+                                }
+                                Err(e) => eprintln!("❌ Database initialization failed: {}", e),
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Database health check failed: {}", e);
+                        println!("🔧 Attempting emergency database initialization...");
+                        
+                        if let Err(init_err) = crate::data::initialize_database(app_handle_db) {
+                            eprintln!("❌ Emergency database initialization also failed: {}", init_err);
+                        } else {
+                            println!("✅ Emergency database initialization succeeded");
+                        }
+                    }
+                }
+            });
             
             Ok(())
         })
@@ -206,15 +262,21 @@ pub fn run() {
             process_clipboard_image,
             cleanup_temp_files,
             
-            // Data storage
+            // Database management
+            initialize_database,
+            get_database_info,
+            cleanup_legacy_files,
+            check_database_health,
+            
+            // Chat data storage (Claude conversations)
             save_chat_sessions,
             load_chat_sessions,
+            
+            // Conversation data storage (Audio conversations)
             save_conversations,
             load_conversations,
             delete_conversation,
             clear_all_conversations,
-            restore_from_backup,
-            list_backups,
             
             // NEW: Audio loopback commands
             enumerate_loopback_devices,
@@ -236,6 +298,8 @@ pub fn run() {
             batch_save_conversation_messages,
             update_conversation_message,
             delete_conversation_message,
+            update_session_metadata,
+            update_session_active_state,
             ping_backend,
             
             // Conversation insights
@@ -292,6 +356,26 @@ pub fn run() {
             generate_mcp_enabled_response,
             create_mcp_session_for_ai,
             get_mcp_session_for_ai,
+            
+            // Message-level conversation operations
+            save_conversation_message,
+            batch_save_conversation_messages,
+            update_conversation_message,
+            delete_conversation_message,
+            
+            // Conversation insights
+            save_conversation_insight,
+            get_conversation_insights,
+            
+            // Backend connectivity
+            ping_backend,
+            
+            // Database logging
+            get_database_logs,
+            get_database_logs_by_operation,
+            get_database_logs_by_level,
+            get_database_log_stats,
+            clear_database_logs,
 
         ])
         .run(tauri::generate_context!())

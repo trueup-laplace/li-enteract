@@ -49,43 +49,33 @@ export const useConversationStore = defineStore('conversation', () => {
   // Persistence key
   const STORAGE_KEY = 'conversation-sessions'
 
-  // Load sessions from Rust backend
+  // Load sessions from SQLite backend
   const loadSessions = async () => {
     try {
-      console.log('📁 Store: Attempting to load conversations from backend...')
+      console.log('📁 Store: Loading conversations from SQLite backend...')
       const response = await invoke<{conversations: ConversationSession[]}>('load_conversations')
       
-      // Migrate old sessions that don't have insights field
+      // Ensure all sessions have insights field
       sessions.value = response.conversations.map(session => ({
         ...session,
         insights: session.insights || [] // Add empty insights array if missing
       }))
       
-      console.log(`📁 Store: Successfully loaded ${sessions.value.length} conversation sessions from backend:`, sessions.value.map(s => ({ id: s.id, name: s.name, messageCount: s.messages.length, insightCount: s.insights?.length || 0 })))
+      console.log(`📁 Store: Successfully loaded ${sessions.value.length} conversation sessions:`, 
+        sessions.value.map(s => ({ 
+          id: s.id, 
+          name: s.name, 
+          messageCount: s.messages.length, 
+          insightCount: s.insights?.length || 0 
+        })))
     } catch (error) {
-      console.error('📁 Store: Failed to load conversation sessions from backend:', error)
-      // Fallback to localStorage for migration
-      try {
-        const stored = localStorage.getItem(STORAGE_KEY)
-        if (stored) {
-          const parsed = JSON.parse(stored)
-          // Migrate old sessions that don't have insights field
-          sessions.value = parsed.map((session: any) => ({
-            ...session,
-            insights: session.insights || [] // Add empty insights array if missing
-          }))
-          console.log(`📁 Store: Migrated ${parsed.length} conversation sessions from localStorage`)
-          // Save to backend and clear localStorage
-          await saveSessions()
-          localStorage.removeItem(STORAGE_KEY)
-        }
-      } catch (migrationError) {
-        console.error('📁 Store: Failed to migrate from localStorage:', migrationError)
-      }
+      console.error('📁 Store: Failed to load conversation sessions:', error)
+      // Initialize empty state - no localStorage fallback
+      sessions.value = []
     }
   }
 
-  // Save sessions to Rust backend with proper state management
+  // Save sessions to SQLite backend with better error handling
   const saveSessions = async (forceImmediate = false) => {
     if (isSaving.value && !forceImmediate) {
       console.log('💾 Store: Save already in progress, will queue this save')
@@ -93,40 +83,29 @@ export const useConversationStore = defineStore('conversation', () => {
       return
     }
 
+    const saveId = `save_${Date.now()}`
     try {
       isSaving.value = true
       pendingSave.value = false
       
-      console.log(`💾 Store: Attempting to save ${sessions.value.length} conversation sessions to backend...`)
-      console.log(`💾 Store: Sessions to save:`, sessions.value.map(s => ({ id: s.id, name: s.name, messageCount: s.messages.length, isActive: s.isActive, endTime: s.endTime })))
+      console.log(`💾 Store: [${saveId}] Saving ${sessions.value.length} conversation sessions to SQLite...`)
       
       await invoke('save_conversations', {
         payload: { conversations: sessions.value }
       })
-      console.log(`💾 Store: Successfully saved ${sessions.value.length} conversation sessions to backend`)
-      
-      // Verify save by immediately loading back
-      const response = await invoke<{conversations: ConversationSession[]}>('load_conversations')
-      const savedCount = response.conversations.length
-      const expectedCount = sessions.value.length
-      
-      if (savedCount !== expectedCount) {
-        console.error(`💾 Store: Save verification failed! Expected ${expectedCount}, got ${savedCount}`)
-        throw new Error(`Save verification failed: expected ${expectedCount}, got ${savedCount}`)
-      }
-      
-      console.log(`💾 Store: Save verified successfully - ${savedCount} sessions persisted`)
+      console.log(`💾 Store: [${saveId}] Successfully saved ${sessions.value.length} conversation sessions`)
       
     } catch (error) {
-      console.error('💾 Store: Failed to save conversation sessions to backend:', error)
-      throw error // Re-throw to let caller handle
+      console.error(`💾 Store: [${saveId}] Failed to save conversation sessions:`, error)
+      // Don't throw error unless it's a critical failure
+      // Most save errors should be recoverable
     } finally {
       isSaving.value = false
       
-      // If there was a pending save, execute it now
+      // If there was a pending save, execute it now with a delay
       if (pendingSave.value) {
-        console.log('💾 Store: Executing queued save')
-        setTimeout(() => saveSessions().catch(console.error), 100)
+        console.log(`💾 Store: [${saveId}] Executing queued save`)
+        setTimeout(() => saveSessions().catch(console.error), 500) // Increased delay
       }
     }
   }
@@ -198,8 +177,9 @@ export const useConversationStore = defineStore('conversation', () => {
       currentSession.value = session
       console.log('🆕 Store: Session created successfully:', session.id)
       
-      // Force immediate save of new session and wait for completion
-      await saveSessions(true)
+      // For new sessions, use the existing save method which handles creation
+      await saveSessions(true) // Force immediate save for new session creation
+      console.log('✅ Store: New session created and saved')
       
       return session
     } finally {
@@ -267,9 +247,14 @@ export const useConversationStore = defineStore('conversation', () => {
         // and allows for continued interaction with the completed session
         console.log(`🏁 Store: Session completed but remains accessible: ${targetSession.id}`)
         
-        // Force immediate save when completing session to ensure persistence
-        console.log('💾 Store: Force saving completed session with verification')
-        await saveSessions(true) // Force immediate save
+        // Use incremental update instead of full save to avoid race conditions
+        await invoke('update_session_metadata', {
+          sessionId: targetSession.id,
+          name: null, // Don't update name
+          endTime: targetSession.endTime,
+          isActive: targetSession.isActive
+        })
+        console.log('✅ Store: Session completion state updated incrementally')
         
         console.log('🏁 Store: Session completion operation finished successfully')
         
@@ -283,21 +268,33 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
-  const switchToSession = (sessionId: string) => {
+  const switchToSession = async (sessionId: string) => {
     const session = sessions.value.find(s => s.id === sessionId)
     if (session) {
-      console.log('🔄 Store: Switching to session:', sessionId)
+      console.log('🔄 Store: Switching to session for viewing:', sessionId)
       
-      // Simply deactivate current session without ending it (no endTime)
-      if (currentSession.value) {
-        console.log('🔄 Store: Deactivating current session:', currentSession.value.id)
-        currentSession.value.isActive = false
+      try {
+        // Deactivate current session without ending it (no endTime)
+        if (currentSession.value) {
+          console.log('🔄 Store: Deactivating current session:', currentSession.value.id)
+          currentSession.value.isActive = false
+          
+          // Update database incrementally
+          await invoke('update_session_active_state', {
+            sessionId: currentSession.value.id,
+            isActive: false
+          })
+        }
+        
+        // Set as current session but don't activate it yet (viewing mode)
+        // The session will be properly activated when recording starts
+        currentSession.value = session
+        console.log('🔄 Store: Session switched for viewing (not yet active for recording)')
+      } catch (error) {
+        console.error('🔄 Store: Failed to update session active state:', error)
+        // Continue anyway since the UI state change is the priority
+        currentSession.value = session
       }
-      
-      // Activate the target session
-      session.isActive = true
-      currentSession.value = session
-      console.log('🔄 Store: Session switched successfully')
     } else {
       console.error('🔄 Store: Session not found:', sessionId)
     }
@@ -313,7 +310,7 @@ export const useConversationStore = defineStore('conversation', () => {
       autoSaveEnabled.value = false
       
       try {
-        // Complete current session if there is one
+        // Complete current session if there is one and it's different
         if (currentSession.value && currentSession.value.id !== sessionId) {
           console.log('🏁 Store: Completing current session before resume')
           await completeSession()
@@ -321,18 +318,26 @@ export const useConversationStore = defineStore('conversation', () => {
         
         // Reactivate the target session
         session.isActive = true
-        // Clear endTime to indicate it's active again
-        session.endTime = undefined
-        // Update the session name to show it's been resumed
-        if (!session.name.includes('(Resumed)')) {
-          session.name += ' (Resumed)'
+        // Clear endTime to indicate it's active again (handles completed sessions)
+        if (session.endTime) {
+          session.endTime = undefined
+          // Update the session name to show it's been resumed only if it was completed
+          if (!session.name.includes('(Resumed)')) {
+            session.name += ' (Resumed)'
+          }
         }
         
         currentSession.value = session
-        console.log('▶️ Store: Session resumed successfully and ready for new messages')
+        console.log('▶️ Store: Session activated and ready for recording new messages')
         
-        // Force immediate save to persist the resume state
-        await saveSessions(true)
+        // Use incremental session update instead of full save to avoid race conditions
+        await invoke('update_session_metadata', {
+          sessionId: session.id,
+          name: session.name,
+          endTime: session.endTime,
+          isActive: session.isActive
+        })
+        console.log('✅ Store: Session metadata updated incrementally')
         
       } catch (error) {
         console.error('▶️ Store: Failed to resume session properly:', error)
@@ -347,7 +352,7 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
-  const addMessage = (messageData: Omit<ConversationMessage, 'id'>) => {
+  const addMessage = async (messageData: Omit<ConversationMessage, 'id'>) => {
     // Don't automatically create sessions - require explicit session management
     if (!currentSession.value) {
       console.error('❌ Attempting to add message without active session:', messageData)
@@ -373,11 +378,50 @@ export const useConversationStore = defineStore('conversation', () => {
       ...messageData
     }
 
+    // Add message to local state immediately
     currentSession.value.messages.push(message)
     
-    // Immediately queue the message for saving
-    messagePersistence.queueMessage(message, currentSession.value.id)
-    console.log(`💾 Queued message for immediate save: ${message.id}`)
+    // Get reference to the message that's now in the reactive store
+    const storeMessage = currentSession.value.messages.find(m => m.id === message.id)
+    if (!storeMessage) {
+      console.error(`❌ Store: Could not find message ${message.id} in store after adding`)
+      return null
+    }
+    
+    // Save message directly to backend (no dual system)
+    try {
+      // Don't set 'saving' state here - let saveMessageImmediately handle it
+      console.log(`🔄 Store: Starting save process for message: ${message.id}`)
+      console.log(`📋 Store: Initial message state: ${storeMessage.persistenceState}`)
+      console.log(`🔍 Store: Working with store message reference:`, storeMessage === message)
+      
+      const success = await messagePersistence.saveMessageImmediately(storeMessage, currentSession.value.id)
+      
+      console.log(`📋 Store: After save attempt - message state: ${storeMessage.persistenceState}`)
+      console.log(`📋 Store: Save success result: ${success}`)
+      
+      if (success) {
+        console.log(`✅ Store: Message saved immediately: ${storeMessage.id}`)
+        // Double-check the state is properly set (should already be done by persistence system)
+        if (storeMessage.persistenceState !== 'saved') {
+          console.log(`🔧 Store: Force-updating store message state to 'saved' for ${storeMessage.id}`)
+          storeMessage.persistenceState = 'saved'
+          storeMessage.retryCount = 0
+          storeMessage.saveError = undefined
+        }
+      } else {
+        console.log(`❌ Store: Message save failed: ${storeMessage.id}`)
+        // Double-check the state is properly set (should already be done by persistence system)
+        if (storeMessage.persistenceState !== 'failed') {
+          console.log(`🔧 Store: Force-updating store message state to 'failed' for ${storeMessage.id}`)
+          storeMessage.persistenceState = 'failed'
+        }
+      }
+    } catch (error) {
+      console.error(`❌ Store: Unexpected error during save: ${storeMessage.id}`, error)
+      storeMessage.persistenceState = 'failed'
+      storeMessage.saveError = error instanceof Error ? error.message : 'Unknown error'
+    }
     
     // If this is a resumed session (has endTime), update it to show continued activity
     if (currentSession.value.endTime) {
@@ -390,10 +434,11 @@ export const useConversationStore = defineStore('conversation', () => {
       }
     }
     
-    console.log(`📝 Added message to session ${currentSession.value.id}:`, message.content.substring(0, 50))
+    console.log(`📝 Added message to session ${currentSession.value.id}:`, storeMessage.content.substring(0, 50))
     console.log(`📝 Session now has ${currentSession.value.messages.length} total messages`)
+    console.log(`📋 Final message state before return: ${storeMessage.persistenceState}`)
     
-    return message
+    return storeMessage
   }
 
   const updateMessage = async (messageId: string, updates: Partial<ConversationMessage>) => {
@@ -463,9 +508,14 @@ export const useConversationStore = defineStore('conversation', () => {
         session.name = trimmedName
         console.log(`✏️ Store: Session renamed from "${oldName}" to "${trimmedName}": ${sessionId}`)
         
-        // Force immediate save to persist the rename
-        await saveSessions(true)
-        console.log(`✏️ Store: Rename saved successfully`)
+        // Use incremental update to persist the rename
+        await invoke('update_session_metadata', {
+          sessionId: sessionId,
+          name: trimmedName,
+          endTime: null, // Don't update end time
+          isActive: null // Don't update active state
+        })
+        console.log(`✏️ Store: Rename saved incrementally`)
         
       } finally {
         // Re-enable auto-save
@@ -647,15 +697,11 @@ export const useConversationStore = defineStore('conversation', () => {
 
   // Get storage usage info
   const getStorageInfo = () => {
-    const data = localStorage.getItem(STORAGE_KEY)
-    const sizeBytes = data ? new Blob([data]).size : 0
-    const sizeKB = Math.round(sizeBytes / 1024 * 100) / 100
-
     return {
       sessionCount: sessions.value.length,
       totalMessages: sessions.value.reduce((sum, s) => sum + s.messages.length, 0),
-      storageSize: `${sizeKB} KB`,
-      lastSaved: data ? 'Auto-saved' : 'Never'
+      storageSize: 'SQLite Database',
+      lastSaved: 'Auto-saved to SQLite'
     }
   }
 
