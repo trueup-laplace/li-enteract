@@ -48,7 +48,6 @@ impl MCPSession {
         // Register compound tools (require approval)
         tools.insert("click_on_text".to_string(), Box::new(crate::mcp::tools::ClickOnTextTool));
         tools.insert("click_and_type".to_string(), Box::new(crate::mcp::tools::ClickAndTypeTool));
-        
         Self {
             id: session_id,
             config,
@@ -462,7 +461,6 @@ impl MCPSession {
         }
         None
     }
-
     pub async fn cleanup(&self) -> Result<(), String> {
         self.log(LogLevel::Info, "Cleaning up session".to_string(), None).await;
         

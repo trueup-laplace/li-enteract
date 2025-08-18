@@ -288,7 +288,86 @@ class EnhancedRagService {
     }
   }
 
+  async checkDocumentDuplicate(file: File): Promise<{ isDuplicate: boolean; existingDocument?: EnhancedDocument }> {
+    try {
+      if (!this.initialized) {
+        await this.initialize()
+      }
+      
+      const fileContent = await this.fileToArrayBuffer(file)
+      const uint8Array = new Uint8Array(fileContent)
+      
+      const result = await invoke<Record<string, any>>('check_document_duplicate', {
+        fileName: file.name,
+        fileContent: Array.from(uint8Array)
+      })
+      
+      return {
+        isDuplicate: result.is_duplicate as boolean,
+        existingDocument: result.existing_document as EnhancedDocument | undefined
+      }
+    } catch (error) {
+      console.error('Duplicate check failed:', error)
+      return { isDuplicate: false }
+    }
+  }
+
+  async getDocumentEmbeddingStatus(documentIds: string[]): Promise<Record<string, string>> {
+    try {
+      if (!this.initialized) {
+        await this.initialize()
+      }
+
+      const statusMap = await invoke<Record<string, string>>('get_document_embedding_status', {
+        documentIds
+      })
+      return statusMap
+    } catch (error) {
+      console.error('Failed to get document embedding status:', error)
+      throw error
+    }
+  }
+
+  async ensureDocumentsReadyForSearch(documentIds: string[]): Promise<Record<string, string>> {
+    try {
+      if (!this.initialized) {
+        await this.initialize()
+      }
+
+      const readinessMap = await invoke<Record<string, string>>('ensure_documents_ready_for_search', {
+        documentIds
+      })
+      return readinessMap
+    } catch (error) {
+      console.error('Failed to ensure documents ready for search:', error)
+      throw error
+    }
+  }
+
+  async generateEmbeddingsForSelection(documentIds: string[]): Promise<void> {
+    try {
+      if (!this.initialized) {
+        await this.initialize()
+      }
+
+      await invoke('generate_embeddings_for_selection', { documentIds })
+      console.log(`Priority embeddings triggered for ${documentIds.length} documents`)
+    } catch (error) {
+      console.error('Failed to generate embeddings for selection:', error)
+      throw error
+    }
+  }
+
   // Helper methods
+  private async fileToArrayBuffer(file: File): Promise<ArrayBuffer> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as ArrayBuffer)
+      reader.onerror = reject
+      reader.readAsArrayBuffer(file)
+    })
+  }
+
   formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`

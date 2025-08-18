@@ -124,7 +124,6 @@ pub struct ContextData {
     pub result: serde_json::Value,
     pub success: bool,
 }
-
 // Internal types for approval workflow
 pub struct PendingApproval {
     pub request: ToolApprovalRequest,

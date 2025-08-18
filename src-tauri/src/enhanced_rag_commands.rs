@@ -218,6 +218,99 @@ pub async fn get_embedding_status(
 }
 
 #[tauri::command]
+pub async fn check_document_duplicate(
+    file_name: String,
+    file_content: Vec<u8>,
+    state: State<'_, EnhancedRagSystemState>,
+) -> Result<HashMap<String, Value>, String> {
+    use sha2::{Sha256, Digest};
+    
+    let system = {
+        let rag_state = state.0.lock().map_err(|e| e.to_string())?;
+        match &*rag_state {
+            Some(sys) => Ok(sys.clone()),
+            None => Err("Enhanced RAG system not initialized".to_string())
+        }
+    }?;
+    
+    // Calculate content hash
+    let mut hasher = Sha256::new();
+    hasher.update(&file_content);
+    hasher.update(file_name.as_bytes());
+    let content_hash = format!("{:x}", hasher.finalize());
+    
+    // Check if duplicate exists
+    let mut result = HashMap::new();
+    match system.check_duplicate_public(&content_hash) {
+        Ok(Some(doc)) => {
+            result.insert("is_duplicate".to_string(), serde_json::json!(true));
+            result.insert("existing_document".to_string(), serde_json::to_value(doc).unwrap());
+        }
+        Ok(None) => {
+            result.insert("is_duplicate".to_string(), serde_json::json!(false));
+        }
+        Err(e) => {
+            return Err(format!("Failed to check duplicate: {}", e));
+        }
+    }
+    
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn get_document_embedding_status(
+    document_ids: Vec<String>,
+    state: State<'_, EnhancedRagSystemState>,
+) -> Result<HashMap<String, String>, String> {
+    let system = {
+        let rag_state = state.0.lock().map_err(|e| e.to_string())?;
+        match &*rag_state {
+            Some(sys) => Ok(sys.clone()),
+            None => Err("Enhanced RAG system not initialized".to_string())
+        }
+    }?;
+    
+    system.get_embedding_status_for_documents(&document_ids)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn ensure_documents_ready_for_search(
+    document_ids: Vec<String>,
+    state: State<'_, EnhancedRagSystemState>,
+) -> Result<HashMap<String, String>, String> {
+    let system = {
+        let rag_state = state.0.lock().map_err(|e| e.to_string())?;
+        match &*rag_state {
+            Some(sys) => Ok(sys.clone()),
+            None => Err("Enhanced RAG system not initialized".to_string())
+        }
+    }?;
+    
+    system.ensure_documents_ready_for_search(&document_ids)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn generate_embeddings_for_selection(
+    document_ids: Vec<String>,
+    state: State<'_, EnhancedRagSystemState>,
+) -> Result<String, String> {
+    let system = {
+        let rag_state = state.0.lock().map_err(|e| e.to_string())?;
+        match &*rag_state {
+            Some(sys) => Ok(sys.clone()),
+            None => Err("Enhanced RAG system not initialized".to_string())
+        }
+    }?;
+    
+    system.generate_embeddings_for_selection(&document_ids)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn validate_enhanced_file_upload(
     file_name: String,
     file_size: usize,

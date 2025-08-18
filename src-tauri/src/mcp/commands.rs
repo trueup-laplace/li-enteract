@@ -216,7 +216,6 @@ pub async fn execute_approved_plan(
     // TODO: Implement step-by-step execution with context passing
     Ok(vec![])
 }
-
 // Initialize the MCP session manager
 pub fn create_mcp_session_manager() -> MCPSessionManager {
     Arc::new(Mutex::new(HashMap::new()))

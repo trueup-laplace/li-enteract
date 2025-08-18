@@ -752,7 +752,6 @@ async fn type_text(text: &str, delay_ms: u64) -> Result<(), String> {
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
         }
     }
-    
     Ok(())
 }
 
@@ -916,7 +915,6 @@ async fn press_key(key: &str, modifiers: Vec<KeyModifier>) -> Result<(), String>
             return Err(format!("Failed to send key press input, sent {}/{} inputs", result, inputs.len()));
         }
     }
-    
     Ok(())
 }
 
