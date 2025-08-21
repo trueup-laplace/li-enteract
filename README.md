@@ -4,12 +4,15 @@
 
 **A next-generation, hyper-personalized desktop AI Computer Use Agent (CUA) and assistant that seamlessly blends web, native, and 3D interfaces**
 
+
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-blue?logo=tauri)](https://tauri.app/)
 [![Vue 3](https://img.shields.io/badge/Vue.js-3.x-green?logo=vue.js)](https://vuejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Rust](https://img.shields.io/badge/Rust-latest-orange?logo=rust)](https://www.rust-lang.org/)
-[![Windows](https://img.shields.io/badge/Windows-10%2F11-blue?logo=windows)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+[![Windows](https://img.shields.io/badge/Windows-10%2F11-blue?logo=windows)](https://www.microsoft.com/windows)
+
 
 [🌐 **Try Enteract**](https://www.tryenteract.com/) | [📚 Documentation](./resources/) | [🐛 Report Issues](../../issues) | [💬 Discussions](../../discussions)
 
