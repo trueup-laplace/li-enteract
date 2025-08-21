@@ -1,0 +1,30 @@
+name: "🐛 Bug Report"
+description: Report a reproducible bug
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: input
+    id: summary
+    attributes:
+      label: Short summary
+      placeholder: Clear one-line description
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Please provide detailed steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      placeholder: Logs, screenshots, environment, etc.
