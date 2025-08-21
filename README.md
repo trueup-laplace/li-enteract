@@ -1,37 +1,68 @@
-# Embedded Agentic Assistant
+# Embedded Agentic Assistant (Enteract)
 
-## 🤖 Overview
+<div align="center">
 
-The **Embedded Agentic Assistant** is a next-generation, hyper-personalized desktop application that seamlessly blends web, native, and 3D interfaces to create an active, intelligent layer over your computing environment. Unlike passive assistants, this embedded system **observes**, **predicts**, and **augments** your workflow in real-time.
+**A next-generation, hyper-personalized desktop AI Computer Use Agent (CUA) and assistant that seamlessly blends web, native, and 3D interfaces**
 
-### ✨ Key Features
-- **🎨 Decorative & Interactive UI:** Frameless window with animated 3D visuals and glassmorphism effects
-- **👀 Eye-driven Interaction:** Move windows, adjust elements, or manipulate views just by looking
-- **🎹 OS-level Actuation:** Type, click, and control applications programmatically based on context and intent
-- **🖥️ Persistent but Non-intrusive:** Runs quietly, surfaces when needed, integrates deeply into your desktop environment
-- **🧠 AI-Powered:** Contextually aware assistant that learns and adapts to your workflow patterns
+[![Tauri](https://img.shields.io/badge/Tauri-2.0-blue?logo=tauri)](https://tauri.app/)
+[![Vue 3](https://img.shields.io/badge/Vue.js-3.x-green?logo=vue.js)](https://vuejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![Rust](https://img.shields.io/badge/Rust-latest-orange?logo=rust)](https://www.rust-lang.org/)
+[![Windows](https://img.shields.io/badge/Windows-10%2F11-blue?logo=windows)](https://www.microsoft.com/windows)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-*It's not just an assistant. It's an **extension of your will**—embedded, intelligent, beautiful.*
+[🌐 **Try Enteract**](https://www.tryenteract.com/) | [📚 Documentation](./resources/) | [🐛 Report Issues](../../issues) | [💬 Discussions](../../discussions)
 
-## 🛠️ Tech Stack
-<img width="1031" height="741" alt="image" src="https://github.com/user-attachments/assets/ebcb93f3-53b5-420c-91f6-c586d53c7ea3" />
+<img width="600" alt="Embedded Agentic Assistant Interface" src="https://github.com/user-attachments/assets/ebcb93f3-53b5-420c-91f6-c586d53c7ea3" />
 
-- **Frontend:** Vue 3 + TypeScript + Vite
-- **Backend:** Rust + Tauri
-- **3D Graphics:** Three.js
-- **Styling:** TailwindCSS + Custom themes + DaisyUI
-- **Eye Tracking:** OpenCV.js + MediaDevices API
-- **Animations:** GSAP + CSS transitions
-- **State Management:** Pinia
+*Not just an assistant. An **extension of your will**—embedded, intelligent, beautiful.*
 
-## 🚀 Quick Start
+</div>
 
-### Prerequisites
-- **Node.js** 18+
+### Core Features
+
+- **Advanced Speech Recognition** - Real-time transcription with Whisper integration
+- **Multi-Modal AI** - Vision analysis, document understanding, and conversational intelligence
+- **System Integration** - OS-level automation, screenshot capture, and application control
+- **Personal Knowledge Base** - RAG system with document embedding and semantic search
+- **Beautiful UI** - Frameless windows with 3D visuals, glassmorphism effects, and smooth animations
+- **High Performance** - Rust backend with optimized data storage (JSON → SQLite migration)
+
+### Platform Support
+
+**Windows**
+- **Windows 10** (1903 or later) - Fully supported
+- **Windows 11** - Fully supported and optimized
+- Advanced features: Eye tracking, audio loopback, system automation
+- Native Windows API integration for seamless OS interaction
+
+### Technical Architecture
+
+- **Hybrid Storage System** - Seamless migration from JSON to SQLite with zero downtime
+- **Modular AI Agents** - Specialized agents for different tasks (coding, research, conversation)
+- **Cross-Platform** - Windows, macOS, and Linux support via Tauri
+- **Audio Processing** - Loopback capture, noise reduction, and speech-to-text
+- **Comprehensive Testing** - Full test suite with Vitest and Vue Test Utils
+
+## Quick Start
+
+### System Requirements
+
+**Minimum Requirements:**
+- **Windows:** Windows 10 (build 1903+) or Windows 11
+- **RAM:** 4GB minimum, 8GB recommended
+- **Storage:** 8GB available space
+- **Camera:** Any USB or integrated camera (for eye tracking)
+- **Microphone:** Any audio input device (for speech recognition)
+
+**Development Requirements:**
+- **Node.js** 18+ 
 - **Rust** (latest stable)
-- **Visual Studio Build Tools** (Windows) or **Xcode CLI Tools** (macOS)
+- **Platform-specific build tools:**
+  - **Windows:** Visual Studio Build Tools 2019/2022 or Visual Studio Community
 
 ### Installation
+
 ```bash
 # Clone the repository
 git clone <repository-url>
@@ -40,134 +71,146 @@ cd embedded-agentic-assistant
 # Install dependencies
 npm install
 
-# Run development server
+# Run in development mode
 npm run tauri dev
 
 # Build for production
 npm run tauri build
 ```
 
-### Setup from Scratch
-```bash
-# Create new project
-npx create-tauri-app@latest embedded-agentic-assistant
-# Choose: TypeScript → Vue → TypeScript
+### First Launch
 
-cd embedded-agentic-assistant
+1. **Configure AI Models** - Set up your preferred Ollama models or OpenAI API keys
+2. **Calibrate Eye Tracking** - Follow the brief calibration process for gaze controls
+3. **Explore Features** - Open different windows and try voice commands
 
-# Install additional dependencies
-npm install three @types/three tailwindcss @headlessui/vue @heroicons/vue gsap opencv-js lodash @types/lodash uuid date-fns
-
-# Initialize Tailwind
-npx tailwindcss init -p
-
-# Start development
-npm run tauri dev
-```
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 embedded-agentic-assistant/
-├── src/                     # Vue 3 + TypeScript frontend
-│   ├── components/          # UI components
-│   │   ├── core/           # Base UI components
-│   │   ├── three/          # 3D scene components
-│   │   ├── interaction/    # Eye tracking & gestures
-│   │   └── overlay/        # Desktop overlays
-│   ├── composables/        # Vue composables
-│   │   ├── useEyeTracking.ts
-│   │   ├── useThreeScene.ts
-│   │   └── useWindowManager.ts
-│   ├── stores/             # Pinia state stores
-│   ├── utils/              # Utility functions
-│   └── types/              # TypeScript definitions
-├── src-tauri/              # Rust backend
+├── src/                           # Vue 3 + TypeScript frontend
+│   ├── components/                # UI components
+│   │   ├── ControlPanel.vue       # Main control interface
+│   │   ├── ChatWindow.vue         # AI chat interface
+│   │   └── ConversationalWindow.vue # Voice interaction UI
+│   ├── composables/               # Vue composables
+│   │   ├── useEyeTracking.ts      # Eye tracking system
+│   │   ├── useSpeechTranscription.ts # Speech recognition
+│   │   └── useWindowManager.ts    # Window management
+│   ├── types/                     # TypeScript definitions
+│   └── tests/                     # Comprehensive test suite
+├── src-tauri/                     # Rust backend
 │   ├── src/
-│   │   ├── commands/       # Tauri commands
-│   │   │   ├── window_manager.rs
-│   │   │   ├── os_automation.rs
-│   │   │   └── system_info.rs
-│   │   └── main.rs
-│   └── tauri.conf.json     # Tauri configuration
-├── vite.config.ts          # Vite configuration
-├── tailwind.config.js      # Tailwind CSS config
-└── package.json
+│   │   ├── ai_commands.rs         # AI model integration
+│   │   ├── data/                  # Storage system
+│   │   │   ├── json_store.rs      # Legacy JSON storage
+│   │   │   ├── sqlite_store.rs    # Modern SQLite storage
+│   │   │   ├── migration.rs       # Migration utilities
+│   │   │   └── hybrid_store.rs    # Auto-selecting storage
+│   │   ├── rag_system.rs          # Document embedding & search
+│   │   ├── speech.rs              # Whisper integration
+│   │   └── screenshot.rs          # Screen capture
+│   └── capabilities/              # Tauri permissions
+└── resources/                     # Documentation & assets
 ```
 
-## ⚡ Development Scripts
+## Testing & Quality Assurance (needs contributors)
 
-```bash
-npm run tauri dev      # Start development server
-npm run tauri build    # Build for production
-npm run dev           # Frontend only (for UI development)
-npm run build         # Build frontend only
-npm run lint          # Lint code
-npm run type-check    # TypeScript validation
-```
+<img width="794" height="575" alt="image" src="https://github.com/user-attachments/assets/fa685380-4156-4a8e-ab1c-30a28cb20194" />
 
-## 🎨 Configuration
+Long term TDD is intended, if you have rust or UX testing expertise please contribute!
 
-### Window Settings
-The application runs as a frameless, transparent window with:
-- Custom title bar with drag regions
-- Always-on-top capability
-- System tray integration
-- Smooth animations and transitions
+## Configuration & Setup
 
-### Permissions
-Required for full functionality:
-- Camera access (eye tracking)
-- Screen recording (context awareness)
-- Accessibility permissions (OS automation)
-- File system access
+### AI Models
 
-## 🔧 Development Features
+Configure your AI models in the settings:
 
-### Hot Reload
-- Instant frontend updates with Vite HMR
-- Automatic Rust recompilation
-- Live reload for configuration changes
+- **Ollama** - Local models for privacy-focused AI
+- **OpenAI / DeepSeek API** - Cloud-based models for advanced capabilities (pending)
+- **Whisper** - Local speech recognition
 
-### Code Splitting
-- Optimized Three.js chunks
-- Separate vendor bundles
-- Lazy-loaded components
+## Contributing
 
-### TypeScript
-- Full type safety across frontend and Tauri APIs
-- Auto-completion for all libraries
-- Build-time error checking
+We welcome contributions! Whether you're fixing bugs, adding features, or improving documentation, your help makes this project better. Make sure to review the [Contributing Guide](https://github.com/Quaternion-Studios/enteract/blob/main/CONTRIBUTING.md) first (short).
 
-## 🎯 Roadmap
+### Development Setup
 
-### Phase 1: Foundation ✅
-- Basic Tauri + Vue setup
-- Frameless window with custom decorations
-- 3D scene integration
+1. **Fork and Clone** the repository
+2. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
+3. **Install dependencies** (`npm install`)
+4. **Run tests** (`npm run test`) to ensure everything works
+5. **Make your changes** with proper test coverage
+6. **Commit your changes** (`git commit -m 'Add amazing feature'`)
+7. **Push to the branch** (`git push origin feature/amazing-feature`)
+8. **Open a Pull Request**
 
-### Phase 2: Interaction (In Progress)
-- Eye tracking implementation
-- Gesture recognition
-- Window management automation
+### Areas for Contribution
 
-### Phase 3: Intelligence (Planned)
-- Local AI integration
-- Context awareness
-- Predictive workflows
+- **UI/UX Improvements** - Enhanced visual design and user experience
+- **AI Capabilities** - New AI agents and improved prompts
+- **Integrations** - Connect with more external services
+- **Documentation** - Tutorials, guides, and API docs
+- **Testing** - Expanded test coverage and performance benchmarks
+- **Windows Features** - Advanced Windows-specific integrations
+  
+(Experimental)
+- **Eye Tracking** - Better calibration and gaze accuracy (experimental)
+- **Platform Support** - macOS/Linux compatibility
 
-### Phase 4: Advanced Features (Future)
-- Voice commands
-- Multi-monitor support
-- Plugin system
 
-## 📚 Documentation
+### Code Style
 
-- [Tauri Documentation](https://tauri.app/v1/guides/)
-- [Vue 3 Composition API](https://vuejs.org/guide/extras/composition-api-faq.html)
-- [Three.js Documentation](https://threejs.org/docs/)
-- [TailwindCSS Documentation](https://tailwindcss.com/docs)
+- **TypeScript/Vue** - Use Composition API with TypeScript
+- **Rust** - Follow standard Rust conventions with `rustfmt`
+- **Tests** - Write tests for new features and bug fixes
+- **Documentation** - Update relevant documentation
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- **Rust Community** - For the powerful systems language and crate development
+- **Tauri Team** - For the amazing cross-platform framework
+- **Vue.js Community** - For the reactive frontend framework
+- **Whisper** - For speech recognition technology
+
+## Roadmap
+
+### Phase 1:
+- [x] Core UI components and window management
+- [x] Speech recognition integration
+- [x] SQL Based RAG
+- [ ] Computer Use Agent (CUA) MCP
+
+### Phase 2:
+- [ ] Cloud integration (OAI API, Deepseek API, Azure AI)
+- [ ] Enhanced AI agent capabilities (CUA)
+- [ ] Basic eye tracking implementation w/ model context
+- [ ] Improved RAG system with better embeddings / file ref
+- [ ] Multi-modal AI interactions
+
+### Phase 3:
+- [ ] Multi-platform support
+- [ ] Advanced automation workflows + CUA
+- [ ] Plugin system for extensibility
+
+## Support & Community
+
+- **Website** - Visit [tryenteract.com](https://www.tryenteract.com/) for more information
+- **Issues** - Report bugs and request features on [GitHub Issues](../../issues)
+- **Discussions** - Join conversations on [GitHub Discussions](../../discussions)
+- **Documentation** - Check the `/resources` directory for detailed guides
 
 ---
 
-*Building the future of human-computer interaction, one pixel at a time.* ✨
+<div align="center">
+
+**Star ⭐ this repository if you find it helpful!**
+
+Made with ❤️ by the community
+
+Started by [Rohan](https://github.com/rohxnsxngh) and [Chase](https://github.com/MC-Meesh)
+</div>
