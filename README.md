@@ -18,7 +18,6 @@
 
 <img width="600" alt="Embedded Agentic Assistant Interface" src="https://github.com/user-attachments/assets/ebcb93f3-53b5-420c-91f6-c586d53c7ea3" />
 
-*Not just an assistant. An **extension of your will**—embedded, intelligent, beautiful.*
 
 </div>
 
