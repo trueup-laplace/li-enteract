@@ -12,6 +12,7 @@ html, body {
   width: auto !important;
   overflow: hidden !important;
   background: transparent !important;
+  background-color: transparent !important;
 }
 
 #app {
@@ -20,6 +21,30 @@ html, body {
   height: auto !important;
   width: auto !important;
   background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Force all elements to have transparent backgrounds */
+* {
+  background-color: transparent !important;
+}
+
+/* Target webview specifically */
+webview {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Target any potential webview containers */
+webview-container {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Ensure the main app container is transparent */
+.app-root {
+  background: transparent !important;
+  background-color: transparent !important;
 }
 
 @tailwind base;

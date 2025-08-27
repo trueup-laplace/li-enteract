@@ -10,6 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "title": "Enteract Control Panel",
@@ -22,6 +23,7 @@
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
+        "backgroundColor": "#00000000",
         "center": true,
         "resizable": true,
         "shadow": false,

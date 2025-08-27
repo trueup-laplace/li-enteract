@@ -90,7 +90,24 @@ export function useWindowManager() {
         Math.floor((screenSize.height - normalSize.height) / 2)
       )
       await currentWindow.setPosition(position)
-      store.updateWindowPosition(position.x, position.y)
+              store.updateWindowPosition(position.x, position.y)
+        
+        // Initialize window transparency to set webview background
+        try {
+          // Add a small delay to ensure window is fully loaded
+          await new Promise(resolve => setTimeout(resolve, 100))
+          await invoke('initialize_window_transparency')
+          console.log('🔧 TRANSPARENCY: Window transparency initialized successfully')
+          
+          // Force CSS transparency after initialization
+          document.body.style.backgroundColor = 'transparent'
+          document.documentElement.style.backgroundColor = 'transparent'
+          if (document.getElementById('app')) {
+            document.getElementById('app')!.style.backgroundColor = 'transparent'
+          }
+        } catch (error) {
+          console.warn('🔧 TRANSPARENCY: Failed to initialize window transparency:', error)
+        }      
       
     } catch (error) {
       console.error('Failed to initialize window:', error)

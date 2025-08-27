@@ -39,7 +39,11 @@ export function useTransparency() {
       const clampedLevel = Math.max(0.1, Math.min(1, level)) // Minimum 10% opacity to prevent full invisibility
       console.log(`🔧 TRANSPARENCY: Applying level ${clampedLevel} (original: ${level})`)
       
+      // Apply transparency through both backend and frontend
       await invoke('set_window_transparency', { alpha: clampedLevel })
+      
+      // Also apply CSS-based transparency for better cross-platform support
+      applyCSSTransparency(clampedLevel)
       
       transparencyLevel.value = clampedLevel
       
@@ -54,11 +58,22 @@ export function useTransparency() {
         console.log('🔄 TRANSPARENCY: Emergency restore due to error')
         await invoke('emergency_restore_window')
         transparencyLevel.value = 1.0
+        applyCSSTransparency(1.0)
       } catch (restoreError) {
         console.error('🚨 EMERGENCY RESTORE FAILED:', restoreError)
       }
     } finally {
       isLoading.value = false
+    }
+  }
+
+  // Apply CSS-based transparency
+  const applyCSSTransparency = (level: number): void => {
+    try {
+      document.body.style.opacity = level.toString()
+      console.log(`🔧 CSS TRANSPARENCY: Applied opacity ${level}`)
+    } catch (error) {
+      console.error('🚨 CSS TRANSPARENCY ERROR:', error)
     }
   }
 
@@ -70,6 +85,9 @@ export function useTransparency() {
       })
       transparencyLevel.value = result
       isEnabled.value = result < 1.0
+      
+      // Apply CSS transparency for the new level
+      applyCSSTransparency(result)
       
     } catch (error) {
       lastError.value = error instanceof Error ? error.message : 'Failed to toggle transparency'
@@ -98,6 +116,9 @@ export function useTransparency() {
       transparencyLevel.value = 1.0
       isEnabled.value = false
       
+      // Reset CSS transparency
+      applyCSSTransparency(1.0)
+      
       // Clear error state
       lastError.value = null
       
@@ -106,6 +127,7 @@ export function useTransparency() {
       // Even if the invoke fails, update local state
       transparencyLevel.value = 1.0
       isEnabled.value = false
+      applyCSSTransparency(1.0)
     }
   }
 
