@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import ControlPanelButtons from '@/components/core/ControlPanelButtons.vue'
 import { createMockTauriStore } from '../__mocks__/tauri'
 
 // Mock the composables and stores
@@ -189,7 +188,7 @@ describe('ControlPanelButtons Integration Tests', () => {
   describe('Accessibility', () => {
     it('buttons are focusable', () => {
       const buttons = wrapper.findAll('.panel-btn')
-      buttons.forEach(button => {
+      buttons.forEach((button: any) => {
         // Check that buttons can receive focus (not disabled)
         expect(button.element.disabled).toBe(false)
       })
@@ -197,7 +196,7 @@ describe('ControlPanelButtons Integration Tests', () => {
 
     it('has proper button semantics', () => {
       const buttons = wrapper.findAll('.panel-btn')
-      buttons.forEach(button => {
+      buttons.forEach((button: any) => {
         expect(button.element.tagName).toBe('BUTTON')
       })
     })

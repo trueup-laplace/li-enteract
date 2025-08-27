@@ -37,7 +37,6 @@ const props = defineProps({
   formatFileSize: { type: Function as PropType<(bytes: number) => string>, required: true }
 })
 
-const emit = defineEmits<{ (e: 'clearCache'): void }>()
 const fileInputRef = ref<HTMLInputElement>()
 
 const formattedStorageSize = computed(() => {

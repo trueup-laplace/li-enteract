@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import { ragService, type Document, type DocumentChunk, type RagSettings } from '../services/ragService'
+import { ragService, type RagSettings } from '../services/ragService'
 import { enhancedRagService, type EnhancedDocument, type EnhancedDocumentChunk, type EnhancedRagSettings } from '../services/enhancedRagService'
 
 export interface UploadContext {
@@ -138,7 +138,7 @@ export function useRagDocuments() {
     try {
       settings.value = useEnhanced.value 
         ? await enhancedRagService.getSettings()
-        : await ragService.getSettings() as EnhancedRagSettings
+        : await ragService.getSettings() as unknown as EnhancedRagSettings
     } catch (err) {
       console.error('Failed to load RAG settings:', err)
     }
@@ -194,7 +194,7 @@ export function useRagDocuments() {
           return duplicateCheck.existingDocument
         }
       } else if (settings.value) {
-        const validation = ragService.validateFile(file, settings.value as RagSettings)
+        const validation = ragService.validateFile(file, settings.value as unknown as RagSettings)
         if (!validation.valid) {
           error.value = validation.error || 'File validation failed'
           return null
@@ -513,7 +513,7 @@ export function useRagDocuments() {
       if (useEnhanced.value) {
         await enhancedRagService.updateSettings(updatedSettings)
       } else {
-        await ragService.updateSettings(updatedSettings as RagSettings)
+        await ragService.updateSettings(updatedSettings as unknown as RagSettings)
       }
       settings.value = updatedSettings
     } catch (err) {
@@ -593,7 +593,7 @@ export function useRagDocuments() {
     
     // Legacy validation
     if (settings.value) {
-      return ragService.validateFile(file, settings.value as RagSettings)
+      return ragService.validateFile(file, settings.value as unknown as RagSettings)
     }
     return { valid: true }
   }

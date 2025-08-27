@@ -5,8 +5,6 @@ import type {
   EyeRegion, 
   GazeVector, 
   EyeTrackingResult,
-  Point2D,
-  Rectangle
 } from '../types/eyeTracking'
 
 interface OpenCVState {
@@ -22,11 +20,6 @@ export function useComputerVision() {
     error: null,
     version: null
   })
-
-  // OpenCV instance
-  let cv: any = null
-  let faceClassifier: any = null
-  let eyeClassifier: any = null
 
   // Processing state
   const isProcessing = ref(false)
@@ -58,10 +51,11 @@ export function useComputerVision() {
   }
 
   // Load classifiers (simplified for Phase 1 demo)
-  const loadClassifiers = async (): Promise<void> => {
-    // For Phase 1 demo, no external classifiers needed
-    console.log('Classifiers loaded (demo mode)')
-  }
+  // Unused in current implementation
+  // const loadClassifiers = async (): Promise<void> => {
+  //   // For Phase 1 demo, no external classifiers needed
+  //   console.log('Classifiers loaded (demo mode)')
+  // }
 
   // Process ImageData (simplified for Phase 1 demo)
   const processImageData = (imageData: ImageData): any => {
@@ -151,7 +145,7 @@ export function useComputerVision() {
   }
 
   // Detect eyes within a face region (simplified for Phase 1 demo)
-  const detectEyes = (processedImage: any, faceBox: FaceBox): EyePair => {
+  const detectEyes = (_processedImage: any, faceBox: FaceBox): EyePair => {
     if (!state.isLoaded) {
       return {
         left: createEmptyEyeRegion(),
@@ -232,14 +226,15 @@ export function useComputerVision() {
   }
 
   // Simplified pupil detection for Phase 1 demo
-  const findPupilCenter = (eyeRegion: any): Point2D & { confidence: number } => {
-    // For Phase 1 demo, return center of eye region
-    return {
-      x: eyeRegion.width / 2,
-      y: eyeRegion.height / 2,
-      confidence: 0.8
-    }
-  }
+  // Unused in current implementation - removed to fix TypeScript error
+  // const findPupilCenter = (eyeRegion: any): Point2D & { confidence: number } => {
+  //   // For Phase 1 demo, return center of eye region
+  //   return {
+  //     x: eyeRegion.width / 2,
+  //     y: eyeRegion.height / 2,
+  //     confidence: 0.8
+  //   }
+  // }
 
   // Calculate basic gaze vector from eye positions and image analysis
   const calculateGaze = (eyes: EyePair, faceBox: FaceBox, processedImage?: any): GazeVector => {

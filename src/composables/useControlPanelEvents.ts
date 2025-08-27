@@ -7,10 +7,10 @@ import { useWindowResizing } from './useWindowResizing'
  * This replaces the fragile CSS selector-based approach with a robust registry pattern
  */
 export function useControlPanelEvents(
-  store: any,
+  _store: any,
   mlEyeTracking: any,
-  windowManager: any,
-  wakeWordDetection: any,
+  _windowManager: any,
+  _wakeWordDetection: any,
   providedStateRefs: any
 ) {
   // Get state management (use provided refs if available, otherwise create new)
@@ -246,7 +246,7 @@ export function useControlPanelEvents(
     }
   }
 
-  const handleClickOutside = async (event: Event) => {
+  const handleClickOutside = async (_event: Event) => {
     // Let the window registry handle click-outside detection automatically
     // This prevents duplicate detection and conflicts
     // The registry will call individual window close handlers when needed

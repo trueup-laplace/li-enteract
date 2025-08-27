@@ -31,7 +31,7 @@ export class MarkdownRenderer {
       const inlineCodePlaceholder = (index: number) => `⏿⏿⏿INLINECODE${index}⏿⏿⏿`
       
       // Extract code blocks with simple regex
-      processed = processed.replace(/```(\w+)?\n?([\s\S]*?)```/g, (match, lang, code) => {
+      processed = processed.replace(/```(\w+)?\n?([\s\S]*?)```/g, (_match, lang, code) => {
         const index = codeBlocks.length
         const language = (lang || 'text').toLowerCase()
         const cleanCode = code.trim()
@@ -56,7 +56,7 @@ export class MarkdownRenderer {
       })
       
       // Extract inline code
-      processed = processed.replace(/`([^`\n]+)`/g, (match, code) => {
+      processed = processed.replace(/`([^`\n]+)`/g, (_match, code) => {
         const index = inlineCodes.length
         const inlineCodeHtml = `<code class="bg-black/40 px-1.5 py-0.5 rounded text-sm font-mono text-cyan-300">${this.escapeHtml(code)}</code>`
         inlineCodes.push(inlineCodeHtml)
@@ -250,7 +250,7 @@ export class MarkdownRenderer {
   static processInlineElements(text: string): string {
     return text
       // Agent mentions
-      .replace(/@(enteract|coding|research|vision)\b/g, (match, agent) => {
+      .replace(/@(enteract|coding|research|vision)\b/g, (_match, agent) => {
         const agentStyles = {
           enteract: 'bg-blue-500/20 text-blue-300 border-blue-400/30',
           coding: 'bg-green-500/20 text-green-300 border-green-400/30',

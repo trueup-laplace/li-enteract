@@ -20,7 +20,7 @@ interface AudioDeviceSettings {
   sampleRate: number
 }
 
-const props = defineProps({
+defineProps({
   audioDevices: { type: Array as PropType<AudioLoopbackDevice[]>, required: true },
   isLoadingAudioDevices: { type: Boolean, required: true },
   audioDevicesError: { type: String as PropType<string | null>, required: false, default: null },

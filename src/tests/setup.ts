@@ -46,7 +46,7 @@ Object.defineProperty(window, 'webkitSpeechRecognition', {
 })
 
 // Mock requestAnimationFrame
-global.requestAnimationFrame = vi.fn(cb => setTimeout(cb, 16))
+global.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => setTimeout(cb, 16))
 global.cancelAnimationFrame = vi.fn()
 
 // Mock IntersectionObserver

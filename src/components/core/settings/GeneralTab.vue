@@ -18,7 +18,7 @@ interface SystemInfo {
   os: string
 }
 
-const props = defineProps({
+defineProps({
   generalSettings: { type: Object as PropType<any>, required: true },
   transparency: { type: Object as PropType<any>, required: true },
   handleTransparencyLevelChange: { type: Function as PropType<() => void>, required: true },

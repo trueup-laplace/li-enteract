@@ -13,7 +13,7 @@ interface OllamaModel {
   details?: { parameter_size?: string }
 }
 
-const props = defineProps({
+defineProps({
   ollamaStatus: { type: Object as PropType<OllamaStatus>, required: true },
   isLoadingModels: { type: Boolean, required: true },
   modelsError: { type: String as PropType<string | null>, required: false, default: null },

@@ -1,6 +1,6 @@
 import { ref, computed, onUnmounted, readonly } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import { KalmanFilter2D, type KalmanConfig } from '../lib/filters/KalmanFilter'
+import { KalmanFilter2D } from '../lib/filters/KalmanFilter'
 
 // Types for ML eye tracking
 export interface MLGazeData {
@@ -91,7 +91,8 @@ export function useMLEyeTracking() {
   // Smoothing components
   const kalmanFilter = ref<KalmanFilter2D | null>(null)
   const gazeHistory = ref<Array<MLGazeData>>([])
-  const maxHistorySize = 10
+  // Unused in current implementation
+  // const maxHistorySize = 10
 
   // Calibration data
   const calibrationPoints = ref<CalibrationPoint[]>([])

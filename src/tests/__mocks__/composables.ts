@@ -32,7 +32,7 @@ export const createMockSpeechTranscription = () => ({
   stopRecording: vi.fn().mockResolvedValue(undefined),
   isRecording: ref(false),
   isInitialized: ref(true),
-  error: ref(null),
+  error: ref<string | null>(null),
   setAutoSendToChat: vi.fn(),
   setContinuousMode: vi.fn(),
 })

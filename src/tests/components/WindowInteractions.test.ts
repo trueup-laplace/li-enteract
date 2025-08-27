@@ -2,6 +2,28 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
+// Type definitions for test components
+interface ChatComponentData {
+  showChat: boolean
+  message: string
+}
+
+interface ConversationalComponentData {
+  showConversational: boolean
+  isRecording: boolean
+}
+
+interface MultiWindowComponentData {
+  showChat: boolean
+  showConversational: boolean
+  showAIModels: boolean
+}
+
+interface KeyboardComponentData {
+  showChat: boolean
+  showConversational: boolean
+}
+
 // Integration test for window opening/closing functionality
 describe('Window Interactions Integration Tests', () => {
   let mockWindowManager: any
@@ -41,14 +63,14 @@ describe('Window Interactions Integration Tests', () => {
             </div>
           </div>
         `,
-        data() {
+        data(): ChatComponentData {
           return {
             showChat: false,
             message: '',
           }
         },
         methods: {
-          toggleChat() {
+          toggleChat(this: ChatComponentData) {
             this.showChat = !this.showChat
             mockControlPanelState.showChatWindow.value = this.showChat
             if (this.showChat) {
@@ -57,19 +79,19 @@ describe('Window Interactions Integration Tests', () => {
               mockWindowManager.closeWindow('chat')
             }
           },
-          closeChat() {
+          closeChat(this: ChatComponentData) {
             this.showChat = false
             mockControlPanelState.showChatWindow.value = false
             mockWindowManager.closeWindow('chat')
           },
-          sendMessage() {
+          sendMessage(this: ChatComponentData) {
             if (this.message.trim()) {
               // Simulate message sending
               this.message = ''
             }
           },
         },
-      }
+      } as any // Add 'as any' to bypass strict typing for test components
 
       const wrapper = mount(TestComponent)
 
@@ -86,11 +108,11 @@ describe('Window Interactions Integration Tests', () => {
       // Test input functionality
       const input = wrapper.find('[data-testid="chat-input"]')
       await input.setValue('Hello world')
-      expect(input.element.value).toBe('Hello world')
+      expect((input.element as HTMLInputElement).value).toBe('Hello world')
 
       // Test send functionality
       await wrapper.find('[data-testid="chat-send"]').trigger('click')
-      expect(input.element.value).toBe('')
+      expect((input.element as HTMLInputElement).value).toBe('')
 
       // Test close functionality
       await wrapper.find('[data-testid="chat-close"]').trigger('click')
@@ -118,14 +140,14 @@ describe('Window Interactions Integration Tests', () => {
             </div>
           </div>
         `,
-        data() {
+        data(): ConversationalComponentData {
           return {
             showConversational: false,
             isRecording: false,
           }
         },
         methods: {
-          toggleConversational() {
+          toggleConversational(this: ConversationalComponentData) {
             this.showConversational = !this.showConversational
             mockControlPanelState.showConversationalWindow.value = this.showConversational
             if (this.showConversational) {
@@ -134,18 +156,18 @@ describe('Window Interactions Integration Tests', () => {
               mockWindowManager.closeWindow('conversational')
             }
           },
-          toggleMicrophone() {
+          toggleMicrophone(this: ConversationalComponentData) {
             this.isRecording = !this.isRecording
             // Simulate microphone start/stop
           },
-          closeConversational() {
+          closeConversational(this: ConversationalComponentData) {
             this.showConversational = false
             this.isRecording = false
             mockControlPanelState.showConversationalWindow.value = false
             mockWindowManager.closeWindow('conversational')
           },
         },
-      }
+      } as any
 
       const wrapper = mount(TestComponent)
 
@@ -190,7 +212,7 @@ describe('Window Interactions Integration Tests', () => {
             <button @click="closeAll" data-testid="close-all">Close All</button>
           </div>
         `,
-        data() {
+        data(): MultiWindowComponentData {
           return {
             showChat: false,
             showConversational: false,
@@ -198,17 +220,17 @@ describe('Window Interactions Integration Tests', () => {
           }
         },
         methods: {
-          toggleChat() { this.showChat = !this.showChat },
-          toggleConversational() { this.showConversational = !this.showConversational },
-          toggleAIModels() { this.showAIModels = !this.showAIModels },
-          closeAll() {
+          toggleChat(this: MultiWindowComponentData) { this.showChat = !this.showChat },
+          toggleConversational(this: MultiWindowComponentData) { this.showConversational = !this.showConversational },
+          toggleAIModels(this: MultiWindowComponentData) { this.showAIModels = !this.showAIModels },
+          closeAll(this: MultiWindowComponentData) {
             this.showChat = false
             this.showConversational = false
             this.showAIModels = false
             mockWindowManager.closeWindow('all')
           },
         },
-      }
+      } as any
 
       const wrapper = mount(TestComponent)
 
@@ -242,14 +264,14 @@ describe('Window Interactions Integration Tests', () => {
             <div v-if="showConversational" data-testid="conv-window">Conversational Window</div>
           </div>
         `,
-        data() {
+        data(): KeyboardComponentData {
           return {
             showChat: false,
             showConversational: false,
           }
         },
         methods: {
-          handleKeydown(event: KeyboardEvent) {
+          handleKeydown(this: KeyboardComponentData, event: KeyboardEvent) {
             if (event.ctrlKey && event.shiftKey) {
               switch (event.key) {
                 case 'C':
@@ -266,7 +288,7 @@ describe('Window Interactions Integration Tests', () => {
             }
           },
         },
-      }
+      } as any
 
       const wrapper = mount(TestComponent)
       const container = wrapper.find('[data-testid="app-container"]')

@@ -1,6 +1,6 @@
 import { ref, computed, watch, onMounted, onUnmounted, readonly } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import { Window } from '@tauri-apps/api/window'
+
 
 export interface TransparencyState {
   level: number
@@ -27,9 +27,6 @@ export function useTransparency() {
     isClickThrough: isClickThrough.value,
     isVisible: isVisible.value
   }))
-
-  // Tauri window reference
-  const currentWindow = Window.getCurrent()
 
   // Apply transparency to OS window
   const applyTransparency = async (level: number): Promise<void> => {

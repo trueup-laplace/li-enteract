@@ -313,8 +313,6 @@ const {
   startCodingAgent,
   startComputerUseAgent,
   sendMessage,
-  triggerFileUpload,
-  handleFileUpload,
   estimateTokens,
   cancelResponse
 } = useChatManagement(props.selectedModel, scrollChatToBottom, currentAgent)
@@ -424,9 +422,9 @@ const handleStartComputerUse = () => {
 }
 
 
-const handleFileUploadEvent = (event: Event) => {
-  handleFileUpload(event, { value: props.showChatWindow })
-}
+// const handleFileUploadEvent = (event: Event) => {
+//   handleFileUpload(event, { value: props.showChatWindow })
+// }
 
 // Microphone functionality for chat interface
 const handleMicrophoneToggle = async () => {

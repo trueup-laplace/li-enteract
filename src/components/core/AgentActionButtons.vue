@@ -19,7 +19,7 @@ interface Emits {
   (e: 'handleFileUpload', event: Event): void
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   isUploading: false
 })
 defineEmits<Emits>()

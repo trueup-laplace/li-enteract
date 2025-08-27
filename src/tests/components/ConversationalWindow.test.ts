@@ -149,7 +149,6 @@ describe('ConversationalWindow', () => {
   })
 
   it('renders microphone icon in header', () => {
-    const micIcon = wrapper.find('.window-header [data-testid="microphone-icon"], .window-header svg')
     expect(wrapper.find('.window-header').exists()).toBe(true)
   })
 
@@ -217,13 +216,11 @@ describe('ConversationalWindow', () => {
     
     await wrapper.vm.$nextTick()
     
-    const recordingIndicator = wrapper.find('[title="Recording"]')
     // Note: This might need adjustment based on the actual DOM structure
     expect(wrapper.find('.status-indicators').exists()).toBe(true)
   })
 
   it('shows session timer when session is active', () => {
-    const timeItem = wrapper.find('.time-item')
     // Note: This depends on whether there's an active session in the mock
     expect(wrapper.find('.status-indicators').exists()).toBe(true)
   })

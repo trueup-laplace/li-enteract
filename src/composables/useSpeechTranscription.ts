@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import type {
   TranscriptionResult,
@@ -26,7 +26,6 @@ export function useSpeechTranscription() {
   const isTranscribing = ref(false)
   const hasWebSpeechSupport = ref(false)
   const hasWhisperModel = ref(false)
-  const currentText = ref('')
   const interimText = ref('')
   const finalText = ref('')
   const currentTranscript = ref('')
@@ -741,7 +740,6 @@ export function useSpeechTranscription() {
     const sampleRate = audioBuffer.sampleRate
     const arrayBuffer = new ArrayBuffer(44 + length * 2)
     const view = new DataView(arrayBuffer)
-    const channels = audioBuffer.numberOfChannels
     
     // WAV header
     const writeString = (offset: number, string: string) => {
