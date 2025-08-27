@@ -133,8 +133,10 @@ export function useControlPanelEvents(
     
     try {
       console.log('🖱️ Starting window drag')
-      // The actual drag implementation would go here
-      // This is placeholder for the existing drag functionality
+      // Call the window manager's startDrag method
+      if (_windowManager && _windowManager.startDrag) {
+        await _windowManager.startDrag()
+      }
     } catch (error) {
       console.error('❌ Failed to start window drag:', error)
     }
@@ -143,7 +145,10 @@ export function useControlPanelEvents(
   const handleDragEnd = async () => {
     try {
       console.log('🖱️ Ending window drag')
-      // The actual drag end implementation would go here
+      // Reset dragging state if needed
+      if (_windowManager && _windowManager.isDragging) {
+        _windowManager.isDragging.value = false
+      }
     } catch (error) {
       console.error('❌ Failed to end window drag:', error)
     }

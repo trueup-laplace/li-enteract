@@ -125,14 +125,50 @@ defineExpose({
 // Ref for the control panel element
 const controlPanelRef = ref<HTMLElement>()
 
+// Store event handler references for cleanup
+let mouseDownHandler: ((event: MouseEvent) => void) | null = null
+let mouseMoveHandler: ((event: MouseEvent) => void) | null = null
+let mouseUpHandler: (() => void) | null = null
+
 onMounted(async () => {
   document.addEventListener('keydown', handleKeydown)
   // Removed global click listener - let window registry handle click-outside detection
   
   const controlPanel = controlPanelRef.value
   if (controlPanel) {
-    controlPanel.addEventListener('mousedown', handleDragStart)
-    document.addEventListener('mouseup', handleDragEnd)
+    // Use a more robust drag implementation
+    let isDragging = false
+    
+    mouseDownHandler = (event: MouseEvent) => {
+      // Only start drag if clicking on the control panel itself, not on buttons
+      if (event.target === controlPanel || controlPanel.contains(event.target as Node)) {
+        // Check if the click target is a button
+        const target = event.target as HTMLElement
+        if (target.closest('.control-btn')) {
+          return // Don't start drag if clicking on a button
+        }
+        
+        isDragging = true
+        handleDragStart(event)
+      }
+    }
+    
+    mouseMoveHandler = () => {
+      if (isDragging) {
+        // The actual dragging is handled by Tauri's startDragging
+      }
+    }
+    
+    mouseUpHandler = () => {
+      if (isDragging) {
+        isDragging = false
+        handleDragEnd()
+      }
+    }
+    
+    controlPanel.addEventListener('mousedown', mouseDownHandler)
+    document.addEventListener('mousemove', mouseMoveHandler)
+    document.addEventListener('mouseup', mouseUpHandler)
   }
   
   await store.initializeSpeechTranscription('tiny')
@@ -152,8 +188,16 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
-  // Removed global click listener cleanup - window registry handles its own cleanup
-  document.removeEventListener('mouseup', handleDragEnd)
+  // Clean up custom drag event listeners
+  if (mouseDownHandler && controlPanelRef.value) {
+    controlPanelRef.value.removeEventListener('mousedown', mouseDownHandler)
+  }
+  if (mouseMoveHandler) {
+    document.removeEventListener('mousemove', mouseMoveHandler)
+  }
+  if (mouseUpHandler) {
+    document.removeEventListener('mouseup', mouseUpHandler)
+  }
 })
 </script>
 
@@ -165,7 +209,6 @@ onUnmounted(() => {
         ref="controlPanelRef"
         class="control-panel-glass-bar" 
         :class="{ 'dragging': isDragging }"
-        data-tauri-drag-region
       >
         <ControlPanelButtons
           :store="store"
@@ -342,8 +385,12 @@ onUnmounted(() => {
   align-items: center;
 }
 
-/* Drag region styling */
-.control-panel-glass-bar[data-tauri-drag-region] {
-  -webkit-app-region: drag;
+/* Custom drag styling */
+.control-panel-glass-bar {
+  cursor: grab;
+}
+
+.control-panel-glass-bar.dragging {
+  cursor: grabbing;
 }
 </style>
