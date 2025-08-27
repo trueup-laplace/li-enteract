@@ -1,9 +1,57 @@
 //! Objective-C bindings for Core Audio functionality
 //! This module provides direct access to Core Audio APIs that aren't available in Rust crates
+//! 
+//! # Naming Conventions
+//! 
+//! ## Constants
+//! This module maps Core Audio constants from their original camelCase names to Rust-style UPPER_SNAKE_CASE:
+//! - `kAudioObjectUnknown` → `AUDIO_OBJECT_UNKNOWN`
+//! - `kAudioObjectSystemObject` → `AUDIO_OBJECT_SYSTEM_OBJECT`
+//! - `kAudioHardwarePropertyDevices` → `AUDIO_HARDWARE_PROPERTY_DEVICES`
+//! - etc.
+//! 
+//! ## Struct Properties
+//! Struct properties are mapped from Core Audio's camelCase to Rust's snake_case:
+//! - `mSelector` → `selector`
+//! - `mScope` → `scope`
+//! - `mElement` → `element`
+//! - `mSampleRate` → `sample_rate`
+//! - `mFormatID` → `format_id`
+//! - `mFormatFlags` → `format_flags`
+//! - `mBytesPerPacket` → `bytes_per_packet`
+//! - `mFramesPerPacket` → `frames_per_packet`
+//! - `mBytesPerFrame` → `bytes_per_frame`
+//! - `mChannelsPerFrame` → `channels_per_frame`
+//! - `mBitsPerChannel` → `bits_per_channel`
+//! - `mReserved` → `reserved`
+//! - `mNumberChannels` → `number_channels`
+//! - `mDataByteSize` → `data_byte_size`
+//! - `mData` → `data`
+//! - `mNumberBuffers` → `number_buffers`
+//! - `mBuffers` → `buffers`
+//! - `mSampleTime` → `sample_time`
+//! - `mHostTime` → `host_time`
+//! - `mRateScalar` → `rate_scalar`
+//! - `mWordClockTime` → `word_clock_time`
+//! - `mSMPTETime` → `smpte_time`
+//! - `mFlags` → `flags`
+//! 
+//! This follows Rust naming conventions while maintaining the semantic meaning of the original Core Audio constants and properties.
+//! 
+//! ## FFI Function Parameters
+//! 
+//! **External FFI functions** (declared with `extern "C"`) maintain their original camelCase parameter names
+//! to preserve compatibility with the Core Audio C API:
+//! - `AudioObjectGetPropertyDataSize(inObjectID, inAddress, ...)`
+//! - `AudioDeviceCreateIOProcID(inDevice, inProc, ...)`
+//! 
+//! **Function type definitions** use Rust snake_case parameter names while maintaining FFI compatibility:
+//! - `AudioDeviceIOProc(in_device, in_now, in_input_data, ...)`
+//! - `AudioObjectPropertyListenerProc(in_object_id, in_number_addresses, ...)`
 
 use std::ffi::{c_void, CStr, CString};
 use std::ptr;
-use std::os::raw::{c_char, c_int, c_uint, c_ulong};
+use std::os::raw::{c_char};
 
 // Core Audio types
 pub type AudioObjectID = u32;
@@ -14,125 +62,187 @@ pub type AudioAggregateDeviceID = AudioObjectID;
 pub type OSStatus = i32;
 
 // Core Audio constants
-pub const kAudioObjectUnknown: AudioObjectID = 0;
-pub const kAudioObjectSystemObject: AudioObjectID = 1;
+/// Maps to `kAudioObjectUnknown` - represents an unknown audio object
+pub const AUDIO_OBJECT_UNKNOWN: AudioObjectID = 0;
+/// Maps to `kAudioObjectSystemObject` - represents the system audio object
+pub const AUDIO_OBJECT_SYSTEM_OBJECT: AudioObjectID = 1;
 
 // Property scopes
-pub const kAudioObjectPropertyScopeGlobal: u32 = 0;
-pub const kAudioObjectPropertyScopeInput: u32 = 1;
-pub const kAudioObjectPropertyScopeOutput: u32 = 2;
+/// Maps to `kAudioObjectPropertyScopeGlobal` - global property scope
+pub const AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL: u32 = 0;
+/// Maps to `kAudioObjectPropertyScopeInput` - input property scope
+pub const AUDIO_OBJECT_PROPERTY_SCOPE_INPUT: u32 = 1;
+/// Maps to `kAudioObjectPropertyScopeOutput` - output property scope
+pub const AUDIO_OBJECT_PROPERTY_SCOPE_OUTPUT: u32 = 2;
 
 // Property elements
-pub const kAudioObjectPropertyElementMain: u32 = 0;
+/// Maps to `kAudioObjectPropertyElementMain` - main property element
+pub const AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN: u32 = 0;
 
 // Property selectors
-pub const kAudioHardwarePropertyDevices: u32 = 0x64657623; // 'dev#'
-pub const kAudioHardwarePropertyDefaultInputDevice: u32 = 0x64696e20; // 'din '
-pub const kAudioHardwarePropertyDefaultOutputDevice: u32 = 0x646f7574; // 'dout'
-pub const kAudioDevicePropertyDeviceNameCFString: u32 = 0x6e616d65; // 'name'
-pub const kAudioDevicePropertyDeviceUID: u32 = 0x75696420; // 'uid '
-pub const kAudioDevicePropertyStreams: u32 = 0x73746d23; // 'stm#'
-pub const kAudioDevicePropertyNominalSampleRate: u32 = 0x6e737261; // 'nsra'
-pub const kAudioDevicePropertyStreamConfiguration: u32 = 0x736c63e6; // 'slc#'
-pub const kAudioDevicePropertyStreamFormat: u32 = 0x73666d74; // 'sfmt'
-pub const kAudioDevicePropertyTransportType: u32 = 0x7472616e; // 'tran'
-pub const kAudioDeviceTransportTypeAggregate: u32 = 0x61676772; // 'aggr'
+/// Maps to `kAudioHardwarePropertyDevices` - hardware devices property
+pub const AUDIO_HARDWARE_PROPERTY_DEVICES: u32 = 0x64657623; // 'dev#'
+/// Maps to `kAudioHardwarePropertyDefaultInputDevice` - default input device property
+pub const AUDIO_HARDWARE_PROPERTY_DEFAULT_INPUT_DEVICE: u32 = 0x64696e20; // 'din '
+/// Maps to `kAudioHardwarePropertyDefaultOutputDevice` - default output device property
+pub const AUDIO_HARDWARE_PROPERTY_DEFAULT_OUTPUT_DEVICE: u32 = 0x646f7574; // 'dout'
+/// Maps to `kAudioDevicePropertyDeviceNameCFString` - device name property
+pub const AUDIO_DEVICE_PROPERTY_DEVICE_NAME_CF_STRING: u32 = 0x6e616d65; // 'name'
+/// Maps to `kAudioDevicePropertyDeviceUID` - device UID property
+pub const AUDIO_DEVICE_PROPERTY_DEVICE_UID: u32 = 0x75696420; // 'uid '
+/// Maps to `kAudioDevicePropertyStreams` - device streams property
+pub const AUDIO_DEVICE_PROPERTY_STREAMS: u32 = 0x73746d23; // 'stm#'
+/// Maps to `kAudioDevicePropertyNominalSampleRate` - nominal sample rate property
+pub const AUDIO_DEVICE_PROPERTY_NOMINAL_SAMPLE_RATE: u32 = 0x6e737261; // 'nsra'
+/// Maps to `kAudioDevicePropertyStreamConfiguration` - stream configuration property
+pub const AUDIO_DEVICE_PROPERTY_STREAM_CONFIGURATION: u32 = 0x736c63e6; // 'slc#'
+/// Maps to `kAudioDevicePropertyStreamFormat` - stream format property
+pub const AUDIO_DEVICE_PROPERTY_STREAM_FORMAT: u32 = 0x73666d74; // 'sfmt'
+/// Maps to `kAudioDevicePropertyTransportType` - transport type property
+pub const AUDIO_DEVICE_PROPERTY_TRANSPORT_TYPE: u32 = 0x7472616e; // 'tran'
+/// Maps to `kAudioDeviceTransportTypeAggregate` - aggregate transport type
+pub const AUDIO_DEVICE_TRANSPORT_TYPE_AGGREGATE: u32 = 0x61676772; // 'aggr'
 
 // Audio tap specific properties
-pub const kAudioTapPropertyDescription: u32 = 100;
-pub const kAudioTapPropertyUID: u32 = 101;
-pub const kAudioTapPropertyFormat: u32 = 102;
+/// Maps to `kAudioTapPropertyDescription` - tap description property
+pub const AUDIO_TAP_PROPERTY_DESCRIPTION: u32 = 100;
+/// Maps to `kAudioTapPropertyUID` - tap UID property
+pub const AUDIO_TAP_PROPERTY_UID: u32 = 101;
+/// Maps to `kAudioTapPropertyFormat` - tap format property
+pub const AUDIO_TAP_PROPERTY_FORMAT: u32 = 102;
 
 // Aggregate device specific properties
-pub const kAudioAggregateDevicePropertyFullSubDeviceList: u32 = 200;
-pub const kAudioAggregateDevicePropertyTapList: u32 = 201;
-pub const kAudioAggregateDevicePropertyComposition: u32 = 202;
+/// Maps to `kAudioAggregateDevicePropertyFullSubDeviceList` - full sub-device list property
+pub const AUDIO_AGGREGATE_DEVICE_PROPERTY_FULL_SUB_DEVICE_LIST: u32 = 200;
+/// Maps to `kAudioAggregateDevicePropertyTapList` - tap list property
+pub const AUDIO_AGGREGATE_DEVICE_PROPERTY_TAP_LIST: u32 = 201;
+/// Maps to `kAudioAggregateDevicePropertyComposition` - composition property
+pub const AUDIO_AGGREGATE_DEVICE_PROPERTY_COMPOSITION: u32 = 202;
 
 // Audio process properties
-pub const kAudioProcessPropertyIsRunning: u32 = 300;
-pub const kAudioProcessPropertyBundleID: u32 = 301;
-pub const kAudioProcessPropertyPID: u32 = 302;
+/// Maps to `kAudioProcessPropertyIsRunning` - process running status property
+pub const AUDIO_PROCESS_PROPERTY_IS_RUNNING: u32 = 300;
+/// Maps to `kAudioProcessPropertyBundleID` - process bundle ID property
+pub const AUDIO_PROCESS_PROPERTY_BUNDLE_ID: u32 = 301;
+/// Maps to `kAudioProcessPropertyPID` - process PID property
+pub const AUDIO_PROCESS_PROPERTY_PID: u32 = 302;
 
 // Audio stream properties
-pub const kAudioStreamPropertyDirection: u32 = 400;
-pub const kAudioStreamPropertyVirtualFormat: u32 = 401;
+/// Maps to `kAudioStreamPropertyDirection` - stream direction property
+pub const AUDIO_STREAM_PROPERTY_DIRECTION: u32 = 400;
+/// Maps to `kAudioStreamPropertyVirtualFormat` - virtual format property
+pub const AUDIO_STREAM_PROPERTY_VIRTUAL_FORMAT: u32 = 401;
 
 // Status codes
-pub const noErr: OSStatus = 0;
-pub const kAudioHardwareNoError: OSStatus = 0;
+/// Maps to `noErr` - no error status
+pub const NO_ERR: OSStatus = 0;
+/// Maps to `kAudioHardwareNoError` - no hardware error status
+pub const AUDIO_HARDWARE_NO_ERROR: OSStatus = 0;
 
 // Audio format constants
-pub const kAudioFormatLinearPCM: u32 = 1819304813;
-pub const kAudioFormatFlagIsFloat: u32 = 1;
-pub const kAudioFormatFlagIsPacked: u32 = 2;
-pub const kAudioFormatFlagIsSignedInteger: u32 = 4;
+/// Maps to `kAudioFormatLinearPCM` - linear PCM format
+pub const AUDIO_FORMAT_LINEAR_PCM: u32 = 1819304813;
+/// Maps to `kAudioFormatFlagIsFloat` - float format flag
+pub const AUDIO_FORMAT_FLAG_IS_FLOAT: u32 = 1;
+/// Maps to `kAudioFormatFlagIsPacked` - packed format flag
+pub const AUDIO_FORMAT_FLAG_IS_PACKED: u32 = 2;
+/// Maps to `kAudioFormatFlagIsSignedInteger` - signed integer format flag
+pub const AUDIO_FORMAT_FLAG_IS_SIGNED_INTEGER: u32 = 4;
 
 // Stream direction
-pub const kAudioStreamDirectionOutput: u32 = 0;
-pub const kAudioStreamDirectionInput: u32 = 1;
+/// Maps to `kAudioStreamDirectionOutput` - output stream direction
+pub const AUDIO_STREAM_DIRECTION_OUTPUT: u32 = 0;
+/// Maps to `kAudioStreamDirectionInput` - input stream direction
+pub const AUDIO_STREAM_DIRECTION_INPUT: u32 = 1;
 
 // Property address structure
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct AudioObjectPropertyAddress {
-    pub mSelector: u32,
-    pub mScope: u32,
-    pub mElement: u32,
+    /// Maps to `mSelector` - property selector
+    pub selector: u32,
+    /// Maps to `mScope` - property scope
+    pub scope: u32,
+    /// Maps to `mElement` - property element
+    pub element: u32,
 }
 
 // Audio stream basic description
 #[repr(C)]
 pub struct AudioStreamBasicDescription {
-    pub mSampleRate: f64,
-    pub mFormatID: u32,
-    pub mFormatFlags: u32,
-    pub mBytesPerPacket: u32,
-    pub mFramesPerPacket: u32,
-    pub mBytesPerFrame: u32,
-    pub mChannelsPerFrame: u32,
-    pub mBitsPerChannel: u32,
-    pub mReserved: u32,
+    /// Maps to `mSampleRate` - sample rate in Hz
+    pub sample_rate: f64,
+    /// Maps to `mFormatID` - format identifier
+    pub format_id: u32,
+    /// Maps to `mFormatFlags` - format flags
+    pub format_flags: u32,
+    /// Maps to `mBytesPerPacket` - bytes per packet
+    pub bytes_per_packet: u32,
+    /// Maps to `mFramesPerPacket` - frames per packet
+    pub frames_per_packet: u32,
+    /// Maps to `mBytesPerFrame` - bytes per frame
+    pub bytes_per_frame: u32,
+    /// Maps to `mChannelsPerFrame` - channels per frame
+    pub channels_per_frame: u32,
+    /// Maps to `mBitsPerChannel` - bits per channel
+    pub bits_per_channel: u32,
+    /// Maps to `mReserved` - reserved field
+    pub reserved: u32,
 }
 
 // Audio buffer structure
 #[repr(C)]
 pub struct AudioBuffer {
-    pub mNumberChannels: u32,
-    pub mDataByteSize: u32,
-    pub mData: *mut c_void,
+    /// Maps to `mNumberChannels` - number of channels
+    pub number_channels: u32,
+    /// Maps to `mDataByteSize` - data byte size
+    pub data_byte_size: u32,
+    /// Maps to `mData` - data pointer
+    pub data: *mut c_void,
 }
 
 // Audio buffer list structure
 #[repr(C)]
 pub struct AudioBufferList {
-    pub mNumberBuffers: u32,
-    pub mBuffers: [AudioBuffer; 1], // Variable length array
+    /// Maps to `mNumberBuffers` - number of buffers
+    pub number_buffers: u32,
+    /// Maps to `mBuffers` - buffer array
+    pub buffers: [AudioBuffer; 1], // Variable length array
 }
 
 // Audio time stamp
 #[repr(C)]
 pub struct AudioTimeStamp {
-    pub mSampleTime: f64,
-    pub mHostTime: u64,
-    pub mRateScalar: f64,
-    pub mWordClockTime: u64,
-    pub mSMPTETime: [u8; 16],
-    pub mFlags: u32,
-    pub mReserved: u32,
+    /// Maps to `mSampleTime` - sample time
+    pub sample_time: f64,
+    /// Maps to `mHostTime` - host time
+    pub host_time: u64,
+    /// Maps to `mRateScalar` - rate scalar
+    pub rate_scalar: f64,
+    /// Maps to `mWordClockTime` - word clock time
+    pub word_clock_time: u64,
+    /// Maps to `mSMPTETime` - SMPTE time
+    pub smpte_time: [u8; 16],
+    /// Maps to `mFlags` - flags
+    pub flags: u32,
+    /// Maps to `mReserved` - reserved field
+    pub reserved: u32,
 }
 
 // Audio device IO proc ID
 pub type AudioDeviceIOProcID = *mut c_void;
 
 // Audio device IO proc callback
+/// Maps to Core Audio's AudioDeviceIOProc callback type
+/// Parameter names follow Rust snake_case convention while maintaining FFI compatibility
 pub type AudioDeviceIOProc = extern "C" fn(
-    inDevice: AudioObjectID,
-    inNow: *const AudioTimeStamp,
-    inInputData: *const AudioBufferList,
-    inInputTime: *const AudioTimeStamp,
-    outOutputData: *mut AudioBufferList,
-    outOutputTime: *const AudioTimeStamp,
-    inClientData: *mut c_void,
+    in_device: AudioObjectID,
+    in_now: *const AudioTimeStamp,
+    in_input_data: *const AudioBufferList,
+    in_input_time: *const AudioTimeStamp,
+    out_output_data: *mut AudioBufferList,
+    out_output_time: *const AudioTimeStamp,
+    in_client_data: *mut c_void,
 ) -> OSStatus;
 
 // CATapDescription structure (simplified)
@@ -152,17 +262,24 @@ pub struct CATapDescription {
 }
 
 // CATapMuteBehavior enum
-pub const kCATapMuteBehaviorUnmuted: u32 = 0;
-pub const kCATapMuteBehaviorMuted: u32 = 1;
-pub const kCATapMuteBehaviorMutedWithFeedback: u32 = 2;
+/// Maps to `kCATapMuteBehaviorUnmuted` - unmuted tap behavior
+pub const CA_TAP_MUTE_BEHAVIOR_UNMUTED: u32 = 0;
+/// Maps to `kCATapMuteBehaviorMuted` - muted tap behavior
+pub const CA_TAP_MUTE_BEHAVIOR_MUTED: u32 = 1;
+/// Maps to `kCATapMuteBehaviorMutedWithFeedback` - muted with feedback tap behavior
+pub const CA_TAP_MUTE_BEHAVIOR_MUTED_WITH_FEEDBACK: u32 = 2;
 
 // Aggregate device composition keys
-pub const kAudioAggregateDeviceIsPrivateKey: &str = "isPrivate";
-pub const kAudioAggregateDeviceTapAutoStartKey: &str = "tapAutoStart";
+/// Maps to `kAudioAggregateDeviceIsPrivateKey` - aggregate device private key
+pub const AUDIO_AGGREGATE_DEVICE_IS_PRIVATE_KEY: &str = "isPrivate";
+/// Maps to `kAudioAggregateDeviceTapAutoStartKey` - aggregate device tap auto-start key
+pub const AUDIO_AGGREGATE_DEVICE_TAP_AUTO_START_KEY: &str = "tapAutoStart";
 
 // Additional Core Audio constants for aggregate device creation
-pub const kAudioObjectPropertyName: u32 = 2;
-pub const kAudioObjectPropertyManufacturer: u32 = 3;
+/// Maps to `kAudioObjectPropertyName` - object name property
+pub const AUDIO_OBJECT_PROPERTY_NAME: u32 = 2;
+/// Maps to `kAudioObjectPropertyManufacturer` - object manufacturer property
+pub const AUDIO_OBJECT_PROPERTY_MANUFACTURER: u32 = 3;
 
 // Core Foundation types (simplified)
 pub type CFStringRef = *mut std::ffi::c_void;
@@ -239,19 +356,21 @@ extern "C" {
 }
 
 // Property listener callback
+/// Maps to Core Audio's AudioObjectPropertyListenerProc callback type
+/// Parameter names follow Rust snake_case convention while maintaining FFI compatibility
 pub type AudioObjectPropertyListenerProc = extern "C" fn(
-    inObjectID: AudioObjectID,
-    inNumberAddresses: u32,
-    inAddresses: *const AudioObjectPropertyAddress,
-    inClientData: *mut c_void,
+    in_object_id: AudioObjectID,
+    in_number_addresses: u32,
+    in_addresses: *const AudioObjectPropertyAddress,
+    in_client_data: *mut c_void,
 ) -> OSStatus;
 
 // Helper functions for working with Core Audio
 pub fn create_property_address(selector: u32, scope: u32, element: u32) -> AudioObjectPropertyAddress {
     AudioObjectPropertyAddress {
-        mSelector: selector,
-        mScope: scope,
-        mElement: element,
+        selector,
+        scope,
+        element,
     }
 }
 
@@ -270,7 +389,7 @@ pub fn get_property_data_size(
         )
     };
     
-    if status == noErr {
+    if status == NO_ERR {
         Ok(size)
     } else {
         Err(status)
@@ -295,7 +414,7 @@ pub fn get_property_data<T>(
         )
     };
     
-    if status == noErr {
+    if status == NO_ERR {
         Ok(data)
     } else {
         Err(status)
@@ -320,7 +439,7 @@ pub fn set_property_data<T>(
         )
     };
     
-    if status == noErr {
+    if status == NO_ERR {
         Ok(())
     } else {
         Err(status)

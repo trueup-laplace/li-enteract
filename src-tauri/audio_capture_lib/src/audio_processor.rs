@@ -197,11 +197,28 @@ pub mod format_converter {
     
     impl FormatConverter {
         /// Convert raw bytes to float32 samples
+        /// 
+        /// # TODO: Unsigned Integer Support
+        /// 
+        /// This function currently assumes all integer audio data is signed (i16, i32).
+        /// Core Audio supports both signed and unsigned integer formats, and some audio
+        /// hardware (especially legacy systems) may output unsigned PCM data (u8, u16).
+        /// 
+        /// When implementing unsigned support, consider:
+        /// - 8-bit unsigned: range 0-255, center at 128
+        /// - 16-bit unsigned: range 0-65535, center at 32768
+        /// - Conversion: `signed = unsigned - center_value`
+        /// - Core Audio format flags: `AUDIO_FORMAT_FLAG_IS_SIGNED_INTEGER`
+        /// 
+        /// This is important for compatibility with:
+        /// - Legacy audio hardware
+        /// - Embedded audio systems
+        /// - Certain audio file formats
+        /// - Future audio sources that may use unsigned formats
         pub fn bytes_to_float32(
             bytes: &[u8],
             bits_per_sample: u16,
             channels: u16,
-            is_signed: bool,
             is_little_endian: bool,
         ) -> AudioCaptureResult<Vec<f32>> {
             match bits_per_sample {
@@ -248,11 +265,19 @@ pub mod format_converter {
         }
         
         /// Convert float32 samples to raw bytes
+        /// 
+        /// # TODO: Unsigned Integer Support
+        /// 
+        /// This function currently always outputs signed integer formats (i16, i32).
+        /// When implementing unsigned support, consider:
+        /// - 8-bit unsigned: range 0-255, center at 128
+        /// - 16-bit unsigned: range 0-65535, center at 32768
+        /// - Conversion: `unsigned = signed + center_value`
+        /// - Core Audio format flags: `AUDIO_FORMAT_FLAG_IS_SIGNED_INTEGER`
         pub fn float32_to_bytes(
             samples: &[f32],
             bits_per_sample: u16,
             channels: u16,
-            is_signed: bool,
             is_little_endian: bool,
         ) -> AudioCaptureResult<Vec<u8>> {
             let mut bytes = Vec::new();

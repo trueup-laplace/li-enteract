@@ -20,21 +20,21 @@ impl AggregateDevice {
     /// Create a new aggregate device
     pub fn new(device_id: AudioAggregateDeviceID) -> AudioCaptureResult<Self> {
         let device_list_address = create_property_address(
-            kAudioAggregateDevicePropertyFullSubDeviceList,
-            kAudioObjectPropertyScopeGlobal,
-            kAudioObjectPropertyElementMain,
+            AUDIO_AGGREGATE_DEVICE_PROPERTY_FULL_SUB_DEVICE_LIST,
+            AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+            AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
         );
         
         let tap_list_address = create_property_address(
-            kAudioAggregateDevicePropertyTapList,
-            kAudioObjectPropertyScopeGlobal,
-            kAudioObjectPropertyElementMain,
+            AUDIO_AGGREGATE_DEVICE_PROPERTY_TAP_LIST,
+            AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+            AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
         );
         
         let composition_address = create_property_address(
-            kAudioAggregateDevicePropertyComposition,
-            kAudioObjectPropertyScopeGlobal,
-            kAudioObjectPropertyElementMain,
+            AUDIO_AGGREGATE_DEVICE_PROPERTY_COMPOSITION,
+            AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+            AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
         );
         
         let mut device = Self {
@@ -125,9 +125,9 @@ impl AggregateDevice {
     /// Get device name from Core Audio
     fn get_device_name_internal(&self) -> AudioCaptureResult<String> {
         let property_address = create_property_address(
-            kAudioObjectPropertyName,
-            kAudioObjectPropertyScopeGlobal,
-            kAudioObjectPropertyElementMain,
+            AUDIO_OBJECT_PROPERTY_NAME,
+            AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+            AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
         );
         
         let mut property_size = std::mem::size_of::<CFStringRef>() as u32;
@@ -144,7 +144,7 @@ impl AggregateDevice {
             )
         };
         
-        if status != noErr {
+        if status != NO_ERR {
             return Err(crate::types::AudioCaptureError::CoreAudioError(
                 format!("Failed to get device name: {}", status)
             ));
@@ -169,7 +169,7 @@ impl AggregateDevice {
             )
         };
         
-        if status != noErr {
+        if status != NO_ERR {
             return Err(crate::types::AudioCaptureError::CoreAudioError(
                 format!("Failed to get device list size: {}", status)
             ));
@@ -192,7 +192,7 @@ impl AggregateDevice {
             )
         };
         
-        if status != noErr {
+        if status != NO_ERR {
             return Err(crate::types::AudioCaptureError::CoreAudioError(
                 format!("Failed to get device list: {}", status)
             ));
@@ -228,7 +228,7 @@ impl AggregateDevice {
             )
         };
         
-        if status != noErr {
+        if status != NO_ERR {
             return Err(crate::types::AudioCaptureError::CoreAudioError(
                 format!("Failed to get tap list size: {}", status)
             ));
@@ -251,7 +251,7 @@ impl AggregateDevice {
             )
         };
         
-        if status != noErr {
+        if status != NO_ERR {
             return Err(crate::types::AudioCaptureError::CoreAudioError(
                 format!("Failed to get tap list: {}", status)
             ));
@@ -287,7 +287,7 @@ impl AggregateDevice {
             )
         };
         
-        if status != noErr {
+        if status != NO_ERR {
             return Err(crate::types::AudioCaptureError::CoreAudioError(
                 format!("Failed to get composition size: {}", status)
             ));
@@ -309,7 +309,7 @@ impl AggregateDevice {
             )
         };
         
-        if status != noErr {
+        if status != NO_ERR {
             return Err(crate::types::AudioCaptureError::CoreAudioError(
                 format!("Failed to get composition: {}", status)
             ));
@@ -339,7 +339,7 @@ impl AggregateDevice {
             )
         };
         
-        if status != noErr {
+        if status != NO_ERR {
             return Err(crate::types::AudioCaptureError::CoreAudioError(
                 format!("Failed to get list size: {}", status)
             ));
@@ -357,7 +357,7 @@ impl AggregateDevice {
             )
         };
         
-        if status != noErr {
+        if status != NO_ERR {
             return Err(crate::types::AudioCaptureError::CoreAudioError(
                 format!("Failed to get list: {}", status)
             ));
@@ -399,7 +399,7 @@ impl AggregateDevice {
             )
         };
         
-        if status != noErr {
+        if status != NO_ERR {
             return Err(crate::types::AudioCaptureError::CoreAudioError(
                 format!("Failed to set updated list: {}", status)
             ));

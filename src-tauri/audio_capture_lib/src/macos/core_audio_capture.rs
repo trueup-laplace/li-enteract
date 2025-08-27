@@ -1,12 +1,10 @@
 //! Core Audio capture engine implementation
 //! This module will implement the actual audio capture functionality using Core Audio
 
-use crate::types::{AudioCaptureResult, CaptureConfig, AudioChunk, TranscriptionResult};
+use crate::types::{AudioCaptureResult, CaptureConfig};
 use crate::capture_engine::{CaptureEngine, AudioChunkCallback, TranscriptionCallback};
 use crate::macos::core_audio_bindings::*;
 use async_trait::async_trait;
-use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc;
 
 /// Core Audio capture engine for macOS
 pub struct CoreAudioCaptureEngine {
@@ -151,5 +149,5 @@ extern "C" fn audio_io_proc(
     // 3. Calling the audio callback with the processed data
     // 4. Handling transcription if enabled
     
-    noErr
+    NO_ERR
 }

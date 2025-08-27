@@ -3,7 +3,6 @@
 use crate::types::{AudioCaptureResult, CaptureConfig, AudioChunk, TranscriptionResult};
 use async_trait::async_trait;
 use tokio::sync::mpsc;
-use std::sync::Arc;
 
 /// Callback for receiving audio chunks
 pub type AudioChunkCallback = Box<dyn Fn(AudioChunk) + Send + Sync>;

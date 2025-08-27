@@ -9,9 +9,9 @@ use std::ptr;
 /// Helper function to create a property address
 fn create_property_address(selector: u32, scope: u32, element: u32) -> AudioObjectPropertyAddress {
     AudioObjectPropertyAddress {
-        mSelector: selector,
-        mScope: scope,
-        mElement: element,
+        selector,
+        scope,
+        element,
     }
 }
 
@@ -43,14 +43,14 @@ impl CoreAudioDeviceEnumerator {
     pub fn get_audio_device_ids(&self) -> AudioCaptureResult<Vec<AudioObjectID>> {
         let mut property_size = 0u32;
         let property_address = create_property_address(
-            kAudioHardwarePropertyDevices,
-            kAudioObjectPropertyScopeGlobal,
-            kAudioObjectPropertyElementMain,
+            AUDIO_HARDWARE_PROPERTY_DEVICES,
+            AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+            AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
         );
         
         let status = unsafe {
             AudioObjectGetPropertyDataSize(
-                kAudioObjectSystemObject,
+                AUDIO_OBJECT_SYSTEM_OBJECT,
                 &property_address,
                 0,
                 ptr::null(),
@@ -74,7 +74,7 @@ impl CoreAudioDeviceEnumerator {
         
         let status = unsafe {
             AudioObjectGetPropertyData(
-                kAudioObjectSystemObject,
+                AUDIO_OBJECT_SYSTEM_OBJECT,
                 &property_address,
                 0,
                 ptr::null(),
@@ -96,9 +96,9 @@ impl CoreAudioDeviceEnumerator {
     fn get_device_name(&self, device_id: AudioObjectID) -> AudioCaptureResult<String> {
         let mut property_size = std::mem::size_of::<*mut std::ffi::c_void>() as u32;
         let property_address = create_property_address(
-            kAudioDevicePropertyDeviceNameCFString,
-            kAudioObjectPropertyScopeGlobal,
-            kAudioObjectPropertyElementMain,
+            AUDIO_DEVICE_PROPERTY_DEVICE_NAME_CF_STRING,
+            AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+            AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
         );
         
         let mut name_ref: *mut std::ffi::c_void = ptr::null_mut();
@@ -134,9 +134,9 @@ impl CoreAudioDeviceEnumerator {
     fn get_device_uid(&self, device_id: AudioObjectID) -> AudioCaptureResult<String> {
         let mut property_size = std::mem::size_of::<*mut std::ffi::c_void>() as u32;
         let property_address = create_property_address(
-            kAudioDevicePropertyDeviceUID,
-            kAudioObjectPropertyScopeGlobal,
-            kAudioObjectPropertyElementMain,
+            AUDIO_DEVICE_PROPERTY_DEVICE_UID,
+            AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+            AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
         );
         
         let mut uid_ref: *mut std::ffi::c_void = ptr::null_mut();
@@ -172,9 +172,9 @@ impl CoreAudioDeviceEnumerator {
     fn has_output_streams(&self, device_id: AudioObjectID) -> AudioCaptureResult<bool> {
         let mut property_size = 0u32;
         let property_address = AudioObjectPropertyAddress {
-            mSelector: kAudioDevicePropertyStreams,
-            mScope: kAudioObjectPropertyScopeOutput,
-            mElement: kAudioObjectPropertyElementMain,
+            selector: AUDIO_DEVICE_PROPERTY_STREAMS,
+            scope: AUDIO_OBJECT_PROPERTY_SCOPE_OUTPUT,
+            element: AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
         };
         
         let status = unsafe {
@@ -198,9 +198,9 @@ impl CoreAudioDeviceEnumerator {
     fn has_input_streams(&self, device_id: AudioObjectID) -> AudioCaptureResult<bool> {
         let mut property_size = 0u32;
         let property_address = AudioObjectPropertyAddress {
-            mSelector: kAudioDevicePropertyStreams,
-            mScope: kAudioObjectPropertyScopeInput,
-            mElement: kAudioObjectPropertyElementMain,
+            selector: AUDIO_DEVICE_PROPERTY_STREAMS,
+            scope: AUDIO_OBJECT_PROPERTY_SCOPE_INPUT,
+            element: AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
         };
         
         let status = unsafe {
@@ -225,9 +225,9 @@ impl CoreAudioDeviceEnumerator {
         let mut sample_rate: f64 = 0.0;
         let mut property_size = std::mem::size_of::<f64>() as u32;
         let property_address = AudioObjectPropertyAddress {
-            mSelector: kAudioDevicePropertyNominalSampleRate,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain,
+            selector: AUDIO_DEVICE_PROPERTY_NOMINAL_SAMPLE_RATE,
+            scope: AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+            element: AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
         };
         
         let status = unsafe {
@@ -253,9 +253,9 @@ impl CoreAudioDeviceEnumerator {
         let mut channels: u32 = 0;
         let mut property_size = std::mem::size_of::<u32>() as u32;
         let property_address = AudioObjectPropertyAddress {
-            mSelector: kAudioDevicePropertyStreamConfiguration,
-            mScope: kAudioObjectPropertyScopeOutput,
-            mElement: kAudioObjectPropertyElementMain,
+            selector: AUDIO_DEVICE_PROPERTY_STREAM_CONFIGURATION,
+            scope: AUDIO_OBJECT_PROPERTY_SCOPE_OUTPUT,
+            element: AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
         };
         
         let status = unsafe {
@@ -279,22 +279,22 @@ impl CoreAudioDeviceEnumerator {
     /// Check if device is default
     fn is_default_device(&self, device_id: AudioObjectID, device_type: DeviceType) -> AudioCaptureResult<bool> {
         let property_selector = match device_type {
-            DeviceType::Render => kAudioHardwarePropertyDefaultOutputDevice,
-            DeviceType::Capture => kAudioHardwarePropertyDefaultInputDevice,
+            DeviceType::Render => AUDIO_HARDWARE_PROPERTY_DEFAULT_OUTPUT_DEVICE,
+            DeviceType::Capture => AUDIO_HARDWARE_PROPERTY_DEFAULT_INPUT_DEVICE,
             DeviceType::Aggregate => return Ok(false),
         };
         
         let mut default_device_id: AudioObjectID = 0;
         let mut property_size = std::mem::size_of::<AudioObjectID>() as u32;
         let property_address = AudioObjectPropertyAddress {
-            mSelector: property_selector,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain,
+            selector: property_selector,
+            scope: AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+            element: AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
         };
         
         let status = unsafe {
             AudioObjectGetPropertyData(
-                kAudioObjectSystemObject,
+                AUDIO_OBJECT_SYSTEM_OBJECT,
                 &property_address,
                 0,
                 ptr::null(),
@@ -315,9 +315,9 @@ impl CoreAudioDeviceEnumerator {
         let mut transport_type: u32 = 0;
         let mut property_size = std::mem::size_of::<u32>() as u32;
         let property_address = AudioObjectPropertyAddress {
-            mSelector: kAudioDevicePropertyTransportType,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain,
+            selector: AUDIO_DEVICE_PROPERTY_TRANSPORT_TYPE,
+            scope: AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+            element: AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
         };
         
         let status = unsafe {
@@ -347,7 +347,7 @@ impl CoreAudioDeviceEnumerator {
         
         // Check transport type to determine if this is an aggregate device
         let transport_type = self.get_device_transport_type(device_id).unwrap_or(0);
-        let is_aggregate = transport_type == kAudioDeviceTransportTypeAggregate;
+        let is_aggregate = transport_type == AUDIO_DEVICE_TRANSPORT_TYPE_AGGREGATE;
         
         // For now, let's include all devices and determine type based on transport type
         // This is similar to how the Swift code works

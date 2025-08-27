@@ -61,15 +61,15 @@ impl AudioTap {
         
         // Return a default format for now
         Ok(AudioStreamBasicDescription {
-            mSampleRate: 48000.0,
-            mFormatID: kAudioFormatLinearPCM,
-            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
-            mBytesPerPacket: 4,
-            mFramesPerPacket: 1,
-            mBytesPerFrame: 4,
-            mChannelsPerFrame: 1,
-            mBitsPerChannel: 32,
-            mReserved: 0,
+            sample_rate: 48000.0,
+            format_id: AUDIO_FORMAT_LINEAR_PCM,
+            format_flags: AUDIO_FORMAT_FLAG_IS_FLOAT | AUDIO_FORMAT_FLAG_IS_PACKED,
+            bytes_per_packet: 4,
+            frames_per_packet: 1,
+            bytes_per_frame: 4,
+            channels_per_frame: 1,
+            bits_per_channel: 32,
+            reserved: 0,
         })
     }
 }
