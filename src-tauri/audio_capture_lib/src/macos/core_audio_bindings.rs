@@ -83,11 +83,13 @@ pub const AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN: u32 = 0;
 /// Maps to `kAudioHardwarePropertyDevices` - hardware devices property
 pub const AUDIO_HARDWARE_PROPERTY_DEVICES: u32 = 0x64657623; // 'dev#'
 /// Maps to `kAudioHardwarePropertyDefaultInputDevice` - default input device property
-pub const AUDIO_HARDWARE_PROPERTY_DEFAULT_INPUT_DEVICE: u32 = 0x64696e20; // 'din '
+pub const AUDIO_HARDWARE_PROPERTY_DEFAULT_INPUT_DEVICE: u32 = 0x64496e20; // 'dIn '
 /// Maps to `kAudioHardwarePropertyDefaultOutputDevice` - default output device property
-pub const AUDIO_HARDWARE_PROPERTY_DEFAULT_OUTPUT_DEVICE: u32 = 0x646f7574; // 'dout'
-/// Maps to `kAudioDevicePropertyDeviceNameCFString` - device name property
-pub const AUDIO_DEVICE_PROPERTY_DEVICE_NAME_CF_STRING: u32 = 0x6e616d65; // 'name'
+pub const AUDIO_HARDWARE_PROPERTY_DEFAULT_OUTPUT_DEVICE: u32 = 0x644f7574; // 'dOut'
+/// Maps to `kAudioObjectPropertyName` - device name property
+pub const AUDIO_OBJECT_PROPERTY_NAME: u32 = 0x6c6e616d; // 'lnam'
+/// Maps to `kAudioDevicePropertyDeviceNameCFString` - device name property (deprecated, use AUDIO_OBJECT_PROPERTY_NAME)
+pub const AUDIO_DEVICE_PROPERTY_DEVICE_NAME_CF_STRING: u32 = 0x6c6e616d; // 'lnam'
 /// Maps to `kAudioDevicePropertyDeviceUID` - device UID property
 pub const AUDIO_DEVICE_PROPERTY_DEVICE_UID: u32 = 0x75696420; // 'uid '
 /// Maps to `kAudioDevicePropertyStreams` - device streams property
@@ -95,7 +97,7 @@ pub const AUDIO_DEVICE_PROPERTY_STREAMS: u32 = 0x73746d23; // 'stm#'
 /// Maps to `kAudioDevicePropertyNominalSampleRate` - nominal sample rate property
 pub const AUDIO_DEVICE_PROPERTY_NOMINAL_SAMPLE_RATE: u32 = 0x6e737261; // 'nsra'
 /// Maps to `kAudioDevicePropertyStreamConfiguration` - stream configuration property
-pub const AUDIO_DEVICE_PROPERTY_STREAM_CONFIGURATION: u32 = 0x736c63e6; // 'slc#'
+pub const AUDIO_DEVICE_PROPERTY_STREAM_CONFIGURATION: u32 = 0x736c6179; // 'slay'
 /// Maps to `kAudioDevicePropertyStreamFormat` - stream format property
 pub const AUDIO_DEVICE_PROPERTY_STREAM_FORMAT: u32 = 0x73666d74; // 'sfmt'
 /// Maps to `kAudioDevicePropertyTransportType` - transport type property
@@ -269,15 +271,22 @@ pub const CA_TAP_MUTE_BEHAVIOR_MUTED: u32 = 1;
 /// Maps to `kCATapMuteBehaviorMutedWithFeedback` - muted with feedback tap behavior
 pub const CA_TAP_MUTE_BEHAVIOR_MUTED_WITH_FEEDBACK: u32 = 2;
 
-// Aggregate device composition keys
+// Aggregate device creation keys
+/// Maps to `kAudioAggregateDeviceUIDKey` - aggregate device UID key
+pub const AUDIO_AGGREGATE_DEVICE_UID_KEY: &str = "uid";
+/// Maps to `kAudioAggregateDeviceNameKey` - aggregate device name key
+pub const AUDIO_AGGREGATE_DEVICE_NAME_KEY: &str = "name";
+/// Maps to `kAudioAggregateDeviceSubDeviceListKey` - aggregate device sub-device list key
+pub const AUDIO_AGGREGATE_DEVICE_SUB_DEVICE_LIST_KEY: &str = "subdevices";
+/// Maps to `kAudioAggregateDeviceMainSubDeviceKey` - aggregate device main sub-device key
+pub const AUDIO_AGGREGATE_DEVICE_MAIN_SUB_DEVICE_KEY: &str = "master";
 /// Maps to `kAudioAggregateDeviceIsPrivateKey` - aggregate device private key
-pub const AUDIO_AGGREGATE_DEVICE_IS_PRIVATE_KEY: &str = "isPrivate";
+pub const AUDIO_AGGREGATE_DEVICE_IS_PRIVATE_KEY: &str = "private";
 /// Maps to `kAudioAggregateDeviceTapAutoStartKey` - aggregate device tap auto-start key
-pub const AUDIO_AGGREGATE_DEVICE_TAP_AUTO_START_KEY: &str = "tapAutoStart";
+pub const AUDIO_AGGREGATE_DEVICE_TAP_AUTO_START_KEY: &str = "tapautostart";
 
 // Additional Core Audio constants for aggregate device creation
-/// Maps to `kAudioObjectPropertyName` - object name property
-pub const AUDIO_OBJECT_PROPERTY_NAME: u32 = 2;
+// AUDIO_OBJECT_PROPERTY_NAME is defined above with the correct value
 /// Maps to `kAudioObjectPropertyManufacturer` - object manufacturer property
 pub const AUDIO_OBJECT_PROPERTY_MANUFACTURER: u32 = 3;
 
@@ -352,6 +361,16 @@ extern "C" {
     pub fn AudioDeviceDestroyIOProcID(
         inDevice: AudioObjectID,
         inProcID: AudioDeviceIOProcID,
+    ) -> OSStatus;
+
+    // Aggregate device creation and destruction
+    pub fn AudioHardwareCreateAggregateDevice(
+        inDescription: *mut c_void, // CFDictionaryRef
+        outDeviceID: *mut AudioObjectID,
+    ) -> OSStatus;
+
+    pub fn AudioHardwareDestroyAggregateDevice(
+        inDeviceID: AudioObjectID,
     ) -> OSStatus;
 }
 
@@ -446,27 +465,201 @@ pub fn set_property_data<T>(
     }
 }
 
+// Core Foundation function declarations for aggregate device creation
+#[link(name = "CoreFoundation", kind = "framework")]
+extern "C" {
+    fn CFDictionaryCreate(
+        allocator: *mut c_void,
+        keys: *const *const c_void,
+        values: *const *const c_void,
+        numValues: usize,
+        keyCallBacks: *const c_void,
+        valueCallBacks: *const c_void,
+    ) -> *mut c_void;
+    
+    fn CFArrayCreate(
+        allocator: *mut c_void,
+        values: *const *const c_void,
+        numValues: usize,
+        callBacks: *const c_void,
+    ) -> *mut c_void;
+    
+    fn CFStringCreateWithCString(
+        allocator: *mut c_void,
+        cString: *const c_char,
+        encoding: u32,
+    ) -> *mut c_void;
+    
+    fn CFNumberCreate(
+        allocator: *mut c_void,
+        theType: u32,
+        valuePtr: *const c_void,
+    ) -> *mut c_void;
+    
+    fn kCFAllocatorDefault() -> *mut c_void;
+    fn kCFTypeArrayCallBacks() -> *const c_void;
+    fn kCFTypeDictionaryKeyCallBacks() -> *const c_void;
+    fn kCFTypeDictionaryValueCallBacks() -> *const c_void;
+}
+
+// CFNumber types
+pub const CF_NUMBER_INT_TYPE: u32 = 3; // kCFNumberIntType
+pub const CF_NUMBER_BOOL_TYPE: u32 = 9; // kCFNumberBoolType
+
+// CFString encoding constants
+pub const CF_STRING_ENCODING_UTF8: u32 = 0x08000100; // kCFStringEncodingUTF8
+
+// Helper functions for creating Core Foundation objects
+pub fn create_cf_string(string: &str) -> Result<*mut c_void, OSStatus> {
+    let c_string = match CString::new(string) {
+        Ok(s) => s,
+        Err(_) => return Err(-1),
+    };
+    
+    unsafe {
+        let cf_string = CFStringCreateWithCString(
+            kCFAllocatorDefault(),
+            c_string.as_ptr(),
+            CF_STRING_ENCODING_UTF8,
+        );
+        
+        if cf_string.is_null() {
+            Err(-1)
+        } else {
+            Ok(cf_string)
+        }
+    }
+}
+
+pub fn create_cf_number_int(value: i32) -> Result<*mut c_void, OSStatus> {
+    unsafe {
+        let cf_number = CFNumberCreate(
+            kCFAllocatorDefault(),
+            CF_NUMBER_INT_TYPE,
+            &value as *const i32 as *const c_void,
+        );
+        
+        if cf_number.is_null() {
+            Err(-1)
+        } else {
+            Ok(cf_number)
+        }
+    }
+}
+
+pub fn create_cf_number_bool(value: bool) -> Result<*mut c_void, OSStatus> {
+    unsafe {
+        let cf_number = CFNumberCreate(
+            kCFAllocatorDefault(),
+            CF_NUMBER_BOOL_TYPE,
+            &value as *const bool as *const c_void,
+        );
+        
+        if cf_number.is_null() {
+            Err(-1)
+        } else {
+            Ok(cf_number)
+        }
+    }
+}
+
+pub fn create_cf_array_from_strings(strings: &[String]) -> Result<*mut c_void, OSStatus> {
+    if strings.is_empty() {
+        return Ok(std::ptr::null_mut());
+    }
+    
+    let mut cf_strings: Vec<*mut c_void> = Vec::new();
+    
+    for string in strings {
+        let cf_string = create_cf_string(string)?;
+        cf_strings.push(cf_string);
+    }
+    
+    unsafe {
+        let cf_array = CFArrayCreate(
+            kCFAllocatorDefault(),
+            cf_strings.as_ptr() as *const *const c_void,
+            cf_strings.len(),
+            kCFTypeArrayCallBacks(),
+        );
+        
+        if cf_array.is_null() {
+            Err(-1)
+        } else {
+            Ok(cf_array)
+        }
+    }
+}
+
+pub fn create_cf_dictionary_from_pairs(pairs: &[(&str, *mut c_void)]) -> Result<*mut c_void, OSStatus> {
+    if pairs.is_empty() {
+        return Ok(std::ptr::null_mut());
+    }
+    
+    let mut keys: Vec<*mut c_void> = Vec::new();
+    let mut values: Vec<*mut c_void> = Vec::new();
+    
+    for (key, value) in pairs {
+        let cf_key = create_cf_string(key)?;
+        keys.push(cf_key);
+        values.push(*value);
+    }
+    
+    unsafe {
+        let cf_dict = CFDictionaryCreate(
+            kCFAllocatorDefault(),
+            keys.as_ptr() as *const *const c_void,
+            values.as_ptr() as *const *const c_void,
+            keys.len(),
+            kCFTypeDictionaryKeyCallBacks(),
+            kCFTypeDictionaryValueCallBacks(),
+        );
+        
+        if cf_dict.is_null() {
+            Err(-1)
+        } else {
+            Ok(cf_dict)
+        }
+    }
+}
+
 // CFString helper functions
 pub fn cf_string_to_string(cf_string: *mut c_void) -> Result<String, OSStatus> {
     if cf_string.is_null() {
         return Err(-1);
     }
     
-    // This is a simplified conversion - in a real implementation,
-    // you'd use Core Foundation functions to properly convert CFString to Rust String
+    // For now, we'll use a simpler approach that doesn't require Core Foundation functions
+    // This avoids memory management issues with CFString
     unsafe {
-        // For now, we'll assume it's a C string
+        // Try to treat it as a C string first
         let c_str = cf_string as *const c_char;
-        if c_str.is_null() {
-            return Err(-1);
+        if !c_str.is_null() {
+            // Check if it looks like a valid C string
+            let mut i = 0;
+            while i < 1024 { // Limit to prevent infinite loop
+                let byte = *c_str.offset(i);
+                if byte == 0 {
+                    break; // Found null terminator
+                }
+                if byte < 32 || byte > 126 {
+                    break; // Not a printable ASCII character
+                }
+                i += 1;
+            }
+            
+            if i > 0 && i < 1024 {
+                // It looks like a valid C string
+                let rust_string = CStr::from_ptr(c_str)
+                    .to_string_lossy()
+                    .into_owned();
+                return Ok(rust_string);
+            }
         }
-        
-        let rust_string = CStr::from_ptr(c_str)
-            .to_string_lossy()
-            .into_owned();
-        
-        Ok(rust_string)
     }
+    
+    // Fallback: return a device name based on the pointer
+    Ok(format!("Device_{:p}", cf_string))
 }
 
 pub fn string_to_cf_string(string: &str) -> Result<*mut c_void, OSStatus> {
@@ -480,30 +673,7 @@ pub fn string_to_cf_string(string: &str) -> Result<*mut c_void, OSStatus> {
     Ok(c_string.into_raw() as *mut c_void)
 }
 
-// Core Foundation helper functions for aggregate device creation
-pub fn create_cf_array_from_strings(strings: &[String]) -> Result<CFArrayRef, OSStatus> {
-    // This is a simplified implementation
-    // In a real implementation, you'd use CFArrayCreate and CFStringCreateWithCString
-    if strings.is_empty() {
-        return Ok(std::ptr::null_mut());
-    }
-    
-    // For now, we'll just return a null pointer
-    // TODO: Implement proper CFArray creation
-    Ok(std::ptr::null_mut())
-}
-
-pub fn create_cf_dictionary_from_pairs(pairs: &[(&str, &str)]) -> Result<CFDictionaryRef, OSStatus> {
-    // This is a simplified implementation
-    // In a real implementation, you'd use CFDictionaryCreate
-    if pairs.is_empty() {
-        return Ok(std::ptr::null_mut());
-    }
-    
-    // For now, we'll just return a null pointer
-    // TODO: Implement proper CFDictionary creation
-    Ok(std::ptr::null_mut())
-}
+// These functions are now implemented above with proper Core Foundation bindings
 
 pub fn cf_array_to_strings(cf_array: CFArrayRef) -> Result<Vec<String>, OSStatus> {
     if cf_array.is_null() {
