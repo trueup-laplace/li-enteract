@@ -150,6 +150,14 @@ pub const AUDIO_FORMAT_FLAG_IS_FLOAT: u32 = 1;
 pub const AUDIO_FORMAT_FLAG_IS_PACKED: u32 = 2;
 /// Maps to `kAudioFormatFlagIsSignedInteger` - signed integer format flag
 pub const AUDIO_FORMAT_FLAG_IS_SIGNED_INTEGER: u32 = 4;
+/// Maps to `kAudioFormatFlagIsNonInterleaved` - non-interleaved format flag
+pub const AUDIO_FORMAT_FLAG_IS_NON_INTERLEAVED: u32 = 8;
+
+// Audio format constants (Core Audio style)
+pub const kAudioFormatLinearPCM: u32 = 0x6c70636d; // 'lpcm'
+pub const kAudioFormatFlagIsFloat: u32 = 0x00000001;
+pub const kAudioFormatFlagIsPacked: u32 = 0x00000002;
+pub const kAudioFormatFlagIsNonInterleaved: u32 = 0x00000004;
 
 // Stream direction
 /// Maps to `kAudioStreamDirectionOutput` - output stream direction
@@ -171,6 +179,7 @@ pub struct AudioObjectPropertyAddress {
 
 // Audio stream basic description
 #[repr(C)]
+#[derive(Debug, Clone)]
 pub struct AudioStreamBasicDescription {
     /// Maps to `mSampleRate` - sample rate in Hz
     pub sample_rate: f64,
