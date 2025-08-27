@@ -294,6 +294,21 @@ pub const AUDIO_AGGREGATE_DEVICE_IS_PRIVATE_KEY: &str = "private";
 /// Maps to `kAudioAggregateDeviceTapAutoStartKey` - aggregate device tap auto-start key
 pub const AUDIO_AGGREGATE_DEVICE_TAP_AUTO_START_KEY: &str = "tapautostart";
 
+// Core Audio plugin constants
+/// Maps to `kAudioHardwarePropertyPlugInForBundleID` - hardware plugin for bundle ID property
+pub const AUDIO_HARDWARE_PROPERTY_PLUGIN_FOR_BUNDLE_ID: u32 = 0x706c7567; // 'plug'
+/// Maps to `kAudioPlugInCreateAggregateDevice` - plugin create aggregate device property
+pub const AUDIO_PLUGIN_CREATE_AGGREGATE_DEVICE: u32 = 0x63616767; // 'cagg'
+
+/// Maps to `kAudioAggregateDevicePropertyMasterSubDevice` - aggregate device master sub-device property
+pub const AUDIO_AGGREGATE_DEVICE_PROPERTY_MASTER_SUB_DEVICE: u32 = 0x616d7374; // 'amst'
+
+// Core Audio property scope constants
+/// Maps to `kAudioObjectPropertyScopeGlobal` - global property scope
+pub const kAudioObjectPropertyScopeGlobal: u32 = 0x676c6f62; // 'glob'
+/// Maps to `kAudioObjectPropertyElementMain` - main property element
+pub const kAudioObjectPropertyElementMain: u32 = 0;
+
 // Additional Core Audio constants for aggregate device creation
 // AUDIO_OBJECT_PROPERTY_NAME is defined above with the correct value
 /// Maps to `kAudioObjectPropertyManufacturer` - object manufacturer property
@@ -509,6 +524,50 @@ extern "C" {
     fn kCFTypeArrayCallBacks() -> *const c_void;
     fn kCFTypeDictionaryKeyCallBacks() -> *const c_void;
     fn kCFTypeDictionaryValueCallBacks() -> *const c_void;
+    
+    // Additional Core Foundation functions for mutable objects
+    fn CFDictionaryCreateMutable(
+        allocator: *mut c_void,
+        capacity: usize,
+        keyCallBacks: *const c_void,
+        valueCallBacks: *const c_void,
+    ) -> *mut c_void;
+    
+    fn CFArrayCreateMutable(
+        allocator: *mut c_void,
+        capacity: usize,
+        callBacks: *const c_void,
+    ) -> *mut c_void;
+    
+    fn CFDictionaryAddValue(
+        theDict: *mut c_void,
+        key: *const c_void,
+        value: *const c_void,
+    );
+    
+    fn CFArrayAppendValue(
+        theArray: *mut c_void,
+        value: *const c_void,
+    );
+    
+    fn CFRelease(
+        cf: *const c_void,
+    );
+    
+    // Core Audio plugin functions
+    fn AudioHardwareGetPropertyInfo(
+        inPropertyID: u32,
+        outDataSize: *mut u32,
+        outWritable: *mut bool,
+    ) -> OSStatus;
+    
+    fn AudioHardwareGetProperty(
+        inPropertyID: u32,
+        ioDataSize: *mut u32,
+        outData: *mut c_void,
+    ) -> OSStatus;
+    
+
 }
 
 // CFNumber types

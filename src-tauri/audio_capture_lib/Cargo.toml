@@ -34,6 +34,8 @@ objc = "0.2"
 objc-foundation = "0.1"
 objc2-core-audio = { version = "0.3", features = ["AudioHardware"] }
 objc2-foundation = "0.3"
+objc2-core-foundation = "0.3"
+uuid = { version = "1.0", features = ["v4"] }
 
 [lib]
 name = "audio_capture_lib"

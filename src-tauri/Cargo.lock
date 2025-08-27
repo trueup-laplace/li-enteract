@@ -336,6 +336,7 @@ dependencies = [
  "objc",
  "objc-foundation",
  "objc2-core-audio",
+ "objc2-core-foundation",
  "objc2-foundation 0.3.1",
  "serde",
  "serde_json",
@@ -343,6 +344,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
