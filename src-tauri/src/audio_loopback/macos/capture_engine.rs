@@ -1,20 +1,23 @@
 // src-tauri/src/audio_loopback/macos/capture_engine.rs
 // macOS Core Audio capture engine implementation
 
-use crate::audio_loopback::types::*;
+use crate::audio_loopback::audio_processor::{
+    calculate_audio_level, process_audio_chunk, process_audio_for_transcription,
+};
+use crate::audio_loopback::macos::audio_recorder::AudioRecorder;
 use crate::audio_loopback::macos::device_enumerator::CoreAudioLoopbackEnumerator;
-use crate::audio_loopback::audio_processor::{process_audio_for_transcription, process_audio_chunk, calculate_audio_level};
+use crate::audio_loopback::types::*;
 use anyhow::Result;
+use base64::prelude::*;
+use serde_json;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
-use base64::prelude::*;
-use serde_json;
 
 #[tauri::command]
 pub async fn start_audio_loopback_capture(
     device_id: String,
-    app_handle: AppHandle
+    app_handle: AppHandle,
 ) -> Result<String, String> {
     // Check if already capturing
     {
@@ -23,20 +26,20 @@ pub async fn start_audio_loopback_capture(
             return Err("Audio capture already in progress".to_string());
         }
     }
-    
+
     // Create stop channel
     let (stop_tx, stop_rx) = mpsc::channel::<()>(1);
-    
+
     // Start capture in background thread
     let app_handle_clone = app_handle.clone();
     let device_id_clone = device_id.clone();
-    
+
     let handle = tokio::task::spawn_blocking(move || {
         if let Err(_e) = run_audio_capture_loop_sync(device_id_clone, app_handle_clone, stop_rx) {
             // Audio capture error handling
         }
     });
-    
+
     // Update state
     {
         let mut state = CAPTURE_STATE.lock().unwrap();
@@ -44,7 +47,7 @@ pub async fn start_audio_loopback_capture(
         state.capture_handle = Some(handle);
         state.stop_tx = Some(stop_tx);
     }
-    
+
     Ok("Audio capture started".to_string())
 }
 
@@ -55,17 +58,17 @@ pub async fn stop_audio_loopback_capture() -> Result<(), String> {
         state.is_capturing = false;
         (state.stop_tx.take(), state.capture_handle.take())
     };
-    
+
     // Send stop signal
     if let Some(tx) = stop_tx {
         let _ = tx.send(()).await;
     }
-    
+
     // Wait for task to complete
     if let Some(handle) = handle {
         let _ = handle.await;
     }
-    
+
     Ok(())
 }
 
@@ -73,20 +76,45 @@ pub async fn stop_audio_loopback_capture() -> Result<(), String> {
 fn run_audio_capture_loop_sync(
     device_id: String,
     app_handle: AppHandle,
-    mut stop_rx: mpsc::Receiver<()>
+    mut stop_rx: mpsc::Receiver<()>,
 ) -> Result<()> {
     let enumerator = CoreAudioLoopbackEnumerator::new()?;
-    let device_info = enumerator.find_device_by_id(&device_id)?
+    let device_info = enumerator
+        .find_device_by_id(&device_id)?
         .ok_or_else(|| anyhow::anyhow!("Device not found"))?;
-    
-    // TODO: Implement actual Core Audio capture
-    // For now, this is a placeholder that simulates audio capture
-    
+
+    // Step 1: Basic AudioRecorder integration
+    let mut audio_recorder = AudioRecorder::new();
+    audio_recorder.set_app_handle(app_handle.clone());
+
+    // Convert device_id string to AudioObjectID
+    let device_object_id = device_id
+        .parse::<u32>()
+        .map_err(|_| anyhow::anyhow!("Invalid device ID format"))?;
+
+    // Use the new adapt_to_device method which includes stream cataloging
+    audio_recorder.adapt_to_device(device_object_id)?;
+
+    // Log the discovered streams
+    println!("[CAPTURE] Discovered streams:");
+    println!(
+        "[CAPTURE]   - Input streams: {}",
+        audio_recorder.get_input_stream_count()
+    );
+    println!(
+        "[CAPTURE]   - Output streams: {}",
+        audio_recorder.get_output_stream_count()
+    );
+    println!(
+        "[CAPTURE]   - Sample rate: {}Hz",
+        audio_recorder.get_current_sample_rate()
+    );
+
     let start_time = Instant::now();
     let mut total_samples = 0u64;
     let mut last_emit = Instant::now();
-    
-    // Transcription buffer setup
+
+    // Transcription buffer setup (keep existing)
     let mut transcription_buffer: Vec<f32> = Vec::new();
     let transcription_buffer_duration = 4.0;
     let transcription_buffer_size = (16000.0 * transcription_buffer_duration) as usize;
@@ -94,67 +122,75 @@ fn run_audio_capture_loop_sync(
     let transcription_interval = Duration::from_millis(800);
     let min_audio_length = 1.5;
     let min_audio_samples = (16000.0 * min_audio_length) as usize;
-    
-    // Simulate audio capture loop
+
+    // Replace the simulation loop with:
     loop {
         if stop_rx.try_recv().is_ok() {
             break;
         }
-        
-        // Simulate audio data (silence for now)
+
+        // For now, keep the simulation but prepare for real audio
         let simulated_audio = vec![0.0f32; 1024];
-        
-        // Process audio
+
+        // TODO: Replace with real audio from AudioRecorder
+        // let audio_data = audio_recorder.get_audio_chunk()?;
+
+        // Process audio (keep existing logic)
         let processed_audio = process_audio_chunk(
-            &[], // Empty for now
+            &[], // Empty for now, will be real audio later
             16,
             1,
             48000,
-            16000
+            16000,
         );
-        
+
+        // Rest of the existing transcription logic stays the same...
         total_samples += processed_audio.len() as u64;
         transcription_buffer.extend_from_slice(&processed_audio);
-        
+
         // Trim buffer
         if transcription_buffer.len() > transcription_buffer_size * 2 {
             let excess = transcription_buffer.len() - transcription_buffer_size;
             transcription_buffer.drain(0..excess);
         }
-        
+
         // Try transcription
         let now = Instant::now();
-        if transcription_buffer.len() >= min_audio_samples && 
-           now.duration_since(last_transcription) > transcription_interval {
-            
-            let buffer_rms = (transcription_buffer.iter().map(|&x| x * x).sum::<f32>() / transcription_buffer.len() as f32).sqrt();
-            
+        if transcription_buffer.len() >= min_audio_samples
+            && now.duration_since(last_transcription) > transcription_interval
+        {
+            let buffer_rms = (transcription_buffer.iter().map(|&x| x * x).sum::<f32>()
+                / transcription_buffer.len() as f32)
+                .sqrt();
+
             if buffer_rms > 0.00305 {
-                let int16_samples: Vec<i16> = transcription_buffer.iter()
+                let int16_samples: Vec<i16> = transcription_buffer
+                    .iter()
                     .map(|&sample| (sample * 32767.0).clamp(-32768.0, 32767.0) as i16)
                     .collect();
-                
+
                 let mut stereo_pcm16_bytes = Vec::with_capacity(int16_samples.len() * 4);
                 for &sample in &int16_samples {
                     let bytes = sample.to_le_bytes();
                     stereo_pcm16_bytes.extend_from_slice(&bytes);
                     stereo_pcm16_bytes.extend_from_slice(&bytes);
                 }
-                
+
                 let app_handle_clone = app_handle.clone();
                 let audio_bytes_clone = stereo_pcm16_bytes.clone();
                 let sample_rate = 16000;
-                
+
                 tokio::spawn(async move {
                     let _ = process_audio_for_transcription(
                         audio_bytes_clone,
                         sample_rate,
-                        app_handle_clone
-                    ).await;
+                        app_handle_clone,
+                    )
+                    .await;
                 });
-                
+
                 last_transcription = now;
-                
+
                 let overlap_duration = 1.0;
                 let overlap_size = (16000.0 * overlap_duration) as usize;
                 if transcription_buffer.len() > overlap_size {
@@ -163,37 +199,42 @@ fn run_audio_capture_loop_sync(
                 }
             }
         }
-        
+
         // Emit audio chunk periodically
         let now = Instant::now();
         if now.duration_since(last_emit) > Duration::from_millis(100) {
-            let pcm16_data: Vec<i16> = processed_audio.iter()
+            let pcm16_data: Vec<i16> = processed_audio
+                .iter()
                 .map(|&sample| (sample * 32767.0).clamp(-32768.0, 32767.0) as i16)
                 .collect();
-            
-            let audio_bytes: Vec<u8> = pcm16_data.iter()
+
+            let audio_bytes: Vec<u8> = pcm16_data
+                .iter()
                 .flat_map(|&sample| sample.to_le_bytes())
                 .collect();
-            
+
             let level = calculate_audio_level(&processed_audio);
-            
-            let _emit_result = app_handle.emit("audio-chunk", serde_json::json!({
-                "deviceId": device_id,
-                "audioData": base64::prelude::BASE64_STANDARD.encode(&audio_bytes),
-                "sampleRate": device_info.sample_rate,
-                "channels": 1,
-                "level": level,
-                "timestamp": chrono::Utc::now().timestamp_millis(),
-                "duration": start_time.elapsed().as_secs(),
-                "totalSamples": total_samples
-            }));
-            
+
+            let _emit_result = app_handle.emit(
+                "audio-chunk",
+                serde_json::json!({
+                    "deviceId": device_id,
+                    "audioData": base64::prelude::BASE64_STANDARD.encode(&audio_bytes),
+                    "sampleRate": device_info.sample_rate,
+                    "channels": 1,
+                    "level": level,
+                    "timestamp": chrono::Utc::now().timestamp_millis(),
+                    "duration": start_time.elapsed().as_secs(),
+                    "totalSamples": total_samples
+                }),
+            );
+
             last_emit = now;
         }
-        
+
         // Sleep to simulate real-time processing
         std::thread::sleep(Duration::from_millis(10));
     }
-    
+
     Ok(())
 }

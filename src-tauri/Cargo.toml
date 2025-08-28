@@ -63,9 +63,6 @@ log = "0.4.21"
 env_logger = { version = "0.10", optional = true }
 regex = "1.10.3"
 
-# Audio capture library
-audio_capture_lib = { path = "./audio_capture_lib" }
-
 # Platform-specific dependencies for transparency
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.52", features = [
@@ -99,4 +96,6 @@ wasapi = "0.13"
 objc = "0.2"
 core-graphics = "0.23"
 objc2-core-audio = "0.3.1"
+objc2-core-audio-types = "0.3.1"
 objc2-core-foundation = "0.3.1"
+atomic_float = "1.1.0"

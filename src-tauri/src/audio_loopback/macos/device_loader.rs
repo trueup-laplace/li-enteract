@@ -2,6 +2,7 @@ use super::core_audio_bindings::{
     create_aggregate_device, destroy_aggregate_device, get_audio_device_ids,
     get_default_input_device, get_device_name, get_device_transport_type, AggregateDevice,
 };
+use anyhow::Result;
 use objc2_core_audio::{kAudioDeviceTransportTypeAggregate, AudioObjectID};
 
 pub struct DeviceLists {
@@ -9,19 +10,17 @@ pub struct DeviceLists {
     pub aggregate_device_list: Vec<AggregateDevice>,
 }
 
-pub fn load_devices() -> Result<DeviceLists, String> {
+pub fn load_devices() -> Result<DeviceLists> {
     let mut device_lists = DeviceLists {
         real_device_list: Vec::new(),
         aggregate_device_list: Vec::new(),
     };
 
-    let device_ids: Vec<AudioObjectID> =
-        get_audio_device_ids().map_err(|e| format!("Failed to get audio device IDs: {}", e))?;
+    let device_ids: Vec<AudioObjectID> = get_audio_device_ids()?;
 
     for device_id in device_ids {
         println!("Device ID: {}", device_id);
-        let transport_type = get_device_transport_type(device_id)
-            .map_err(|e| format!("Failed to get device transport type: {}", e))?;
+        let transport_type = get_device_transport_type(device_id)?;
         if transport_type == kAudioDeviceTransportTypeAggregate {
             println!("Device is an aggregate device");
             device_lists
@@ -36,7 +35,7 @@ pub fn load_devices() -> Result<DeviceLists, String> {
     Ok(device_lists)
 }
 
-pub fn clean_own_aggregate_devices() -> Result<(), String> {
+pub fn clean_own_aggregate_devices() -> Result<()> {
     let device_ids = get_audio_device_ids()?;
 
     for device_id in device_ids {
@@ -53,7 +52,7 @@ pub fn clean_own_aggregate_devices() -> Result<(), String> {
     Ok(())
 }
 
-pub fn create_microphone_aggregate_device() -> Result<AggregateDevice, String> {
+pub fn create_microphone_aggregate_device() -> Result<AggregateDevice> {
     let uuid = uuid::Uuid::new_v4().to_string();
     let device_name = format!("Enteract Microphone Aggregate Device {}", uuid);
     let device = create_aggregate_device(device_name, format!("enteract-microphone-{}", uuid))?;

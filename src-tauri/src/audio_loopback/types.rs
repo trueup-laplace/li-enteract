@@ -27,7 +27,7 @@ pub struct AudioLoopbackDevice {
     pub loopback_method: LoopbackMethod,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DeviceType {
     Render,
     Capture,
