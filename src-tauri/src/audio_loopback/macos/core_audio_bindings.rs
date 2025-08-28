@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use objc2_core_audio::*;
-use objc2_core_audio_types::{kAudioFormatLinearPCM, AudioStreamBasicDescription};
+use objc2_core_audio_types::{
+    kAudioFormatLinearPCM, AudioBuffer, AudioBufferList, AudioStreamBasicDescription,
+    AudioTimeStamp,
+};
 use objc2_core_foundation::{
     CFDictionary, CFMutableArray, CFNumber, CFNumberType, CFRetained, CFString,
 };
@@ -812,4 +815,183 @@ pub fn get_device_name_safe(device_id: AudioObjectID) -> Result<String> {
     }
 
     get_device_name(device_id)
+}
+
+/// Audio buffer information for processing
+#[derive(Debug, Clone)]
+pub struct AudioBufferInfo {
+    pub number_input_buffers: u32,
+    pub number_output_buffers: u32,
+    pub frames_per_buffer: u32,
+    pub channels_per_frame: u32,
+    pub sample_rate: f32,
+}
+
+impl AudioBufferInfo {
+    pub fn from_buffer_lists(
+        in_input_data: *const AudioBufferList,
+        out_output_data: *const AudioBufferList,
+        sample_rate: f32,
+    ) -> Self {
+        let mut number_input_buffers = 0u32;
+        let mut number_output_buffers = 0u32;
+        let mut frames_per_buffer = 0u32;
+        let mut channels_per_frame = 0u32;
+
+        // Process input buffers
+        if !in_input_data.is_null() {
+            unsafe {
+                let input_data = &*in_input_data;
+                number_input_buffers = input_data.mNumberBuffers;
+
+                if number_input_buffers > 0 {
+                    let buffer = &input_data.mBuffers[0];
+                    channels_per_frame = buffer.mNumberChannels;
+                    frames_per_buffer = buffer.mDataByteSize
+                        / (channels_per_frame * std::mem::size_of::<f32>() as u32);
+                }
+            }
+        }
+
+        // Process output buffers
+        if !out_output_data.is_null() {
+            unsafe {
+                let output_data = &*out_output_data;
+                number_output_buffers = output_data.mNumberBuffers;
+            }
+        }
+
+        Self {
+            number_input_buffers,
+            number_output_buffers,
+            frames_per_buffer,
+            channels_per_frame,
+            sample_rate,
+        }
+    }
+}
+
+/// Convert audio buffer to mono float samples
+pub fn convert_audio_buffer_to_mono(buffer: &AudioBuffer, frames: u32, channels: u32) -> Vec<f32> {
+    let mut mono_samples = Vec::with_capacity(frames as usize);
+
+    unsafe {
+        let float_data = buffer.mData as *const f32;
+
+        for frame in 0..frames {
+            let mut sample = 0.0f32;
+
+            match channels {
+                1 => {
+                    // Mono: use the single channel
+                    sample = *float_data.offset(frame as isize);
+                }
+                2 => {
+                    // Stereo: average left and right channels
+                    let left = *float_data.offset((frame * 2) as isize);
+                    let right = *float_data.offset((frame * 2 + 1) as isize);
+                    sample = (left + right) * 0.5f32;
+                }
+                _ => {
+                    // Multi-channel: average all channels
+                    for ch in 0..channels {
+                        sample += *float_data.offset((frame * channels + ch) as isize);
+                    }
+                    sample /= channels as f32;
+                }
+            }
+
+            mono_samples.push(sample);
+        }
+    }
+
+    mono_samples
+}
+
+/// IO Proc callback function type (matching the crate's expected signature)
+pub type AudioDeviceIOProc = unsafe extern "C-unwind" fn(
+    inDevice: AudioObjectID,
+    inNow: std::ptr::NonNull<AudioTimeStamp>,
+    inInputData: std::ptr::NonNull<AudioBufferList>,
+    inInputTime: std::ptr::NonNull<AudioTimeStamp>,
+    outOutputData: std::ptr::NonNull<AudioBufferList>,
+    inOutputTime: std::ptr::NonNull<AudioTimeStamp>,
+    inClientData: *mut std::ffi::c_void,
+) -> i32;
+
+/// Create an IO Proc ID for a device (matching Objective-C++ AudioDeviceCreateIOProcID call)
+pub fn create_io_proc_id(
+    device_id: AudioObjectID,
+    io_proc: AudioDeviceIOProc,
+    client_data: *mut std::ffi::c_void,
+) -> Result<AudioDeviceIOProcID> {
+    let mut io_proc_id: AudioDeviceIOProcID = None;
+
+    let result = unsafe {
+        AudioDeviceCreateIOProcID(
+            device_id,
+            Some(io_proc),
+            client_data,
+            std::ptr::NonNull::new(&mut io_proc_id).unwrap(),
+        )
+    };
+
+    if result != 0 {
+        return Err(anyhow::anyhow!(
+            "Failed to create IO Proc ID for device {}: {} (0x{:x})",
+            device_id,
+            result,
+            result
+        ));
+    }
+
+    Ok(io_proc_id)
+}
+
+/// Start audio device IO (matching Objective-C++ AudioDeviceStart call)
+pub fn start_audio_device(device_id: AudioObjectID, io_proc_id: AudioDeviceIOProcID) -> Result<()> {
+    let result = unsafe { AudioDeviceStart(device_id, io_proc_id) };
+
+    if result != 0 {
+        return Err(anyhow::anyhow!(
+            "Failed to start audio device {}: {} (0x{:x})",
+            device_id,
+            result,
+            result
+        ));
+    }
+
+    Ok(())
+}
+
+/// Stop audio device IO (matching Objective-C++ AudioDeviceStop call)
+pub fn stop_audio_device(device_id: AudioObjectID, io_proc_id: AudioDeviceIOProcID) -> Result<()> {
+    let result = unsafe { AudioDeviceStop(device_id, io_proc_id) };
+
+    if result != 0 {
+        return Err(anyhow::anyhow!(
+            "Failed to stop audio device {}: {} (0x{:x})",
+            device_id,
+            result,
+            result
+        ));
+    }
+
+    Ok(())
+}
+
+/// Destroy an IO Proc ID (matching Objective-C++ AudioDeviceDestroyIOProcID call)
+pub fn destroy_io_proc_id(device_id: AudioObjectID, io_proc_id: AudioDeviceIOProcID) -> Result<()> {
+    let result = unsafe { AudioDeviceDestroyIOProcID(device_id, io_proc_id) };
+
+    if result != 0 {
+        return Err(anyhow::anyhow!(
+            "Failed to destroy IO Proc ID for device {}: {} (0x{:x})",
+            device_id,
+            result,
+            result
+        ));
+    }
+
+    Ok(())
 }
