@@ -448,8 +448,8 @@ pub fn is_default_device(device_id: AudioObjectID, device_type: AudioDeviceType)
 }
 
 pub fn get_device_format(device_id: AudioObjectID) -> Result<(u32, u16, String)> {
-    // Get the default format for the device
-    let address = AudioObjectPropertyAddress {
+    // Try output scope first (for render devices)
+    let output_address = AudioObjectPropertyAddress {
         mSelector: kAudioDevicePropertyStreamFormat,
         mScope: kAudioObjectPropertyScopeOutput,
         mElement: kAudioObjectPropertyElementMain,
@@ -458,10 +458,10 @@ pub fn get_device_format(device_id: AudioObjectID) -> Result<(u32, u16, String)>
     let mut format = unsafe { std::mem::zeroed::<AudioStreamBasicDescription>() };
     let mut size = std::mem::size_of::<AudioStreamBasicDescription>() as u32;
 
-    let result = unsafe {
+    let output_result = unsafe {
         AudioObjectGetPropertyData(
             device_id as AudioObjectID,
-            NonNull::from(&address),
+            NonNull::from(&output_address),
             0,
             std::ptr::null(),
             NonNull::from(&mut size),
@@ -469,11 +469,51 @@ pub fn get_device_format(device_id: AudioObjectID) -> Result<(u32, u16, String)>
         )
     };
 
-    if result != 0 {
+    // If output scope works, use it
+    if output_result == 0 {
+        let sample_rate = format.mSampleRate as u32;
+        let channels = format.mChannelsPerFrame as u16;
+
+        let format_str = match format.mFormatID {
+            AUDIO_FORMAT_LINEAR_PCM => {
+                if format.mBitsPerChannel == 32 {
+                    "IEEE Float 32bit".to_string()
+                } else if format.mBitsPerChannel == 16 {
+                    "PCM 16bit".to_string()
+                } else {
+                    format!("PCM {}bit", format.mBitsPerChannel)
+                }
+            }
+            _ => "Unknown Format".to_string(),
+        };
+
+        return Ok((sample_rate, channels, format_str));
+    }
+
+    // Try input scope (for capture devices)
+    let input_address = AudioObjectPropertyAddress {
+        mSelector: kAudioDevicePropertyStreamFormat,
+        mScope: kAudioObjectPropertyScopeInput,
+        mElement: kAudioObjectPropertyElementMain,
+    };
+
+    let input_result = unsafe {
+        AudioObjectGetPropertyData(
+            device_id as AudioObjectID,
+            NonNull::from(&input_address),
+            0,
+            std::ptr::null(),
+            NonNull::from(&mut size),
+            NonNull::new(&mut format as *mut _ as *mut std::ffi::c_void).unwrap(),
+        )
+    };
+
+    if input_result != 0 {
         return Err(anyhow::anyhow!(
-            "Failed to get device format for device {}: {}",
+            "Failed to get device format for device {} (both output and input scopes failed): output={}, input={}",
             device_id,
-            result
+            output_result,
+            input_result
         ));
     }
 
@@ -500,6 +540,32 @@ pub fn device_has_output_streams(device_id: AudioObjectID) -> Result<bool> {
     let address = AudioObjectPropertyAddress {
         mSelector: kAudioDevicePropertyStreams,
         mScope: kAudioObjectPropertyScopeOutput,
+        mElement: kAudioObjectPropertyElementMain,
+    };
+
+    let mut size = 0u32;
+    let size_result = unsafe {
+        AudioObjectGetPropertyDataSize(
+            device_id as AudioObjectID,
+            NonNull::from(&address),
+            0,
+            std::ptr::null(),
+            NonNull::from(&mut size),
+        )
+    };
+    if size_result != 0 {
+        return Err(anyhow::anyhow!(
+            "Failed to get property data size: {}",
+            size_result
+        ));
+    }
+    Ok(size > 0)
+}
+
+pub fn device_has_input_streams(device_id: AudioObjectID) -> Result<bool> {
+    let address = AudioObjectPropertyAddress {
+        mSelector: kAudioDevicePropertyStreams,
+        mScope: kAudioObjectPropertyScopeInput,
         mElement: kAudioObjectPropertyElementMain,
     };
 

@@ -12,7 +12,7 @@ mod ollama;
 mod screenshot;
 mod file_handler;
 mod data; // Data storage module (JSON, SQLite, migration, hybrid)
-mod audio_loopback; // New audio loopback module
+pub mod audio_loopback; // New audio loopback module
 mod system_prompts; // System prompts module
 mod system_info; // System information module
 mod rag_system; // RAG document system module
