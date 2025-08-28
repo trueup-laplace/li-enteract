@@ -11,23 +11,20 @@ impl CoreAudioLoopbackEnumerator {
     pub fn new() -> Result<Self> {
         Ok(Self)
     }
-    
     pub fn enumerate_loopback_devices(&self) -> Result<Vec<AudioLoopbackDevice>> {
-        // Placeholder implementation - return a default device
-        let default_device = AudioLoopbackDevice {
-            id: "default_macos_device".to_string(),
-            name: "Default macOS Audio Device".to_string(),
-            is_default: true,
-            sample_rate: 48000,
-            channels: 2,
-            format: "PCM 16bit".to_string(),
+        let device_lists = super::device_loader::load_devices().map_err(|e| anyhow::anyhow!(e))?;
+        let device_list = device_lists.real_device_list;
+        Ok(device_list.into_iter().map(|id| AudioLoopbackDevice {
+            id: id.to_string(),
+            name: "".to_string(),
+            is_default: false,
+            sample_rate: 0,
+            channels: 0,
+            format: "".to_string(),
             device_type: DeviceType::Render,
             loopback_method: LoopbackMethod::RenderLoopback,
-        };
-        
-        Ok(vec![default_device])
+        }).collect())
     }
-    
     pub fn test_output_loopback_capability(&self, _device_id: u32) -> bool {
         // Placeholder - always return true for now
         true

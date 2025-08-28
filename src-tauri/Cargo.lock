@@ -497,12 +497,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6099cdc01846bc367c4e7dd630dc5966dccf36b652fae7a74e17b640411a91b2"
 
 [[package]]
-name = "block"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a"
-
-[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -814,36 +808,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cocoa"
-version = "0.25.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6140449f97a6e97f9511815c5632d84c8aacf8ac271ad77c559218161a1373c"
-dependencies = [
- "bitflags 1.3.2",
- "block",
- "cocoa-foundation",
- "core-foundation 0.9.4",
- "core-graphics 0.23.2",
- "foreign-types 0.5.0",
- "libc",
- "objc",
-]
-
-[[package]]
-name = "cocoa-foundation"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c6234cbb2e4c785b456c0644748b1ac416dd045799740356f8363dfe00c93f7"
-dependencies = [
- "bitflags 1.3.2",
- "block",
- "core-foundation 0.9.4",
- "core-graphics-types 0.1.3",
- "libc",
- "objc",
-]
-
-[[package]]
 name = "color_quant"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -977,6 +941,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "coreaudio-rs"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1034,6 +999,8 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> 1fa7620 (Start manually adding core audio logic)
 name = "cpufeatures"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1475,9 +1442,11 @@ dependencies = [
  "base64 0.22.1",
  "bytemuck",
  "chrono",
- "cocoa",
  "core-graphics 0.23.2",
+<<<<<<< HEAD
  "coreaudio-rs 0.13.0",
+=======
+>>>>>>> 1fa7620 (Start manually adding core audio logic)
  "ctrlc",
  "dirs 5.0.1",
  "enigo",
@@ -1488,6 +1457,8 @@ dependencies = [
  "lazy_static",
  "log",
  "objc",
+ "objc2-core-audio",
+ "objc2-core-foundation",
  "pdf-extract",
  "rand 0.8.5",
  "regex",
@@ -3681,21 +3652,6 @@ dependencies = [
  "objc2-core-image",
  "objc2-foundation 0.3.1",
  "objc2-quartz-core 0.3.1",
-]
-
-[[package]]
-name = "objc2-audio-toolbox"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10cbe18d879e20a4aea544f8befe38bcf52255eb63d3f23eca2842f3319e4c07"
-dependencies = [
- "bitflags 2.9.1",
- "libc",
- "objc2 0.6.1",
- "objc2-core-audio",
- "objc2-core-audio-types",
- "objc2-core-foundation",
- "objc2-foundation 0.3.1",
 ]
 
 [[package]]

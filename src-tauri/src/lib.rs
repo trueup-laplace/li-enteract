@@ -106,6 +106,8 @@ use data::{
     get_database_log_stats, clear_database_logs
 };
 
+use crate::audio_loopback::macos::device_loader::{load_devices, clean_own_aggregate_devices, create_microphone_aggregate_device};
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -130,6 +132,41 @@ pub fn run() {
             }
             
             // Audio loopback functionality is initialized on-demand
+            
+            // TEST: Load audio devices at startup
+            #[cfg(target_os = "macos")]
+            {
+                println!("[STARTUP] Loading audio devices...");
+                match load_devices() {
+                    Ok(devices) => {
+                        println!("[STARTUP] Successfully loaded {} real devices and {} aggregate devices", devices.real_device_list.len(), devices.aggregate_device_list.len());
+                    }
+                    Err(e) => {
+                        eprintln!("[STARTUP] Failed to load audio devices: {}", e);
+                    }
+                }
+                // Clean up any existing aggregate devices.
+                println!("[STARTUP] Cleaning up existing aggregate devices...");
+                match clean_own_aggregate_devices() {
+                    Ok(()) => {
+                        println!("[STARTUP] Successfully cleaned up existing aggregate devices");
+                    }
+                    Err(e) => {
+                        eprintln!("[STARTUP] Failed to clean up existing aggregate devices: {}", e);
+                    }
+                }
+
+                println!("[STARTUP] Creating microphone aggregate device...");
+                match create_microphone_aggregate_device() {
+                    Ok(device) => {
+                        println!("[STARTUP] Successfully created microphone aggregate device");
+                    }
+                    Err(e) => {
+                        eprintln!("[STARTUP] Failed to create microphone aggregate device: {}", e);
+                    }
+                }
+
+            }
             
             // Enhanced RAG system will be initialized on-demand from frontend
             

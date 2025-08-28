@@ -3,6 +3,9 @@
 
 pub mod device_enumerator;
 pub mod capture_engine;
+pub mod device_loader;
+pub mod core_audio_bindings;
 
 pub use device_enumerator::*;
 pub use capture_engine::*;
+pub use device_loader::*;

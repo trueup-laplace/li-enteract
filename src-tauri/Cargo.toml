@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Local AI Agents by Quaternion Studios"
 authors = ["Rohan Singh", "Chase Allen"]
 edition = "2021"
+default-run = "enteract"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -97,5 +98,5 @@ wasapi = "0.13"
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
 core-graphics = "0.23"
-coreaudio-rs = "0.13"
-cocoa = "0.25"
+objc2-core-audio = "0.3.1"
+objc2-core-foundation = "0.3.1"

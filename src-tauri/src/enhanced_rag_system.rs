@@ -582,7 +582,7 @@ impl EnhancedRagSystem {
         Ok(())
     }
     
-    async fn index_chunks_for_search(&self, document_id: &str, chunks: &[EnhancedDocumentChunk], embeddings: &[Vec<f32>]) -> Result<()> {
+    async fn index_chunks_for_search(&self, _document_id: &str, chunks: &[EnhancedDocumentChunk], embeddings: &[Vec<f32>]) -> Result<()> {
         let search_chunks: Vec<crate::search_service::DocumentChunk> = chunks.iter()
             .zip(embeddings.iter())
             .map(|(chunk, embedding)| crate::search_service::DocumentChunk {
